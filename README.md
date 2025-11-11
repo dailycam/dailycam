@@ -5,7 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-blue.svg)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.0-646CFF.svg)](https://vitejs.dev/)
 
 ## 📖 프로젝트 소개
 
@@ -17,6 +16,53 @@
 - 📊 **데이터 기반**: 히트맵과 트렌드 분석으로 패턴 발견
 - 🔔 **즉시 알림**: 위험 상황 실시간 푸시 알림
 - 📱 **언제 어디서나**: 회사에서도 아이 안전 확인
+
+## 📁 프로젝트 구조
+
+```
+ai_x_daily_cam/
+├── frontend/              # React 프론트엔드
+│   ├── src/
+│   │   ├── components/   # 재사용 컴포넌트
+│   │   ├── pages/        # 페이지 컴포넌트
+│   │   ├── lib/          # 라이브러리
+│   │   ├── utils/        # 유틸리티
+│   │   └── types/        # TypeScript 타입
+│   ├── public/
+│   └── package.json
+├── backend/              # 백엔드 (예정)
+├── docs/                 # 프로젝트 문서
+│   ├── CHARTS_GUIDE.md
+│   ├── DEVELOPMENT.md
+│   ├── FEATURES.md
+│   ├── USER_SCENARIOS.md
+│   └── VIDEO_HIGHLIGHTS_GUIDE.md
+└── README.md
+```
+
+## 🚀 빠른 시작
+
+### 프론트엔드 개발
+
+```bash
+# 프론트엔드 디렉토리로 이동
+cd frontend
+
+# 패키지 설치
+npm install
+
+# 환경 변수 설정
+# .env 파일 생성 후 아래 내용 추가
+# VITE_OPENAI_API_KEY=your_openai_api_key_here
+
+# 개발 서버 실행
+npm run dev
+
+# 빌드
+npm run build
+```
+
+브라우저에서 `http://localhost:5173` 접속
 
 ## ✨ 주요 기능
 
@@ -44,26 +90,6 @@
 - 시간대별 위험 분석
 - 주간/월간 통계
 
-### 5️⃣ 맞춤 설정
-- 알림 민감도 조정
-- 프로필 관리
-- 구독 플랜 관리
-- 보안 설정
-
-## 🎨 UI/UX 미리보기
-
-### 대시보드
-- 오늘의 안전도 한눈에 확인
-- AI 한줄평 및 주요 지표
-- 카메라 상태 모니터링
-- 빠른 액션 버튼
-
-### 실시간 모니터링
-- 멀티 카메라 뷰
-- AI 실시간 분석 오버레이
-- 위험 알림 피드
-- 양방향 통신 (예정)
-
 ## 🛠 기술 스택
 
 ### Frontend
@@ -73,11 +99,11 @@
 - **TailwindCSS** - 스타일링
 - **React Router** - 라우팅
 - **Lucide React** - 아이콘
+- **Recharts** - 데이터 시각화
 
 ### AI & Analytics
 - **OpenAI GPT-4** - 텍스트 분석 및 요약
 - **GPT-4 Vision** - 이미지/비디오 분석
-- **Recharts** - 데이터 시각화 (예정)
 
 ### Backend (예정)
 - Node.js + Express
@@ -85,71 +111,13 @@
 - Redis (캐싱)
 - WebRTC (실시간 스트리밍)
 
-## 🚀 시작하기
-
-### 1. 저장소 클론
-```bash
-git clone https://github.com/yourusername/ai_x_daily_cam.git
-cd ai_x_daily_cam
-```
-
-### 2. 패키지 설치
-```bash
-npm install
-```
-
-### 3. 환경 변수 설정
-`.env` 파일을 생성하고 다음 내용을 추가하세요:
-
-```env
-VITE_OPENAI_API_KEY=your_openai_api_key_here
-VITE_API_BASE_URL=http://localhost:3000/api
-```
-
-### 4. 개발 서버 실행
-```bash
-npm run dev
-```
-
-브라우저에서 `http://localhost:5173` 접속
-
-### 5. 빌드
-```bash
-npm run build
-```
-
-## 📁 프로젝트 구조
-
-```
-ai_x_daily_cam/
-├── src/
-│   ├── components/          # 재사용 컴포넌트
-│   │   └── Layout/         # 레이아웃
-│   ├── pages/              # 페이지 컴포넌트
-│   │   ├── Dashboard.tsx
-│   │   ├── CameraSetup.tsx
-│   │   ├── LiveMonitoring.tsx
-│   │   ├── DailyReport.tsx
-│   │   ├── Analytics.tsx
-│   │   └── Settings.tsx
-│   ├── lib/                # 라이브러리
-│   │   └── openai.ts       # OpenAI 통합
-│   ├── utils/              # 유틸리티
-│   │   └── mockData.ts
-│   ├── types/              # TypeScript 타입
-│   └── App.tsx
-├── public/
-├── DEVELOPMENT.md          # 개발 가이드
-├── FEATURES.md            # 기능 명세
-├── USER_SCENARIOS.md      # 사용 시나리오
-└── README.md
-```
-
 ## 📚 문서
 
 - [개발 가이드](./DEVELOPMENT.md) - 상세 개발 문서
 - [기능 명세서](./FEATURES.md) - 전체 기능 설명
 - [사용 시나리오](./USER_SCENARIOS.md) - 실제 사용 예시
+- [차트 가이드](./CHARTS_GUIDE.md) - 차트 컴포넌트 사용법
+- [비디오 하이라이트 가이드](./VIDEO_HIGHLIGHTS_GUIDE.md) - 비디오 기능 가이드
 
 ## 🗺 로드맵
 
@@ -158,7 +126,7 @@ ai_x_daily_cam/
 - [x] 레이아웃 및 네비게이션
 - [x] 6개 주요 페이지 UI
 - [x] 반응형 디자인
-- [x] TailwindCSS 스타일링
+- [x] 프론트엔드 폴더 구조 분리
 
 ### 🚧 Phase 2: 백엔드 통합 (진행 중)
 - [ ] REST API 개발
