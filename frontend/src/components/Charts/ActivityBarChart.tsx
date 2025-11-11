@@ -8,41 +8,42 @@ interface ActivityBarChartProps {
 }
 
 export default function ActivityBarChart({ data }: ActivityBarChartProps) {
+  // JP Morgan 스타일: 단일 색상의 농도로 표현
   const getBarColor = (value: number) => {
-    if (value >= 90) return '#22c55e'
-    if (value >= 70) return '#3b82f6'
-    if (value >= 50) return '#f59e0b'
-    return '#ef4444'
+    if (value >= 90) return '#003d82' // 진한 네이비
+    if (value >= 70) return '#0057b8' // 중간 블루
+    if (value >= 50) return '#4a90e2' // 밝은 블루
+    return '#94b8d8' // 연한 블루
   }
 
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" vertical={false} />
         <XAxis
           dataKey="day"
-          stroke="#6b7280"
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          axisLine={{ stroke: '#e5e7eb' }}
+          stroke="#666666"
+          tick={{ fill: '#666666', fontSize: 13, fontWeight: 500 }}
+          axisLine={{ stroke: '#d0d0d0' }}
         />
         <YAxis
-          stroke="#6b7280"
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          axisLine={{ stroke: '#e5e7eb' }}
+          stroke="#666666"
+          tick={{ fill: '#666666', fontSize: 13, fontWeight: 500 }}
+          axisLine={{ stroke: '#d0d0d0' }}
           domain={[0, 100]}
         />
         <Tooltip
           contentStyle={{
             backgroundColor: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+            border: '1px solid #d0d0d0',
+            borderRadius: '6px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
           }}
-          labelStyle={{ color: '#111827', fontWeight: 600, marginBottom: '4px' }}
-          itemStyle={{ color: '#6b7280', fontSize: '13px' }}
-          cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
+          labelStyle={{ color: '#333333', fontWeight: 600, marginBottom: '6px' }}
+          itemStyle={{ color: '#003d82', fontSize: '14px', fontWeight: 500 }}
+          cursor={{ fill: 'rgba(0, 61, 130, 0.05)' }}
         />
-        <Bar dataKey="activity" radius={[8, 8, 0, 0]} name="활동량">
+        <Bar dataKey="activity" radius={[6, 6, 0, 0]} name="활동량" maxBarSize={50}>
           {data.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={getBarColor(entry.activity)} />
           ))}

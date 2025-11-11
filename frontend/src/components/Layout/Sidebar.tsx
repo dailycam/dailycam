@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   Video,
@@ -6,7 +6,6 @@ import {
   FileText,
   BarChart3,
   Settings,
-  Baby,
 } from 'lucide-react'
 
 const navigation = [
@@ -22,17 +21,26 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-200">
+      <Link to="/" className="h-16 flex items-center px-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center">
-            <Baby className="w-6 h-6 text-white" />
+          <img 
+            src="/daily-cam (4).png" 
+            alt="Daily-cam 로고" 
+            className="w-10 h-10"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+              e.currentTarget.nextElementSibling?.classList.remove('hidden')
+            }}
+          />
+          <div className="hidden w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center">
+            <span className="text-white text-xl">👶</span>
           </div>
           <div>
             <h1 className="text-lg font-bold text-gray-900">Daily-cam</h1>
             <p className="text-xs text-gray-500">아이 곁에</p>
           </div>
         </div>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-1">

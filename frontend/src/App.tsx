@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
+import HomeLayout from './components/Layout/HomeLayout'
 import Layout from './components/Layout/Layout'
+import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import CameraSetup from './pages/CameraSetup'
 import LiveMonitoring from './pages/LiveMonitoring'
@@ -10,8 +12,13 @@ import Settings from './pages/Settings'
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+      {/* 홈 (랜딩 페이지) */}
+      <Route path="/" element={<HomeLayout />}>
+        <Route index element={<Home />} />
+      </Route>
+
+      {/* 앱 (대시보드 및 기능들) */}
+      <Route element={<Layout />}>
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="camera-setup" element={<CameraSetup />} />
         <Route path="live-monitoring" element={<LiveMonitoring />} />
