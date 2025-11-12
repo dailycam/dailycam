@@ -15,7 +15,14 @@ npm install
 `.env` 파일을 생성하고 다음 내용을 추가하세요:
 
 ```env
+# OpenAI API 키 (기존 기능)
 VITE_OPENAI_API_KEY=your_openai_api_key_here
+
+# Google Gemini API 키 (비디오 분석용)
+# 발급: https://aistudio.google.com/apikey
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
+
+# API 서버 (향후 사용)
 VITE_API_BASE_URL=http://localhost:3000/api
 ```
 
@@ -56,7 +63,8 @@ frontend/
 │   │   ├── Analytics.tsx   # 분석
 │   │   └── Settings.tsx    # 설정
 │   ├── lib/                # 라이브러리
-│   │   └── openai.ts       # OpenAI 통합
+│   │   ├── openai.ts       # OpenAI 통합
+│   │   └── gemini.ts       # Gemini 비디오 분석
 │   ├── utils/              # 유틸리티
 │   │   └── mockData.ts     # 목 데이터
 │   ├── types/              # TypeScript 타입
@@ -82,6 +90,7 @@ frontend/
 - **Recharts** - 데이터 시각화
 - **Lucide React** - 아이콘
 - **OpenAI API** - AI 기능
+- **Google Gemini API** - 비디오 분석 (Gemini 2.5 Flash)
 - **date-fns** - 날짜 포맷팅
 
 ## 📄 주요 페이지
@@ -114,6 +123,10 @@ frontend/
 - 카메라 추가/편집
 - 세이프존/데드존 설정
 - 연결 테스트
+- **🆕 AI 비디오 분석** (Gemini 2.5 Flash)
+  - 비디오 업로드 및 분석
+  - 넘어짐, 위험 행동 자동 감지
+  - 타임라인 이벤트 및 안전도 평가
 
 ### Settings (설정)
 - 프로필 관리
@@ -147,4 +160,5 @@ npm run build
 - [기능 명세서](../docs/FEATURES.md)
 - [차트 가이드](../docs/CHARTS_GUIDE.md)
 - [비디오 하이라이트 가이드](../docs/VIDEO_HIGHLIGHTS_GUIDE.md)
+- [**🆕 Gemini 비디오 분석 가이드**](../docs/GEMINI_VIDEO_ANALYSIS_GUIDE.md)
 
