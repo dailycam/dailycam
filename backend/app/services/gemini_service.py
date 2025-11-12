@@ -97,11 +97,13 @@ class GeminiService:
 
 분석할 항목:
 1. 넘어짐 (fall) - 아이가 넘어지거나 균형을 잃는 순간
-2. 위험한 행동 (dangerous_action) - 위험한 물건을 만지거나 위험한 장소에 접근
+2. 위험한 행동 (danger) - 위험한 물건을 만지거나 위험한 장소에 접근
 3. 경고 상황 (warning) - 잠재적으로 위험할 수 있는 상황
 4. 안전한 활동 (safe) - 정상적이고 안전한 활동
 
 각 이벤트에 대해 타임스탬프와 한글로 구체적인 설명을 제공해주세요.
+
+**중요: type 필드는 반드시 "fall", "danger", "warning", "safe" 중 하나만 사용하세요. "dangerous_action"이 아닌 "danger"를 사용하세요.**
 
 응답 형식 (모든 설명은 한글로):
 {
@@ -112,14 +114,16 @@ class GeminiService:
   "timeline_events": [
     {
       "timestamp": "00:00:05",
-      "type": "fall" 또는 "danger" 또는 "warning" 또는 "safe",
+      "type": "fall",
       "description": "한글로 작성된 구체적인 설명",
-      "severity": "high" 또는 "medium" 또는 "low"
+      "severity": "high"
     }
   ],
   "summary": "한글로 작성된 전체 비디오 요약 (한 줄)",
   "recommendations": ["한글로 작성된 안전 개선 추천 사항들"]
 }
+
+**다시 강조: timeline_events의 type은 반드시 "fall", "danger", "warning", "safe" 중 하나여야 합니다.**
 
 예시:
 {
@@ -133,6 +137,18 @@ class GeminiService:
       "type": "fall",
       "description": "아이가 소파에서 내려오다가 균형을 잃고 넘어졌습니다",
       "severity": "high"
+    },
+    {
+      "timestamp": "00:01:30",
+      "type": "danger",
+      "description": "아이가 콘센트 근처에 접근했습니다",
+      "severity": "high"
+    },
+    {
+      "timestamp": "00:02:10",
+      "type": "warning",
+      "description": "아이가 계단 근처에서 놀고 있습니다",
+      "severity": "medium"
     }
   ],
   "summary": "대체로 안전하나 1회 넘어짐이 감지되었습니다",
