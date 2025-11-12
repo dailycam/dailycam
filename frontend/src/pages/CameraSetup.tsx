@@ -16,7 +16,7 @@ import {
   Activity,
   Clock,
 } from 'lucide-react'
-import { analyzeVideoWithGemini, VideoAnalysisResult } from '../lib/gemini'
+import { analyzeVideoWithBackend, VideoAnalysisResult } from '../lib/api'
 
 export default function CameraSetup() {
   const [selectedCamera, setSelectedCamera] = useState<string | null>('camera-1')
@@ -71,14 +71,15 @@ export default function CameraSetup() {
         })
       }, 500)
 
-      const result = await analyzeVideoWithGemini(videoFile)
+      // 백엔드 API 호출
+      const result = await analyzeVideoWithBackend(videoFile)
       
       clearInterval(progressInterval)
       setAnalysisProgress(100)
       setAnalysisResult(result)
-    } catch (error) {
+    } catch (error: any) {
       console.error('분석 오류:', error)
-      setAnalysisError('비디오 분석 중 오류가 발생했습니다. Gemini API 키를 확인해주세요.')
+      setAnalysisError(error.message || '비디오 분석 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.')
     } finally {
       setIsAnalyzing(false)
     }
