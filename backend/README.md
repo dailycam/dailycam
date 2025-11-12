@@ -1,3 +1,4 @@
+
 # DailyCam Backend
 
 영유아 안전 모니터링 시스템의 백엔드 서버입니다. Gemini 2.5 Flash를 사용하여 비디오 분석을 수행합니다.
@@ -93,6 +94,11 @@ python run.py
 - **Pydantic** - 데이터 검증
 
 ## 📁 프로젝트 구조
+# Backend Scaffold
+
+This directory contains the Python backend scaffold for the DailyCam project.
+It is organised to make it easy to plug in camera-integration logic that will
+talk to Gemini 2.5 Flash or any other provider.
 
 ```
 backend/
@@ -144,3 +150,36 @@ mypy app/
 - [FastAPI 문서](https://fastapi.tiangolo.com/)
 - [Gemini API 문서](https://ai.google.dev/docs)
 - [Google AI Studio](https://aistudio.google.com/)
+│   ├── api/
+│   │   ├── analytics/      # FastAPI routers grouped by domain
+│   │   ├── daily_report/
+│   │   ├── homecam/
+│   │   ├── live_monitoring/
+│   │   └── video_highlights/
+│   ├── models/
+│   │   ├── analytics/      # Domain models or ORM entities
+│   │   ├── daily_report/
+│   │   ├── homecam/
+│   │   ├── live_monitoring/
+│   │   └── video_highlights/
+│   ├── schemas/
+│   │   ├── analytics/      # Pydantic request/response schemas
+│   │   ├── daily_report/
+│   │   ├── homecam/
+│   │   ├── live_monitoring/
+│   │   └── video_highlights/
+│   └── services/
+│       ├── analytics/      # Business logic (e.g. analytics aggregation)
+│       ├── daily_report/
+│       ├── homecam/
+│       ├── live_monitoring/
+│       └── video_highlights/
+└── pyproject.toml        # Python project configuration
+```
+
+### Next Steps
+
+1. Install dependencies (FastAPI, Uvicorn, google-generativeai, etc.).
+2. Flesh out each domain service (e.g. `app/services/homecam/service.py`, `app/services/analytics/service.py`).
+3. Expose API endpoints in the corresponding routers and ensure they are included in `app/main.py`.
+4. Wire the frontend to call the new backend endpoi

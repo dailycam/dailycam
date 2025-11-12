@@ -50,5 +50,3 @@ async def analyze_video(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"비디오 분석 중 오류가 발생했습니다: {str(e)}")
-
-
