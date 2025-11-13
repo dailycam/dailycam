@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
     analytics_router,
+    dashboard_router,
     daily_report_router,
     homecam_router,
     live_monitoring_router,
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     
     app.include_router(homecam_router, prefix="/api/homecam", tags=["homecam"])
     app.include_router(analytics_router, prefix="/api/analytics", tags=["analytics"])
+    app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(
         daily_report_router, prefix="/api/daily-report", tags=["daily-report"]
     )
