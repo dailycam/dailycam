@@ -5,7 +5,13 @@ from .service import (
     DailyReportServiceConfig,
     get_daily_report_service,
 )
+from .highlight_generator import HighlightGenerator
 
-__all__ = ["DailyReportService", "DailyReportServiceConfig", "get_daily_report_service"]
+__all__ = [
+    "DailyReportService",
+    "DailyReportServiceConfig",
+    "get_daily_report_service",
+    "HighlightGenerator",
+]
 
 

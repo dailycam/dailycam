@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Camera,
   Plus,
@@ -15,12 +16,15 @@ import {
   TrendingDown,
   Activity,
   Clock,
+  FileText,
+  ArrowRight,
 } from 'lucide-react'
 import { analyzeVideoWithBackend, VideoAnalysisResult } from '../lib/api'
 
 export default function CameraSetup() {
   const [selectedCamera, setSelectedCamera] = useState<string | null>('camera-1')
   const [zoneMode, setZoneMode] = useState<'safe' | 'dead'>('safe')
+  const navigate = useNavigate()
   
   // 비디오 분석 상태
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -59,28 +63,93 @@ export default function CameraSetup() {
     setAnalysisError(null)
     setAnalysisProgress(0)
 
+    let progressInterval: NodeJS.Timeout | null = null
+    let timeoutId: NodeJS.Timeout | null = null
+
     try {
       // 진행 상태 시뮬레이션
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setAnalysisProgress(prev => {
           if (prev >= 90) {
-            clearInterval(progressInterval)
             return 90
           }
           return prev + 10
         })
       }, 500)
 
+      // 타임아웃 설정 (5분)
+      timeoutId = setTimeout(() => {
+        if (progressInterval) {
+          clearInterval(progressInterval)
+        }
+        setAnalysisError('비디오 분석이 시간 초과되었습니다. 파일 크기를 확인하거나 다시 시도해주세요.')
+        setIsAnalyzing(false)
+        setAnalysisProgress(0)
+      }, 5 * 60 * 1000) // 5분
+
       // 백엔드 API 호출
+      console.log('[분석 시작] 비디오 분석 API 호출...')
       const result = await analyzeVideoWithBackend(videoFile)
       
-      clearInterval(progressInterval)
+      // 타임아웃 정리
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      
       setAnalysisProgress(100)
       setAnalysisResult(result)
+      console.log('[분석 완료] 비디오 분석 성공:', result)
+      
+      // 분석 결과를 로컬 스토리지에 저장 (analysisId 포함)
+      localStorage.setItem('videoAnalysisResult', JSON.stringify(result))
+      
+      // 리포트 생성 (자동) - 타임아웃 설정
+      if (result.analysisId) {
+        console.log('[리포트 생성] 시작:', result.analysisId)
+        try {
+          const { generateDailyReportFromAnalysis } = await import('../lib/api')
+          
+          // 리포트 생성 타임아웃 (3분)
+          const reportPromise = generateDailyReportFromAnalysis(result)
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('리포트 생성이 시간 초과되었습니다.')), 3 * 60 * 1000)
+          })
+          
+          const reportData = await Promise.race([reportPromise, timeoutPromise]) as any
+          
+          console.log('[리포트 생성] 성공:', reportData)
+          // 리포트 ID를 로컬 스토리지에 저장
+          if (reportData.report_id) {
+            localStorage.setItem('latestReportId', reportData.report_id.toString())
+            console.log('[리포트 생성] 리포트 ID 저장:', reportData.report_id)
+          } else {
+            console.warn('[리포트 생성] 리포트 ID가 없습니다:', reportData)
+          }
+        } catch (error: any) {
+          console.error('[리포트 생성] 실패:', error)
+          console.error('[리포트 생성] 오류 상세:', error.message || error)
+          // 리포트 생성 실패해도 분석 결과는 표시
+          setAnalysisError(prev => prev ? prev : '리포트 생성에 실패했지만 분석 결과는 확인할 수 있습니다.')
+        }
+      } else {
+        console.warn('[리포트 생성] analysisId가 없어서 리포트를 생성하지 않습니다:', result)
+      }
     } catch (error: any) {
       console.error('분석 오류:', error)
       setAnalysisError(error.message || '비디오 분석 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.')
     } finally {
+      // 정리 작업
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       setIsAnalyzing(false)
     }
   }
@@ -323,84 +392,29 @@ export default function CameraSetup() {
             )}
           </div>
 
-          {/* 분석 결과 */}
+          {/* 분석 완료 상태 */}
           <div className="space-y-4">
             {analysisResult ? (
-              <>
-                {/* 통계 카드들 */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingDown className="w-5 h-5 text-red-600" />
-                      <p className="text-sm font-medium text-red-900">넘어짐</p>
-                    </div>
-                    <p className="text-3xl font-bold text-red-600">{analysisResult.falls}회</p>
+              <div className="h-full flex items-center justify-center p-12 text-center">
+                <div className="w-full">
+                  <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
                   </div>
-
-                  <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="w-5 h-5 text-orange-600" />
-                      <p className="text-sm font-medium text-orange-900">위험 행동</p>
-                    </div>
-                    <p className="text-3xl font-bold text-orange-600">
-                      {analysisResult.dangerousActions}회
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Activity className="w-5 h-5 text-blue-600" />
-                      <p className="text-sm font-medium text-blue-900">전체 사건</p>
-                    </div>
-                    <p className="text-3xl font-bold text-blue-600">
-                      {analysisResult.totalIncidents}건
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-5 h-5 text-green-600" />
-                      <p className="text-sm font-medium text-green-900">안전도</p>
-                    </div>
-                    <p className="text-3xl font-bold text-green-600">
-                      {analysisResult.safetyScore}점
-                    </p>
-                  </div>
-                </div>
-
-                {/* 요약 */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-900 mb-2">📋 분석 요약</p>
-                  <p className="text-sm text-blue-800">{analysisResult.summary}</p>
-                </div>
-
-                {/* 타임라인 이벤트 */}
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    타임라인 이벤트
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">분석이 완료되었습니다!</h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    비디오 분석이 성공적으로 완료되었습니다.<br />
+                    상세한 리포트를 확인하세요.
                   </p>
-                  <div className="max-h-64 overflow-y-auto space-y-2">
-                    {analysisResult.timelineEvents.map((event, index) => (
-                      <TimelineEventCard key={index} event={event} />
-                    ))}
-                  </div>
+                  <button
+                    onClick={() => navigate('/daily-report')}
+                    className="btn-primary w-full flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    분석 결과 보러가기
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
-
-                {/* 추천 사항 */}
-                {analysisResult.recommendations.length > 0 && (
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm font-medium text-yellow-900 mb-2">💡 안전 개선 추천</p>
-                    <ul className="space-y-1">
-                      {analysisResult.recommendations.map((rec, index) => (
-                        <li key={index} className="text-sm text-yellow-800">
-                          • {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </>
+              </div>
             ) : (
               <div className="h-full flex items-center justify-center p-12 text-center">
                 <div>

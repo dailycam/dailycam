@@ -102,14 +102,17 @@ npm run build
 - **Recharts** - 데이터 시각화
 
 ### AI & Analytics
-- **OpenAI GPT-4** - 텍스트 분석 및 요약
-- **GPT-4 Vision** - 이미지/비디오 분석
+- **Gemini 2.5 Flash** - 비디오 분석 및 리포트 생성
+- **Google Generative AI** - AI 모델 통합
 
-### Backend (예정)
-- Node.js + Express
-- PostgreSQL
-- Redis (캐싱)
-- WebRTC (실시간 스트리밍)
+### Backend
+- **FastAPI** - Python 웹 프레임워크
+- **Gemini API** - 비디오 분석 및 리포트 생성
+- **Pydantic** - 데이터 검증
+- **SQLAlchemy** - ORM (데이터베이스 연동)
+- **MariaDB/MySQL** - 데이터베이스
+- **Transformers** - Bert 모델 (이벤트 분류)
+- **MoviePy** - 하이라이트 영상 생성
 
 ## 📚 문서
 
@@ -118,6 +121,7 @@ npm run build
 - [사용 시나리오](./USER_SCENARIOS.md) - 실제 사용 예시
 - [차트 가이드](./CHARTS_GUIDE.md) - 차트 컴포넌트 사용법
 - [비디오 하이라이트 가이드](./VIDEO_HIGHLIGHTS_GUIDE.md) - 비디오 기능 가이드
+- [데이터베이스 연동 가이드](./backend/DATABASE_INTEGRATION.md) - 데이터베이스 설정 및 연동 방법
 
 ## 🗺 로드맵
 
@@ -128,16 +132,21 @@ npm run build
 - [x] 반응형 디자인
 - [x] 프론트엔드 폴더 구조 분리
 
-### 🚧 Phase 2: 백엔드 통합 (진행 중)
-- [ ] REST API 개발
+### ✅ Phase 2: 백엔드 통합 (진행 중)
+- [x] REST API 개발 (FastAPI)
+- [x] Gemini 2.5 Flash 비디오 분석 통합
+- [x] 일일 리포트 자동 생성
+- [x] 데이터베이스 설계 및 연동 (MariaDB/MySQL)
+- [x] Bert 모델 통합 (이벤트 분류)
+- [x] MoviePy 하이라이트 영상 생성
 - [ ] 사용자 인증
 - [ ] 카메라 스트림 통합
-- [ ] 데이터베이스 설계
 
-### 📅 Phase 3: AI 기능 (예정)
-- [ ] OpenAI Vision API 통합
+### 🚧 Phase 3: AI 기능 (진행 중)
+- [x] Gemini 비디오 분석 API 통합
+- [x] 비디오 분석 결과 기반 리포트 생성
+- [x] 프롬프트 분리 및 관리
 - [ ] 실시간 위험 감지
-- [ ] 일일 리포트 자동 생성
 - [ ] 행동 패턴 학습
 
 ### 📅 Phase 4: 고급 기능 (예정)
@@ -172,6 +181,40 @@ npm run build
 - [Vite](https://vitejs.dev/) - 빠른 빌드 도구
 - [TailwindCSS](https://tailwindcss.com/) - 유틸리티 CSS
 - [Lucide](https://lucide.dev/) - 아름다운 아이콘
+
+## 📝 최근 변경 사항 (2024-11)
+
+### 비디오 분석 및 리포트 통합 기능 추가
+
+#### 프론트엔드 변경사항
+- **DailyReport.tsx**: 모든 더미 데이터 제거, 실제 분석 결과 표시로 변경
+- **CameraSetup.tsx**: 분석 결과 표시 섹션 제거, 분석 완료 후 "분석 결과 보러가기" 버튼 추가
+- **api.ts**: 리포트 생성 API 함수 추가 (`generateDailyReportFromAnalysis`)
+
+#### 백엔드 변경사항
+- **프롬프트 파일 분리**: 
+  - `backend/app/prompts/video_analysis_prompt.txt`: 비디오 분석용 프롬프트
+  - `backend/app/prompts/daily_report_analysis_prompt.txt`: 리포트 생성용 프롬프트
+- **gemini_service.py**: 
+  - 프롬프트 파일 로드 기능 추가 (`_load_prompt`)
+  - 리포트용 분석 메서드 추가 (`analyze_for_daily_report`)
+  - 기존 `analyze_video` 메서드는 유지 (하위 호환성)
+- **daily_report/service.py**: 
+  - Gemini 서비스 통합
+  - `generate_from_analysis` 메서드 추가
+- **daily_report/router.py**: 
+  - `/api/daily-report/from-analysis` 엔드포인트 추가
+
+#### 데이터 흐름
+1. 사용자가 비디오 업로드 → `POST /api/homecam/analyze-video`
+2. 분석 완료 → 결과를 로컬 스토리지에 저장
+3. "분석 결과 보러가기" 버튼 클릭 → DailyReport 페이지로 이동
+4. DailyReport에서 저장된 분석 결과 로드 및 표시
+
+#### 주의사항
+- 기존 Gemini 호출 코드는 최대한 수정하지 않고 추가하는 방식으로 구현
+- 프롬프트는 별도 파일로 분리하여 관리 용이성 향상
+- 로컬 스토리지를 사용하여 분석 결과 임시 저장 (향후 데이터베이스로 전환 예정)
 
 ---
 

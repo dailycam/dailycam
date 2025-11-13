@@ -9,6 +9,7 @@ interface HighlightCardProps {
   severity: 'high' | 'medium' | 'low'
   thumbnailUrl?: string
   description: string
+  videoUrl?: string
   onPlay: () => void
 }
 

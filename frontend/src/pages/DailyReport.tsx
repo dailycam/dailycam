@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Calendar,
   TrendingUp,
@@ -14,15 +14,176 @@ import {
   ChevronRight,
   Video,
 } from 'lucide-react'
+import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
 import HighlightCard from '../components/VideoHighlights/HighlightCard'
 import VideoPlayer from '../components/VideoHighlights/VideoPlayer'
-import { mockVideoHighlights } from '../utils/mockData'
+import { getLatestDailyReport, getDailyReport } from '../lib/api'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function DailyReport() {
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
+  const [selectedVideo, setSelectedVideo] = useState<any>(null)
+  const [reportData, setReportData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   
+  // 그래프 데이터 생성 (time_slots 기반)
+  const generateGraphData = (timeSlots: any[]) => {
+    if (!timeSlots || timeSlots.length === 0) {
+      // 기본 더미 데이터 (데이터가 없을 때)
+      return [
+        { date: '11/05', safety: 85, incidents: 5, activity: 75 },
+        { date: '11/06', safety: 88, incidents: 3, activity: 80 },
+        { date: '11/07', safety: 92, incidents: 2, activity: 85 },
+        { date: '11/08', safety: 87, incidents: 4, activity: 78 },
+        { date: '11/09', safety: 90, incidents: 3, activity: 82 },
+        { date: '11/10', safety: 95, incidents: 1, activity: 88 },
+        { date: '11/11', safety: 93, incidents: 2, activity: 86 },
+      ]
+    }
+    
+    // time_slots를 그래프 형식으로 변환
+    return timeSlots.map((slot, index) => {
+      const date = new Date()
+      date.setDate(date.getDate() - (timeSlots.length - index - 1))
+      const dateStr = `${date.getMonth() + 1}/${date.getDate().toString().padStart(2, '0')}`
+      
+      // activity를 숫자로 변환 (낮은=30, 중간=60, 높은=90)
+      let activityNum = 60
+      if (slot.activity?.includes('낮은')) activityNum = 30
+      else if (slot.activity?.includes('높은')) activityNum = 90
+      
+      return {
+        date: dateStr,
+        safety: slot.safety_score || 0,
+        incidents: slot.incidents || 0,
+        activity: activityNum,
+      }
+    })
+  }
   
+  const weeklyTrendData = generateGraphData(reportData?.time_slots || [])
+
+  // 리포트 데이터 로드
+  useEffect(() => {
+    const loadReport = async () => {
+      try {
+        setLoading(true)
+        let data = null
+        
+        // 1. 로컬 스토리지에서 리포트 ID 확인
+        const reportId = localStorage.getItem('latestReportId')
+        
+        if (reportId && reportId !== '') {
+          try {
+            console.log(`리포트 ID로 조회 시도: ${reportId}`)
+            data = await getDailyReport(parseInt(reportId))
+            console.log('리포트 조회 성공:', data?.report_id)
+          } catch (error: any) {
+            const errorMessage = error.message || String(error)
+            console.log(`리포트 ID 조회 실패 (${reportId}):`, errorMessage)
+            
+            // 404나 422는 리포트가 없는 것이므로 최신 리포트 조회 시도
+            if (errorMessage.includes('404') || errorMessage.includes('422') || errorMessage.includes('리포트를 찾을 수 없습니다')) {
+              console.log('최신 리포트 조회 시도...')
+              try {
+                data = await getLatestDailyReport()
+                console.log('최신 리포트 조회 성공:', data?.report_id)
+                // 최신 리포트 ID 업데이트
+                if (data?.report_id) {
+                  localStorage.setItem('latestReportId', data.report_id.toString())
+                }
+              } catch (latestError: any) {
+                const latestErrorMessage = latestError.message || String(latestError)
+                // 리포트가 없는 것은 정상 상황
+                if (!latestErrorMessage.includes('404') && !latestErrorMessage.includes('422') && !latestErrorMessage.includes('리포트를 찾을 수 없습니다')) {
+                  console.error('최신 리포트 조회 실패:', latestError)
+                }
+                data = null
+              }
+            } else {
+              // 다른 오류는 로그 출력
+              console.error('리포트 조회 실패:', error)
+              data = null
+            }
+          }
+        } else {
+          // 리포트 ID가 없으면 최신 리포트 조회
+          console.log('최신 리포트 조회 시도...')
+          try {
+            data = await getLatestDailyReport()
+            console.log('최신 리포트 조회 성공:', data?.report_id)
+            // 리포트 ID 저장
+            if (data?.report_id) {
+              localStorage.setItem('latestReportId', data.report_id.toString())
+            }
+          } catch (error: any) {
+            const errorMessage = error.message || String(error)
+            // 404나 422는 리포트가 없는 것이므로 정상 (에러 로그 출력 안 함)
+            if (!errorMessage.includes('404') && !errorMessage.includes('422') && !errorMessage.includes('리포트를 찾을 수 없습니다')) {
+              console.error('리포트 로드 실패:', error)
+            }
+            data = null
+          }
+        }
+        
+        if (data) {
+          setReportData(data)
+        } else {
+          console.log('리포트 데이터가 없습니다.')
+        }
+      } catch (error) {
+        console.error('리포트 로드 중 예상치 못한 오류:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadReport()
+  }, [])
+
+  // 리포트 날짜 포맷팅
+  const formatReportDate = (dateString?: string) => {
+    if (!dateString) {
+      const today = new Date()
+      return `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`
+    }
+    const date = new Date(dateString)
+    const days = ['일', '월', '화', '수', '목', '금', '토']
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${days[date.getDay()]})`
+  }
+
+  // 위험 건수 계산
+  const getTotalRisks = () => {
+    if (!reportData?.risk_priorities) return 0
+    return reportData.risk_priorities.filter((r: any) => r.level === 'high' || r.level === 'medium').length
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">리포트를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!reportData) {
+    return (
+      <div className="space-y-6">
+        <div className="card text-center py-12">
+          <AlertTriangle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">리포트 데이터가 없습니다</h2>
+          <p className="text-gray-600 mb-6">비디오를 분석하여 리포트를 생성해주세요.</p>
+          <a href="/camera-setup" className="btn-primary inline-flex items-center gap-2">
+            비디오 분석하기
+          </a>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -53,7 +214,7 @@ export default function DailyReport() {
           <div className="flex items-center gap-3">
             <Calendar className="w-5 h-5 text-primary-600" />
             <span className="text-lg font-semibold text-gray-900">
-              2024년 11월 11일 (월)
+              {formatReportDate(reportData.report_date)}
             </span>
           </div>
           <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -71,17 +232,20 @@ export default function DailyReport() {
           <div className="flex-1">
             <h2 className="text-lg font-bold text-gray-900 mb-2">AI 한줄평</h2>
             <p className="text-gray-800 leading-relaxed mb-4">
-              "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 
-              주방 데드존에 3회 접근했습니다. 오후 2시경 활동량이 가장 높았고, 모서리 보호대 추가 설치를 권장드립니다."
+              "{reportData.overall_summary || '분석 데이터가 없습니다.'}"
             </p>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-safe rounded-full"></div>
-                <span className="text-sm text-gray-700">안전도: <strong>92%</strong></span>
+                <span className="text-sm text-gray-700">
+                  안전도: <strong>{reportData.safety_metrics?.safe_zone_percentage || 0}%</strong>
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-warning rounded-full"></div>
-                <span className="text-sm text-gray-700">주의 필요: <strong>3건</strong></span>
+                <span className="text-sm text-gray-700">
+                  주의 필요: <strong>{getTotalRisks()}건</strong>
+                </span>
               </div>
             </div>
           </div>
@@ -92,35 +256,41 @@ export default function DailyReport() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <MetricCard
           title="총 모니터링 시간"
-          value="8시간 45분"
-          change="+1.2시간"
-          trend="up"
+          value={reportData.safety_metrics?.total_monitoring_time || "0시간"}
+          change=""
+          trend="neutral"
           icon={Clock}
         />
         <MetricCard
           title="감지된 위험"
-          value="3건"
-          change="-2건"
-          trend="down"
+          value={`${getTotalRisks()}건`}
+          change=""
+          trend="neutral"
           icon={AlertTriangle}
         />
         <MetricCard
           title="세이프존 체류율"
-          value="92%"
-          change="+5%"
-          trend="up"
+          value={`${reportData.safety_metrics?.safe_zone_percentage || 0}%`}
+          change=""
+          trend="neutral"
           icon={CheckCircle2}
         />
         <MetricCard
           title="활동 지수"
-          value="높음"
-          change="정상"
+          value={reportData.safety_metrics?.activity_level || "보통"}
+          change=""
           trend="neutral"
           icon={TrendingUp}
         />
       </div>
 
       {/* Weekly Trend Chart */}
+      <div className="card">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">주간 안전도 추이</h2>
+        <div className="h-64">
+          <ComposedTrendChart data={weeklyTrendData} />
+        </div>
+      </div>
 
       {/* Risk Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -128,27 +298,20 @@ export default function DailyReport() {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">위험도 우선순위</h2>
           <div className="space-y-3">
+            {reportData.risk_priorities && reportData.risk_priorities.length > 0 ? (
+              reportData.risk_priorities.map((risk: any, index: number) => (
             <RiskDetailItem
-              level="high"
-              title="주방 근처 반복 접근"
-              description="오후 2:15 - 2:45 사이 3회 접근"
-              location="주방 입구 (데드존)"
-              time="14:15 - 14:45"
-            />
-            <RiskDetailItem
-              level="medium"
-              title="계단 입구 접근"
-              description="1회 접근, 약 2분간 체류"
-              location="계단 입구"
-              time="11:30"
-            />
-            <RiskDetailItem
-              level="low"
-              title="가구 모서리 접촉"
-              description="거실 테이블 모서리 근접"
-              location="거실"
-              time="13:20"
-            />
+                  key={index}
+                  level={risk.level}
+                  title={risk.title}
+                  description={risk.description}
+                  location={risk.location || "위치 정보 없음"}
+                  time={risk.time || "시간 정보 없음"}
+                />
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-8">위험 상황이 감지되지 않았습니다.</p>
+            )}
           </div>
         </div>
 
@@ -156,24 +319,19 @@ export default function DailyReport() {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">시간대별 활동</h2>
           <div className="space-y-4">
+            {reportData.time_slots && reportData.time_slots.length > 0 ? (
+              reportData.time_slots.map((slot: any, index: number) => (
             <TimeSlot
-              time="09:00 - 12:00"
-              activity="낮은 활동량"
-              safetyScore={95}
-              incidents={0}
+                  key={index}
+                  time={slot.time}
+                  activity={slot.activity || "보통"}
+                  safetyScore={slot.safety_score || 0}
+                  incidents={slot.incidents || 0}
             />
-            <TimeSlot
-              time="12:00 - 15:00"
-              activity="높은 활동량"
-              safetyScore={85}
-              incidents={3}
-            />
-            <TimeSlot
-              time="15:00 - 18:00"
-              activity="중간 활동량"
-              safetyScore={92}
-              incidents={0}
-            />
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-8">시간대별 데이터가 없습니다.</p>
+            )}
           </div>
         </div>
       </div>
@@ -182,34 +340,22 @@ export default function DailyReport() {
       <div className="card">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">즉시 실행 리스트</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {reportData.action_recommendations && reportData.action_recommendations.length > 0 ? (
+            reportData.action_recommendations.map((action: any, index: number) => (
           <ActionRecommendation
-            priority="high"
-            title="주방 안전 게이트 설치"
-            description="아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다."
-            estimatedCost="3-5만원"
-            difficulty="쉬움"
-          />
-          <ActionRecommendation
-            priority="high"
-            title="거실 테이블 모서리 보호대 추가"
-            description="충돌 위험이 감지되었습니다. 모서리 보호대를 추가로 설치하세요."
-            estimatedCost="1-2만원"
-            difficulty="매우 쉬움"
-          />
-          <ActionRecommendation
-            priority="medium"
-            title="계단 입구 차단 강화"
-            description="계단 접근이 감지되었습니다. 기존 게이트의 잠금을 확인하세요."
-            estimatedCost="무료"
-            difficulty="쉬움"
-          />
-          <ActionRecommendation
-            priority="low"
-            title="세이프존 범위 재검토"
-            description="활동 패턴이 변화했습니다. 세이프존 범위 조정을 고려하세요."
-            estimatedCost="무료"
-            difficulty="쉬움"
-          />
+                key={index}
+                priority={action.priority}
+                title={action.title}
+                description={action.description}
+                estimatedCost={action.estimated_cost || "정보 없음"}
+                difficulty={action.difficulty || "보통"}
+              />
+            ))
+          ) : (
+            <div className="col-span-2">
+              <p className="text-gray-500 text-center py-8">추천 사항이 없습니다.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -226,13 +372,27 @@ export default function DailyReport() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockVideoHighlights.map((highlight) => (
+          {reportData.highlights && reportData.highlights.length > 0 ? (
+            reportData.highlights.map((highlight: any) => (
             <HighlightCard
               key={highlight.id}
-              {...highlight}
-              onPlay={() => setSelectedVideo(highlight.id)}
+                id={highlight.id}
+                title={highlight.title}
+                timestamp={highlight.timestamp}
+                duration={highlight.duration}
+                location={highlight.location || "위치 정보 없음"}
+                severity={highlight.severity}
+                description={highlight.description}
+                thumbnailUrl={highlight.thumbnail_url}
+                videoUrl={highlight.video_url ? `${API_BASE_URL}${highlight.video_url}` : undefined}
+                onPlay={() => setSelectedVideo(highlight)}
             />
-          ))}
+            ))
+          ) : (
+            <div className="col-span-3">
+              <p className="text-gray-500 text-center py-8">하이라이트 영상이 없습니다.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -264,11 +424,12 @@ export default function DailyReport() {
       {/* Video Player Modal */}
       {selectedVideo && (
         <VideoPlayer
-          title={mockVideoHighlights.find(h => h.id === selectedVideo)?.title || ''}
-          videoUrl={mockVideoHighlights.find(h => h.id === selectedVideo)?.videoUrl}
+          title={selectedVideo.title || '하이라이트 영상'}
+          videoUrl={selectedVideo.video_url ? `${API_BASE_URL}${selectedVideo.video_url}` : undefined}
           onClose={() => setSelectedVideo(null)}
         />
       )}
+
     </div>
   )
 }

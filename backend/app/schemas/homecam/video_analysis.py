@@ -1,6 +1,6 @@
 """비디오 분석 스키마"""
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +21,9 @@ class VideoAnalysisResponse(BaseModel):
     timeline_events: List[TimelineEvent] = Field(default_factory=list, description="타임라인 이벤트 목록")
     summary: str = Field(..., description="전체 요약 (한글)")
     recommendations: List[str] = Field(default_factory=list, description="안전 개선 추천 사항 (한글)")
+    analysis_id: Optional[int] = Field(None, description="분석 ID (DB 저장 후 생성)")
+    video_id: Optional[int] = Field(None, description="비디오 ID (DB 저장 후 생성)")
+    video_path: Optional[str] = Field(None, description="비디오 파일 경로")
 
     class Config:
         json_schema_extra = {
