@@ -1,7 +1,6 @@
 import {
   ComposedChart,
   Line,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -66,14 +65,6 @@ export default function ComposedTrendChart({ data }: ComposedTrendChartProps) {
           iconType="line"
           formatter={(value) => <span style={{ color: '#6b7280', fontSize: '13px' }}>{value}</span>}
         />
-        <Bar
-          yAxisId="right"
-          dataKey="incidents"
-          fill="#ef4444"
-          radius={[8, 8, 0, 0]}
-          name="위험 감지"
-          opacity={0.8}
-        />
         <Line
           yAxisId="left"
           type="monotone"
@@ -83,6 +74,16 @@ export default function ComposedTrendChart({ data }: ComposedTrendChartProps) {
           dot={{ fill: '#22c55e', r: 4 }}
           activeDot={{ r: 6 }}
           name="안전도"
+        />
+        <Line
+          yAxisId="right"
+          type="monotone"
+          dataKey="incidents"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={{ fill: '#ef4444', r: 3 }}
+          activeDot={{ r: 5 }}
+          name="위험 감지"
         />
         <Line
           yAxisId="left"
@@ -98,4 +99,3 @@ export default function ComposedTrendChart({ data }: ComposedTrendChartProps) {
     </ResponsiveContainer>
   )
 }
-
