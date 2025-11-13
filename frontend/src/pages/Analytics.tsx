@@ -13,6 +13,7 @@ import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
 import ActivityBarChart from '../components/Charts/ActivityBarChart'
 import HourlyHeatmap from '../components/Charts/HourlyHeatmap'
+import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
 import { generateWeeklySafetyData, generateHourlyActivityData } from '../utils/mockData'
 
 export default function Analytics() {
@@ -20,6 +21,17 @@ export default function Analytics() {
   
   const weeklyData = generateWeeklySafetyData()
   const hourlyData = generateHourlyActivityData()
+  
+
+  const weeklyTrendData = [
+    { date: '11/05', safety: 85, incidents: 5, activity: 75 },
+    { date: '11/06', safety: 88, incidents: 3, activity: 80 },
+    { date: '11/07', safety: 92, incidents: 2, activity: 85 },
+    { date: '11/08', safety: 87, incidents: 4, activity: 78 },
+    { date: '11/09', safety: 90, incidents: 3, activity: 82 },
+    { date: '11/10', safety: 95, incidents: 1, activity: 88 },
+    { date: '11/11', safety: 93, incidents: 2, activity: 86 },
+  ]
   
   const incidentData = [
     { name: '데드존 접근', value: 12, color: '#ef4444' },
@@ -138,93 +150,46 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Heatmaps */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Spatial Heatmap */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">공간 히트맵</h2>
-            <MapPin className="w-5 h-5 text-primary-600" />
-          </div>
-          <div className="bg-gray-100 rounded-lg p-6 mb-4">
-            <div className="relative aspect-video bg-gray-200 rounded-lg overflow-hidden">
-              {/* Simulated Room Layout */}
-              <div className="absolute inset-0 p-4">
-                {/* High Activity Zone */}
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-danger/30 rounded-full blur-xl"></div>
-                {/* Medium Activity Zone */}
-                <div className="absolute top-1/2 right-1/4 w-40 h-40 bg-warning/30 rounded-full blur-xl"></div>
-                {/* Low Activity Zone */}
-                <div className="absolute bottom-1/4 left-1/3 w-24 h-24 bg-safe/30 rounded-full blur-xl"></div>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center text-gray-600">
-                  <MapPin className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">거실 평면도</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-danger rounded"></div>
-              <span className="text-gray-600">높은 위험</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-warning rounded"></div>
-              <span className="text-gray-600">중간 위험</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-safe rounded"></div>
-              <span className="text-gray-600">안전</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Temporal Heatmap */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">시간대별 활동 히트맵</h2>
-            <Clock className="w-5 h-5 text-primary-600" />
-          </div>
-          <div className="h-80">
-            <HourlyHeatmap data={hourlyData.slice(6, 22)} />
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-sm text-gray-600 flex items-center gap-2">
-              <span className="text-lg">💡</span>
-              <span>오후 12시-3시 사이 활동량과 위험도가 가장 높습니다</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Activity Patterns */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">주간 활동 패턴</h2>
-          <Activity className="w-5 h-5 text-primary-600" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">주간 종합 트렌드</h2>
+            <p className="text-sm text-gray-500 mt-1">안전도, 위험 감지, 활동량 비교</p>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-0.5 bg-safe"></div>
+              <span className="text-gray-600">안전도</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-0.5 bg-primary-500"></div>
+              <span className="text-gray-600">활동량</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-danger rounded"></div>
+              <span className="text-gray-600">위험</span>
+            </div>
+          </div>
         </div>
-        <div className="h-64">
-          <ActivityBarChart data={activityData} />
+        <div className="h-80">
+          <ComposedTrendChart data={weeklyTrendData} />
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-safe rounded"></div>
-              <span className="text-xs text-gray-600">매우 활발 (90%+)</span>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">주간 평균 안전도</p>
+              <p className="text-lg font-bold text-gray-900">90%</p>
+              <p className="text-xs text-safe mt-1">+5% ↑</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-primary-500 rounded"></div>
-              <span className="text-xs text-gray-600">활발 (70-89%)</span>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">총 위험 감지</p>
+              <p className="text-lg font-bold text-gray-900">20건</p>
+              <p className="text-xs text-safe mt-1">-8건 ↓</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-warning rounded"></div>
-              <span className="text-xs text-gray-600">보통 (50-69%)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-danger rounded"></div>
-              <span className="text-xs text-gray-600">낮음 (50% 미만)</span>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">평균 활동량</p>
+              <p className="text-lg font-bold text-gray-900">82%</p>
+              <p className="text-xs text-primary-600 mt-1">정상 범위</p>
             </div>
           </div>
         </div>
