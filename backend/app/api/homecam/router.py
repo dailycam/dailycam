@@ -4,13 +4,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.schemas.homecam import HomeCamAnalysisRequest, HomeCamAnalysisResponse
 from app.schemas.homecam.video_analysis import VideoAnalysisResponse
+from app.services.dashboard.service import get_dashboard_service
 from app.services.homecam import HomeCamService, get_homecam_service
 from app.services.gemini_service import GeminiService, get_gemini_service
-from app.services.video_storage import VideoStorage
-from app.services.daily_report.repository import DailyReportRepository
-from app.database import get_db
 
 router = APIRouter()
 
@@ -32,11 +31,13 @@ async def analyze_homecam_feed(
 @router.post("/analyze-video", response_model=VideoAnalysisResponse)
 async def analyze_video(
     video: UploadFile = File(..., description="분석할 비디오 파일"),
+    user_id: str = "default_user",  # TODO: 실제 인증에서 가져오기
     gemini_service: GeminiService = Depends(get_gemini_service),
     db: Session = Depends(get_db),
 ) -> VideoAnalysisResponse:
     """
-    비디오 파일을 업로드하여 Gemini 2.5 Flash로 안전 분석을 수행합니다.
+    비디오 파일을 업로드하여 Gemini 2.5 Flash로 안전 분석을 수행하고,
+    결과를 대시보드 테이블에 자동 저장합니다.
     
     - **video**: 비디오 파일 (mp4, mov, avi 등)
     - 반환: 넘어짐, 위험 행동 등의 분석 결과 (analysis_id 포함)
@@ -49,40 +50,45 @@ async def analyze_video(
         )
     
     try:
-        # 비디오 파일 저장
-        storage = VideoStorage()
-        await video.seek(0)  # 파일 포인터 초기화
-        video_path = await storage.save_video(video)
+        # 비디오 파일 읽기
+        video_content = await video.read()
+        file_size = len(video_content)
         
-        # 파일 크기 계산
-        file_size = Path(video_path).stat().st_size if Path(video_path).exists() else None
+        # 대략적인 비디오 길이 추정 (1MB ≈ 1분 가정, 매우 근사치)
+        estimated_duration_seconds = (file_size / (1024 * 1024)) * 60
         
-        # DB에 비디오 정보 저장
-        repository = DailyReportRepository(db)
-        saved_video = repository.save_video(
-            filename=video.filename or "unknown",
-            file_path=video_path,
-            file_size=file_size,
-            mime_type=video.content_type
+        # Gemini로 비디오 분석 (bytes 직접 전달)
+        result = await gemini_service.analyze_video(
+            video_bytes=video_content,
+            content_type=video.content_type or "video/mp4",
         )
         
-        # Gemini로 비디오 분석
-        await video.seek(0)  # 파일 포인터 초기화
-        result, _ = await gemini_service.analyze_video(video, save_video=False)
-        
-        # DB에 분석 결과 저장
-        saved_analysis = repository.save_video_analysis(
-            video_id=saved_video.id,
-            analysis_data=result
-        )
-        
-        # 분석 ID와 비디오 경로를 결과에 포함
-        result['analysis_id'] = saved_analysis.id
-        result['video_id'] = saved_video.id
-        result['video_path'] = video_path
+        # 대시보드 테이블에 저장
+        try:
+            dashboard_service = get_dashboard_service(db)
+            dashboard_service.save_video_analysis_to_dashboard(
+                user_id=user_id,
+                video_analysis_result=result,
+                video_duration_seconds=estimated_duration_seconds,
+            )
+        except Exception as db_error:
+            # DB 저장 실패해도 분석 결과는 반환
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"⚠️ 대시보드 데이터 저장 실패: {db_error}")
+            print(f"상세 에러:\n{error_trace}")
+            # 에러를 무시하고 분석 결과만 반환
         
         return VideoAnalysisResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"비디오 분석 중 오류가 발생했습니다: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        error_msg = str(e)
+        print(f"❌ 비디오 분석 오류: {error_msg}")
+        print(f"상세 에러:\n{error_trace}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"비디오 분석 중 오류가 발생했습니다: {error_msg}"
+        )

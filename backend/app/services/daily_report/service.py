@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 from app.schemas.daily_report import DailyReportRequest, DailyReportResponse
 from app.services.gemini_service import GeminiService, get_gemini_service
 from app.services.daily_report.highlight_generator import HighlightGenerator
-from app.services.daily_report.repository import DailyReportRepository
-from app.models.daily_report.models import DailyReport, VideoAnalysis
+from app.models.daily_report import DailyReport, DailyReportRisk, DailyReportRecommendation
 import traceback
+import json
 
 
 @dataclass(slots=True)
@@ -92,56 +92,77 @@ class DailyReportService:
         else:
             report_data["highlights"] = []
         
-        # 데이터베이스에 저장 (세션이 제공된 경우)
-        if db and analysis_id:
+        # 데이터베이스에 저장 (세션이 제공된 경우) - 팀원의 DB 구조 사용
+        if db:
             try:
-                repository = DailyReportRepository(db)
-                saved_report = repository.save_daily_report(
-                    analysis_id=analysis_id,
-                    report_data=report_data,
-                    video_path=video_path
-                )
-                # report_id를 명확하게 설정 (예외가 발생해도 report_id는 설정)
-                report_id = saved_report.id
-                report_data["report_id"] = report_id
-                report_data["analysis_id"] = analysis_id  # analysis_id도 명확하게 설정
+                # 팀원의 DailyReport 모델 사용
+                from datetime import date
+                user_id = "default_user"  # TODO: 실제 인증에서 가져오기
+                report_date = date.today()
                 
-                if saved_report.created_at:
-                    if isinstance(saved_report.created_at, str):
-                        report_data["created_at"] = saved_report.created_at
+                # 리포트 생성
+                daily_report = DailyReport(
+                    user_id=user_id,
+                    report_date=report_date,
+                    safety_score=float(report_data.get("safety_metrics", {}).get("safe_zone_percentage", 0)),
+                    total_monitoring_time=0,  # TODO: 실제 모니터링 시간 계산
+                    incident_count=analysis_data.get("total_incidents", 0),
+                    safe_zone_percentage=float(report_data.get("safety_metrics", {}).get("safe_zone_percentage", 0)),
+                    activity_level=report_data.get("safety_metrics", {}).get("activity_level", "medium"),
+                    ai_summary=report_data.get("overall_summary", ""),
+                    hourly_activity_json=json.dumps(report_data.get("time_slots", []), ensure_ascii=False)
+                )
+                db.add(daily_report)
+                db.flush()
+                
+                # 위험 항목 저장
+                for risk_data in report_data.get("risk_priorities", []):
+                    risk = DailyReportRisk(
+                        daily_report_id=daily_report.id,
+                        level=risk_data.get("level", "low").lower(),
+                        title=risk_data.get("title", ""),
+                        description=risk_data.get("description", ""),
+                        location=risk_data.get("location", ""),
+                        time=risk_data.get("time", ""),
+                        count=risk_data.get("count", 1)
+                    )
+                    db.add(risk)
+                
+                # 추천 사항 저장
+                for rec_data in report_data.get("action_recommendations", []):
+                    recommendation = DailyReportRecommendation(
+                        daily_report_id=daily_report.id,
+                        priority=rec_data.get("priority", "low").lower(),
+                        title=rec_data.get("title", ""),
+                        description=rec_data.get("description", ""),
+                        estimated_cost=rec_data.get("estimated_cost"),
+                        difficulty=rec_data.get("difficulty")
+                    )
+                    db.add(recommendation)
+                
+                db.commit()
+                db.refresh(daily_report)
+                
+                # report_id 설정
+                report_id = daily_report.id
+                report_data["report_id"] = report_id
+                
+                if daily_report.created_at:
+                    if isinstance(daily_report.created_at, str):
+                        report_data["created_at"] = daily_report.created_at
                     else:
-                        report_data["created_at"] = saved_report.created_at.isoformat()
+                        report_data["created_at"] = daily_report.created_at.isoformat()
                 else:
                     report_data["created_at"] = ""
                 
-                print(f"[성공] 리포트 저장 완료: report_id={report_id}, analysis_id={analysis_id}")
-                print(f"[디버그] 리포트 데이터에 report_id 추가됨: {report_data.get('report_id')}")
+                print(f"[성공] 리포트 저장 완료: report_id={report_id}")
             except Exception as e:
                 import traceback
                 print(f"[오류] 리포트 DB 저장 중 오류 발생: {e}")
                 print(traceback.format_exc())
-                
-                # 리포트는 저장되었지만 관계 데이터 로드 중 오류가 발생한 경우
-                # report_id를 DB에서 다시 조회
-                try:
-                    from app.models.daily_report.models import DailyReport
-                    existing_report = db.query(DailyReport).filter(
-                        DailyReport.analysis_id == analysis_id
-                    ).order_by(DailyReport.created_at.desc()).first()
-                    
-                    if existing_report:
-                        report_id = existing_report.id
-                        report_data["report_id"] = report_id
-                        report_data["analysis_id"] = analysis_id
-                        print(f"[복구] DB에서 리포트 ID 찾음: report_id={report_id}")
-                    else:
-                        print(f"[경고] 리포트 ID를 찾을 수 없습니다.")
-                except Exception as recovery_error:
-                    print(f"[경고] 리포트 ID 복구 실패: {recovery_error}")
-                
-                # 저장 실패해도 리포트 데이터는 반환 (report_id가 있으면 포함)
+                db.rollback()
         else:
-            print(f"[경고] 리포트 DB 저장 스킵: db={db is not None}, analysis_id={analysis_id}")
+            print(f"[경고] 리포트 DB 저장 스킵: db가 제공되지 않음")
         
         # 최종 확인
         print(f"[디버그] 반환 전 리포트 데이터 키: {list(report_data.keys())}")
@@ -151,8 +172,7 @@ class DailyReportService:
 
     def get_report_by_id(self, report_id: int, db: Session) -> Optional[Dict[str, Any]]:
         """리포트 ID로 리포트 조회"""
-        repository = DailyReportRepository(db)
-        report = repository.get_daily_report_by_id(report_id)
+        report = db.query(DailyReport).filter(DailyReport.id == report_id).first()
         
         if not report:
             return None
@@ -163,10 +183,8 @@ class DailyReportService:
         """가장 최근 리포트 조회"""
         try:
             print("[서비스] get_latest_report 시작")
-            repository = DailyReportRepository(db)
-            print("[서비스] repository 생성 완료")
             
-            report = repository.get_latest_daily_report()
+            report = db.query(DailyReport).order_by(DailyReport.created_at.desc()).first()
             print(f"[서비스] 리포트 조회 완료: report={report is not None}")
             
             if not report:
@@ -185,89 +203,62 @@ class DailyReportService:
             return None
 
     def _report_to_dict(self, report: DailyReport) -> Dict[str, Any]:
-        """리포트 모델을 딕셔너리로 변환"""
+        """리포트 모델을 딕셔너리로 변환 (팀원의 DB 구조 사용)"""
         try:
-            # 관계 데이터가 로드되었는지 확인하고 안전하게 변환
+            # time_slots는 hourly_activity_json에서 파싱
             time_slots = []
             try:
-                if hasattr(report, 'time_slots') and report.time_slots:
-                    time_slots = [
-                        {
-                            "time": slot.time_range or "",
-                            "activity": slot.activity or "",
-                            "safety_score": slot.safety_score or 0,
-                            "incidents": slot.incidents or 0,
-                            "summary": slot.summary or ""
-                        }
-                        for slot in report.time_slots
-                    ]
+                if report.hourly_activity_json:
+                    time_slots = json.loads(report.hourly_activity_json)
             except Exception as e:
-                print(f"[경고] time_slots 변환 실패: {e}")
+                print(f"[경고] time_slots 파싱 실패: {e}")
                 time_slots = []
             
+            # risks 관계 데이터 변환
             risk_priorities = []
             try:
-                if hasattr(report, 'risk_priorities') and report.risk_priorities:
+                if hasattr(report, 'risks') and report.risks:
                     risk_priorities = [
                         {
-                            "level": risk.level.value.lower() if risk.level else "low",
+                            "level": risk.level.lower() if risk.level else "low",
                             "title": risk.title or "",
                             "description": risk.description or "",
                             "location": risk.location or "",
-                            "time": risk.time_range or "",
+                            "time": risk.time or "",
                             "count": risk.count or 1
                         }
-                        for risk in report.risk_priorities
+                        for risk in report.risks
                     ]
             except Exception as e:
-                print(f"[경고] risk_priorities 변환 실패: {e}")
+                print(f"[경고] risks 변환 실패: {e}")
                 import traceback
                 print(traceback.format_exc())
                 risk_priorities = []
             
+            # recommendations 관계 데이터 변환
             action_recommendations = []
             try:
-                if hasattr(report, 'action_recommendations') and report.action_recommendations:
+                if hasattr(report, 'recommendations') and report.recommendations:
                     action_recommendations = [
                         {
-                            "priority": action.priority.value.lower() if action.priority else "low",
-                            "title": action.title or "",
-                            "description": action.description or "",
-                            "estimated_cost": action.estimated_cost or "",
-                            "difficulty": action.difficulty or ""
+                            "priority": rec.priority.lower() if rec.priority else "low",
+                            "title": rec.title or "",
+                            "description": rec.description or "",
+                            "estimated_cost": rec.estimated_cost or "",
+                            "difficulty": rec.difficulty or ""
                         }
-                        for action in report.action_recommendations
+                        for rec in report.recommendations
                     ]
             except Exception as e:
-                print(f"[경고] action_recommendations 변환 실패: {e}")
+                print(f"[경고] recommendations 변환 실패: {e}")
                 import traceback
                 print(traceback.format_exc())
                 action_recommendations = []
             
+            # highlights는 팀원 모델에 없으므로 빈 배열
             highlights = []
-            try:
-                if hasattr(report, 'highlights') and report.highlights:
-                    highlights = [
-                        {
-                            "id": highlight.id,
-                            "title": highlight.title or "",
-                            "timestamp": highlight.timestamp or "",
-                            "duration": highlight.duration or "",
-                            "location": highlight.location or "",
-                            "severity": highlight.severity.value.lower() if highlight.severity else "medium",
-                            "description": highlight.description or "",
-                            "video_url": highlight.video_url or "",
-                            "thumbnail_url": highlight.thumbnail_url or ""
-                        }
-                        for highlight in report.highlights
-                    ]
-            except Exception as e:
-                print(f"[경고] highlights 변환 실패: {e}")
-                import traceback
-                print(traceback.format_exc())
-                highlights = []
         
-            # report_date 처리 (datetime 또는 None)
+            # report_date 처리
             report_date_str = ""
             try:
                 if report.report_date:
@@ -293,12 +284,11 @@ class DailyReportService:
             
             result = {
                 "report_id": report.id,
-                "analysis_id": report.analysis_id,
                 "report_date": report_date_str,
-                "overall_summary": report.overall_summary or "",
+                "overall_summary": report.ai_summary or "",
                 "safety_metrics": {
-                    "total_monitoring_time": report.total_monitoring_time or "",
-                    "safe_zone_percentage": report.safe_zone_percentage or 0,
+                    "total_monitoring_time": f"{report.total_monitoring_time}분" if report.total_monitoring_time else "",
+                    "safe_zone_percentage": int(report.safe_zone_percentage) if report.safe_zone_percentage else 0,
                     "activity_level": report.activity_level or ""
                 },
                 "time_slots": time_slots,
@@ -318,9 +308,8 @@ class DailyReportService:
             # 최소한의 데이터라도 반환
             return {
                 "report_id": report.id if hasattr(report, 'id') else None,
-                "analysis_id": report.analysis_id if hasattr(report, 'analysis_id') else None,
                 "report_date": "",
-                "overall_summary": report.overall_summary or "" if hasattr(report, 'overall_summary') else "",
+                "overall_summary": report.ai_summary or "" if hasattr(report, 'ai_summary') else "",
                 "safety_metrics": {
                     "total_monitoring_time": "",
                     "safe_zone_percentage": 0,

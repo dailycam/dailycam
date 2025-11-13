@@ -68,18 +68,9 @@ async def generate_daily_report_from_analysis(
             else:
                 report_data = dict(report_data)
         
-        # report_id가 없으면 None이 아닌 0으로라도 설정 (디버깅용)
+        # report_id가 없으면 경고만 출력 (팀원의 DB 구조에서는 analysis_id가 없으므로 복구 불가)
         if 'report_id' not in report_data or report_data.get('report_id') is None:
             print(f"[경고] 리포트 ID가 응답에 없습니다! 리포트 데이터: {report_data}")
-            # 리포트가 DB에 저장되었는지 확인
-            if analysis_id:
-                from app.services.daily_report.repository import DailyReportRepository
-                repo = DailyReportRepository(db)
-                existing_report = repo.get_daily_report_by_analysis_id(analysis_id)
-                if existing_report:
-                    report_data['report_id'] = existing_report.id
-                    report_data['analysis_id'] = analysis_id
-                    print(f"[복구] DB에서 리포트 ID 찾음: report_id={existing_report.id}")
         
         print(f"[최종] 반환할 리포트 데이터: report_id={report_data.get('report_id')}, keys={list(report_data.keys())}")
         
