@@ -127,9 +127,9 @@ class LiveMonitoringService:
     ) -> None:
         """백그라운드 스트림을 시작합니다. 클라이언트 연결과 무관하게 계속 실행됩니다."""
         async with self._lock:
-            # 기존 스트림이 있으면 중지
+            # 기존 스트림이 있으면 중지 (파일은 삭제하지 않음 - 새 스트림 시작이므로)
             if camera_id in self._active_streams:
-                await self.stop_stream(camera_id)
+                await self.stop_stream(camera_id, delete_file=False)
 
             # 비디오 파일 확인
             if not os.path.exists(video_path):
@@ -224,11 +224,19 @@ class LiveMonitoringService:
                 last_frame = current_frame
             await asyncio.sleep(0.033)  # 약 30 FPS
 
-    async def stop_stream(self, camera_id: str) -> None:
-        """특정 카메라의 스트림을 중지합니다."""
+    async def stop_stream(self, camera_id: str, delete_file: bool = True) -> None:
+        """
+        특정 카메라의 스트림을 중지합니다.
+        
+        Args:
+            camera_id: 카메라 ID
+            delete_file: 스트림 중지 시 비디오 파일도 삭제할지 여부 (기본값: True)
+        """
         async with self._lock:
             if camera_id in self._active_streams:
                 state = self._active_streams[camera_id]
+                video_path = state.video_path
+                
                 # 백그라운드 태스크 취소
                 if state.task is not None and not state.task.done():
                     state.task.cancel()
@@ -236,10 +244,25 @@ class LiveMonitoringService:
                         await state.task
                     except asyncio.CancelledError:
                         pass
+                
                 # VideoCapture 정리
                 if state.cap is not None:
                     state.cap.release()
+                
+                # 스트림 상태에서 제거
                 del self._active_streams[camera_id]
+                
+                # 파일 삭제 (옵션)
+                if delete_file and video_path and os.path.exists(video_path):
+                    try:
+                        os.remove(video_path)
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(f"스트림 중지 시 파일 삭제: {video_path}")
+                    except Exception as e:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"파일 삭제 실패 (무시): {video_path}, 오류: {e}")
 
     def get_active_streams(self) -> list[str]:
         """현재 활성화된 스트림의 카메라 ID 목록을 반환합니다."""

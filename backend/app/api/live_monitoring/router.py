@@ -61,9 +61,10 @@ async def upload_video_for_streaming(
             logger.info(f"기존 파일 발견: {temp_file_path}")
             
             # 해당 카메라의 스트림이 활성화되어 있으면 먼저 중지
+            # (파일은 삭제하지 않음 - 새 파일로 교체할 것이므로)
             if camera_id in service.get_active_streams():
                 logger.info(f"기존 스트림 중지 중: {camera_id}")
-                await service.stop_stream(camera_id)
+                await service.stop_stream(camera_id, delete_file=False)
                 # 스트림이 완전히 종료될 때까지 잠시 대기
                 await asyncio.sleep(0.5)
             
@@ -186,11 +187,18 @@ async def stream_video(
 @router.post("/stop-stream/{camera_id}")
 async def stop_stream(
     camera_id: str,
+    delete_file: bool = Query(True, description="스트림 중지 시 비디오 파일도 삭제할지 여부"),
     service: LiveMonitoringService = Depends(get_live_monitoring_service),
 ):
-    """특정 카메라의 스트림을 중지합니다."""
-    await service.stop_stream(camera_id)
-    return {"message": f"카메라 {camera_id}의 스트림이 중지되었습니다."}
+    """
+    특정 카메라의 스트림을 중지합니다.
+    기본적으로 비디오 파일도 함께 삭제됩니다.
+    """
+    await service.stop_stream(camera_id, delete_file=delete_file)
+    return {
+        "message": f"카메라 {camera_id}의 스트림이 중지되었습니다.",
+        "file_deleted": delete_file,
+    }
 
 
 @router.get("/active-streams")
