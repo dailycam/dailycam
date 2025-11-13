@@ -194,18 +194,15 @@ export async function analyzeVideoWithBackend(file: File): Promise<VideoAnalysis
 }
 
 /**
- * 비디오 분석 결과를 기반으로 일일 리포트를 생성합니다.
+ * 비디오 분석 결과를 기반으로 일일 리포트를 생성합니다. (새로 작성)
  */
 export async function generateDailyReportFromAnalysis(
   analysisData: VideoAnalysisResult
 ): Promise<any> {
-  if (!analysisData.analysisId) {
-    throw new Error('analysisId가 필요합니다.')
-  }
+  console.log('[API] 리포트 생성 시작')
 
   // 백엔드 형식으로 변환
-  const requestData = {
-    analysis_id: analysisData.analysisId,
+  const requestData: any = {
     total_incidents: analysisData.totalIncidents,
     falls: analysisData.falls,
     dangerous_actions: analysisData.dangerousActions,
@@ -218,16 +215,14 @@ export async function generateDailyReportFromAnalysis(
     })),
     summary: analysisData.summary,
     recommendations: analysisData.recommendations,
-    video_path: analysisData.videoPath, // video_path 포함
   }
 
-  console.log('[API] 리포트 생성 요청:', {
-    analysis_id: requestData.analysis_id,
-    video_path: requestData.video_path,
-    timeline_events_count: requestData.timeline_events.length,
-  })
+  // video_path가 있으면 포함
+  if (analysisData.videoPath) {
+    requestData.video_path = analysisData.videoPath
+  }
 
-  const response = await fetch(`${API_BASE_URL}/api/daily-report/from-analysis`, {
+  const response = await fetch(`${API_BASE_URL}/api/daily-report/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -243,27 +238,11 @@ export async function generateDailyReportFromAnalysis(
     } catch {
       error = { detail: errorText || '리포트 생성 중 오류가 발생했습니다.' }
     }
-    console.error('[API] 리포트 생성 실패:', {
-      status: response.status,
-      statusText: response.statusText,
-      error,
-    })
     throw new Error(error.detail || error.message || '리포트 생성 중 오류가 발생했습니다.')
   }
 
   const result = await response.json()
-  
-  // 응답 데이터 상세 로깅
-  console.log('[API] 리포트 생성 성공 - 전체 응답:', result)
-  console.log('[API] 리포트 생성 성공 - report_id:', result.report_id)
-  console.log('[API] 리포트 생성 성공 - analysis_id:', result.analysis_id)
-  console.log('[API] 리포트 생성 성공 - 응답 키:', Object.keys(result))
-  
-  // report_id가 없으면 경고
-  if (!result.report_id) {
-    console.warn('[API] 경고: report_id가 응답에 없습니다!', result)
-  }
-  
+  console.log('[API] 리포트 생성 성공:', result.report_id)
   return result
 }
 

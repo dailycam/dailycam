@@ -54,66 +54,55 @@ CREATE TABLE IF NOT EXISTS analysis_recommendations (
     INDEX idx_analysis_id (analysis_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='분석 추천 사항';
 
--- 일일 리포트
+-- 일일 리포트 (팀원 구조에 맞게 수정)
 CREATE TABLE IF NOT EXISTS daily_reports (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    analysis_id INT NOT NULL COMMENT '분석 ID',
-    report_date DATETIME NOT NULL COMMENT '리포트 날짜',
-    overall_summary TEXT NOT NULL COMMENT '종합 요약',
-    total_monitoring_time VARCHAR(50) COMMENT '총 모니터링 시간',
-    safe_zone_percentage INT COMMENT '세이프존 체류율',
-    activity_level VARCHAR(50) COMMENT '활동 지수',
+    user_id VARCHAR(100) NOT NULL COMMENT '사용자 ID',
+    report_date DATE NOT NULL COMMENT '리포트 날짜',
+    safety_score FLOAT DEFAULT 0.0 COMMENT '안전도 점수',
+    total_monitoring_time INT DEFAULT 0 COMMENT '총 모니터링 시간 (분)',
+    incident_count INT DEFAULT 0 COMMENT '사건 수',
+    safe_zone_percentage FLOAT DEFAULT 0.0 COMMENT '세이프존 체류 비율 (%)',
+    activity_level VARCHAR(20) DEFAULT 'medium' COMMENT '활동 수준: low, medium, high',
+    ai_summary TEXT COMMENT 'AI 한줄평',
+    hourly_activity_json TEXT COMMENT '시간대별 활동 데이터 (JSON)',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (analysis_id) REFERENCES video_analyses(id) ON DELETE CASCADE,
-    INDEX idx_analysis_id (analysis_id),
+    UNIQUE KEY unique_user_date (user_id, report_date),
+    INDEX idx_user_id (user_id),
     INDEX idx_report_date (report_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일일 리포트';
 
--- 리포트 시간대별 활동
-CREATE TABLE IF NOT EXISTS report_time_slots (
+-- 일일 리포트 위험 항목 (팀원 구조에 맞게 수정)
+CREATE TABLE IF NOT EXISTS daily_report_risks (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    report_id INT NOT NULL COMMENT '리포트 ID',
-    time_range VARCHAR(50) NOT NULL COMMENT '시간대 (예: 09:00 - 12:00)',
-    activity VARCHAR(50) COMMENT '활동량 (낮은/중간/높은)',
-    safety_score INT NOT NULL COMMENT '안전도 점수',
-    incidents INT NOT NULL DEFAULT 0 COMMENT '사건 수',
-    summary TEXT COMMENT '시간대별 요약',
+    daily_report_id INT NOT NULL COMMENT '리포트 ID',
+    level VARCHAR(10) NOT NULL COMMENT '위험도: high, medium, low',
+    title VARCHAR(200) NOT NULL COMMENT '위험 제목',
+    description TEXT COMMENT '위험 설명',
+    location VARCHAR(200) COMMENT '발생 위치',
+    time VARCHAR(100) COMMENT '발생 시간',
+    count INT DEFAULT 1 COMMENT '발생 횟수',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (report_id) REFERENCES daily_reports(id) ON DELETE CASCADE,
-    INDEX idx_report_id (report_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='리포트 시간대별 활동';
-
--- 리포트 위험도 우선순위
-CREATE TABLE IF NOT EXISTS report_risk_priorities (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    report_id INT NOT NULL COMMENT '리포트 ID',
-    level ENUM('high', 'medium', 'low') NOT NULL COMMENT '위험도 레벨',
-    title VARCHAR(255) NOT NULL COMMENT '위험 제목',
-    description TEXT NOT NULL COMMENT '설명',
-    location VARCHAR(255) COMMENT '위치',
-    time_range VARCHAR(50) COMMENT '시간 범위',
-    count INT NOT NULL DEFAULT 1 COMMENT '반복 횟수',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (report_id) REFERENCES daily_reports(id) ON DELETE CASCADE,
-    INDEX idx_report_id (report_id),
+    FOREIGN KEY (daily_report_id) REFERENCES daily_reports(id) ON DELETE CASCADE,
+    INDEX idx_daily_report_id (daily_report_id),
     INDEX idx_level (level)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='리포트 위험도 우선순위';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일일 리포트 위험 항목';
 
--- 리포트 실행 리스트
-CREATE TABLE IF NOT EXISTS report_action_recommendations (
+-- 일일 리포트 추천 사항 (팀원 구조에 맞게 수정)
+CREATE TABLE IF NOT EXISTS daily_report_recommendations (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    report_id INT NOT NULL COMMENT '리포트 ID',
-    priority ENUM('high', 'medium', 'low') NOT NULL COMMENT '우선순위',
-    title VARCHAR(255) NOT NULL COMMENT '제목',
-    description TEXT NOT NULL COMMENT '설명',
+    daily_report_id INT NOT NULL COMMENT '리포트 ID',
+    priority VARCHAR(10) NOT NULL COMMENT '우선순위: high, medium, low',
+    title VARCHAR(200) NOT NULL COMMENT '추천 제목',
+    description TEXT NOT NULL COMMENT '추천 설명',
     estimated_cost VARCHAR(100) COMMENT '예상 비용',
     difficulty VARCHAR(50) COMMENT '난이도',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (report_id) REFERENCES daily_reports(id) ON DELETE CASCADE,
-    INDEX idx_report_id (report_id),
+    FOREIGN KEY (daily_report_id) REFERENCES daily_reports(id) ON DELETE CASCADE,
+    INDEX idx_daily_report_id (daily_report_id),
     INDEX idx_priority (priority)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='리포트 실행 리스트';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='일일 리포트 추천 사항';
 
 -- 하이라이트 영상
 CREATE TABLE IF NOT EXISTS highlights (

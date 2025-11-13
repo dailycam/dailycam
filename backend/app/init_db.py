@@ -1,21 +1,21 @@
 """MariaDB 데이터베이스 초기화 및 더미 데이터 삽입"""
 
 from datetime import date, timedelta
-from app.database import engine, SessionLocal, Base, test_connection
+from app.database import engine, SessionLocal, Base
 from app.models.analytics.models import DailyStat, Incident, AnalyticsSummary
 
 
 def init_db():
     """테이블 생성"""
-    print("[CHECK] MariaDB Connection Testing...")
-    if not test_connection():
-        print("[ERROR] Database connection failed. Check .env DB settings.")
-        return False
-    
     print("[CREATE] Creating Tables...")
-    Base.metadata.create_all(bind=engine)
-    print("[OK] Database tables created successfully")
-    return True
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("[OK] Database tables created successfully")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Database connection failed: {e}")
+        print("   Check .env DB settings.")
+        return False
 
 
 def insert_dummy_data():

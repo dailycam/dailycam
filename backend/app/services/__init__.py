@@ -8,7 +8,6 @@ from .dashboard import (
 )
 from .daily_report import (
     DailyReportService,
-    DailyReportServiceConfig,
     get_daily_report_service,
 )
 from .homecam import HomeCamService, HomeCamServiceConfig, get_homecam_service
@@ -30,7 +29,6 @@ __all__ = [
     "DashboardServiceConfig",
     "get_dashboard_service",
     "DailyReportService",
-    "DailyReportServiceConfig",
     "get_daily_report_service",
     "HomeCamService",
     "HomeCamServiceConfig",
