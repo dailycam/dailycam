@@ -167,3 +167,56 @@ export async function analyzeVideoWithBackend(file: File): Promise<VideoAnalysis
   }
 }
 
+// ============================================================
+// Analytics API
+// ============================================================
+
+export interface WeeklyTrendItem {
+  date: string
+  safety: number
+  incidents: number
+  activity: number
+}
+
+export interface IncidentDistItem {
+  name: string
+  value: number
+  color: string
+}
+
+export interface AnalyticsSummary {
+  avg_safety_score: number
+  total_incidents: number
+  safe_zone_percentage: number
+  incident_reduction_percentage: number
+  
+  // 비교 데이터
+  prev_avg_safety?: number
+  prev_total_incidents?: number
+  safety_change?: number
+  safety_change_percent?: number
+  incident_change?: number
+  incident_change_percent?: number
+}
+
+export interface AnalyticsData {
+  weekly_trend: WeeklyTrendItem[]
+  incident_distribution: IncidentDistItem[]
+  summary: AnalyticsSummary
+}
+
+/**
+ * Analytics 데이터 전체 조회 (데이터베이스에서)
+ */
+export async function fetchAnalyticsData(): Promise<AnalyticsData> {
+  const response = await fetch(`${API_BASE_URL}/api/analytics/all`, {
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    throw new Error('Analytics 데이터를 가져오는 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
