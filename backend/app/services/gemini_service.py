@@ -31,19 +31,32 @@ class GeminiService:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-2.5-flash')
 
-    async def analyze_video(self, video_file: UploadFile) -> dict:
+    async def analyze_video(
+        self, 
+        video_file: Optional[UploadFile] = None,
+        video_bytes: Optional[bytes] = None,
+        content_type: Optional[str] = None,
+    ) -> dict:
         """
         비디오 파일을 분석하여 안전 정보를 반환합니다.
         
         Args:
-            video_file: 업로드된 비디오 파일
+            video_file: 업로드된 비디오 파일 (선택)
+            video_bytes: 비디오 바이트 데이터 (선택, video_file이 없을 때 사용)
+            content_type: 비디오 MIME 타입 (video_bytes 사용 시 필수)
             
         Returns:
             분석 결과 딕셔너리
         """
         try:
             # 비디오 파일 읽기
-            video_bytes = await video_file.read()
+            if video_file:
+                video_bytes = await video_file.read()
+                mime_type = video_file.content_type or "video/mp4"
+            elif video_bytes:
+                mime_type = content_type or "video/mp4"
+            else:
+                raise ValueError("video_file 또는 video_bytes 중 하나는 필수입니다.")
             
             # Base64 인코딩
             video_base64 = base64.b64encode(video_bytes).decode('utf-8')
@@ -54,13 +67,16 @@ class GeminiService:
             # Gemini API 호출
             response = self.model.generate_content([
                 {
-                    'mime_type': video_file.content_type,
+                    'mime_type': mime_type,
                     'data': video_base64
                 },
                 prompt
             ])
             
             # 응답 파싱
+            if not response or not hasattr(response, 'text'):
+                raise ValueError("Gemini API 응답이 올바르지 않습니다.")
+            
             result_text = response.text.strip()
             
             # JSON 추출 (마크다운 코드 블록 제거)
@@ -70,7 +86,11 @@ class GeminiService:
                 result_text = result_text.replace('```\n', '').replace('```', '')
             
             # JSON 파싱
-            analysis_data = json.loads(result_text)
+            try:
+                analysis_data = json.loads(result_text)
+            except json.JSONDecodeError as json_err:
+                print(f"⚠️ JSON 파싱 실패. 원본 응답:\n{result_text[:500]}")
+                raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
             
             # 응답 데이터 정규화
             return {
@@ -84,9 +104,20 @@ class GeminiService:
             }
             
         except json.JSONDecodeError as e:
+            import traceback
+            print(f"❌ JSON 파싱 오류: {str(e)}")
+            print(f"상세:\n{traceback.format_exc()}")
             raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
+        except ValueError as e:
+            # ValueError는 그대로 전달
+            raise
         except Exception as e:
-            raise Exception(f"비디오 분석 중 오류 발생: {str(e)}")
+            import traceback
+            error_trace = traceback.format_exc()
+            error_msg = str(e)
+            print(f"❌ Gemini 비디오 분석 오류: {error_msg}")
+            print(f"상세 에러:\n{error_trace}")
+            raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
     def _create_analysis_prompt(self) -> str:
         """비디오 분석을 위한 프롬프트 생성"""

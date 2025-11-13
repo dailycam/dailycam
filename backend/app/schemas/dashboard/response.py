@@ -1,4 +1,4 @@
-"""Response schemas for analytics - 기본 구조만 유지."""
+"""Response schemas for dashboard."""
 
 from __future__ import annotations
 
@@ -32,15 +32,20 @@ class RecommendationItem(BaseModel):
     description: str
 
 
-class AnalyticsResponse(BaseModel):
-    """Analytics summary response - 기본 구조만 유지."""
+class DashboardResponse(BaseModel):
+    """Dashboard summary response."""
 
     summary: str
     range_days: int
+    # 대시보드 통계
     safety_score: float = 0.0
     incident_count: int = 0
     monitoring_hours: float = 0.0
     activity_pattern: str = "정상"
+    # 주간 추이
     weekly_trend: list[WeeklyTrendData] = []
+    # 위험 항목
     risks: list[RiskItem] = []
+    # 추천 항목
     recommendations: list[RecommendationItem] = []
+

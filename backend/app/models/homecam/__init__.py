@@ -1,5 +1,5 @@
-"""HomeCam ORM/data models placeholder."""
+"""Homecam domain models."""
 
-# This package will host persistence models related to the HomeCam domain.
+from .video_analysis import VideoAnalysis, TimelineEvent
 
-
+__all__ = ["VideoAnalysis", "TimelineEvent"]
