@@ -87,8 +87,8 @@ export default function CameraSetup() {
         setAnalysisProgress(0)
       }, 5 * 60 * 1000) // 5분
 
-      // 백엔드 API 호출
-      console.log('[분석 시작] 비디오 분석 API 호출...')
+      // 백엔드 API 호출 (비디오 분석 + 일일 리포트 자동 생성)
+      console.log('[분석 시작] 비디오 분석 API 호출 (일일 리포트 자동 생성 포함)...')
       const result = await analyzeVideoWithBackend(videoFile)
       
       // 타임아웃 정리
@@ -104,36 +104,17 @@ export default function CameraSetup() {
       setAnalysisProgress(100)
       setAnalysisResult(result)
       console.log('[분석 완료] 비디오 분석 성공:', result)
+      console.log('[분석 완료] report_id:', result.reportId)
       
-      // 분석 결과를 로컬 스토리지에 저장 (analysisId 포함)
+      // 분석 결과를 로컬 스토리지에 저장
       localStorage.setItem('videoAnalysisResult', JSON.stringify(result))
       
-      // 리포트 생성 (자동) - analysisId 없이도 생성 가능
-      console.log('[리포트 생성] 시작 (analysisId 없이도 생성 가능)')
-      try {
-        const { generateDailyReportFromAnalysis } = await import('../lib/api')
-        
-        // 리포트 생성 타임아웃 (3분)
-        const reportPromise = generateDailyReportFromAnalysis(result)
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('리포트 생성이 시간 초과되었습니다.')), 3 * 60 * 1000)
-        })
-        
-        const reportData = await Promise.race([reportPromise, timeoutPromise]) as any
-        
-        console.log('[리포트 생성] 성공:', reportData)
-        // 리포트 ID를 로컬 스토리지에 저장
-        if (reportData.report_id) {
-          localStorage.setItem('latestReportId', reportData.report_id.toString())
-          console.log('[리포트 생성] 리포트 ID 저장:', reportData.report_id)
-        } else {
-          console.warn('[리포트 생성] 리포트 ID가 없습니다:', reportData)
-        }
-      } catch (error: any) {
-        console.error('[리포트 생성] 실패:', error)
-        console.error('[리포트 생성] 오류 상세:', error.message || error)
-        // 리포트 생성 실패해도 분석 결과는 표시
-        setAnalysisError(prev => prev ? prev : '리포트 생성에 실패했지만 분석 결과는 확인할 수 있습니다.')
+      // 로컬 스토리지에 리포트 ID 저장 (백엔드에서 자동 생성된 report_id 사용)
+      if (result.reportId) {
+        localStorage.setItem('latestReportId', result.reportId.toString())
+        console.log('[저장] 리포트 ID 저장 완료:', result.reportId)
+      } else {
+        console.warn('[경고] report_id가 없습니다. 백엔드에서 리포트 생성이 실패했을 수 있습니다.')
       }
     } catch (error: any) {
       console.error('분석 오류:', error)

@@ -24,6 +24,7 @@ class VideoAnalysisResponse(BaseModel):
     analysis_id: Optional[int] = Field(None, description="분석 ID (DB 저장 후 생성)")
     video_id: Optional[int] = Field(None, description="비디오 ID (DB 저장 후 생성)")
     video_path: Optional[str] = Field(None, description="비디오 파일 경로")
+    report_id: Optional[int] = Field(None, description="일일 리포트 ID (자동 생성 후 추가)")
 
     class Config:
         json_schema_extra = {

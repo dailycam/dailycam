@@ -37,10 +37,10 @@ async def analyze_video(
 ) -> VideoAnalysisResponse:
     """
     비디오 파일을 업로드하여 Gemini 2.5 Flash로 안전 분석을 수행하고,
-    결과를 대시보드 테이블에 자동 저장합니다.
+    결과를 대시보드 및 일일 리포트 테이블에 자동 저장합니다.
     
     - **video**: 비디오 파일 (mp4, mov, avi 등)
-    - 반환: 넘어짐, 위험 행동 등의 분석 결과 (analysis_id 포함)
+    - 반환: 넘어짐, 위험 행동 등의 분석 결과 (analysis_id, report_id 포함)
     """
     # 비디오 파일 타입 검증
     if not video.content_type or not video.content_type.startswith('video/'):
@@ -50,6 +50,10 @@ async def analyze_video(
         )
     
     try:
+        print("=" * 80)
+        print("[비디오 분석 시작]")
+        print("=" * 80)
+        
         # 비디오 파일 읽기
         video_content = await video.read()
         file_size = len(video_content)
@@ -58,12 +62,15 @@ async def analyze_video(
         estimated_duration_seconds = (file_size / (1024 * 1024)) * 60
         
         # Gemini로 비디오 분석 (bytes 직접 전달)
+        print("[1단계] Gemini 비디오 분석 시작...")
         result = await gemini_service.analyze_video(
             video_bytes=video_content,
             content_type=video.content_type or "video/mp4",
         )
+        print(f"[1단계 완료] Gemini 분석 완료 - 사건 수: {result.get('total_incidents', 0)}")
         
         # 대시보드 테이블에 저장
+        print("[2단계] 대시보드 데이터 저장...")
         try:
             dashboard_service = get_dashboard_service(db)
             dashboard_service.save_video_analysis_to_dashboard(
@@ -71,13 +78,37 @@ async def analyze_video(
                 video_analysis_result=result,
                 video_duration_seconds=estimated_duration_seconds,
             )
+            print("[2단계 완료] 대시보드 저장 완료")
         except Exception as db_error:
-            # DB 저장 실패해도 분석 결과는 반환
             import traceback
             error_trace = traceback.format_exc()
-            print(f"⚠️ 대시보드 데이터 저장 실패: {db_error}")
+            print(f"[2단계 경고] 대시보드 데이터 저장 실패: {db_error}")
             print(f"상세 에러:\n{error_trace}")
-            # 에러를 무시하고 분석 결과만 반환
+        
+        # 일일 리포트 자동 생성 및 저장
+        print("[3단계] 일일 리포트 자동 생성...")
+        try:
+            from app.services.daily_report.service import get_daily_report_service
+            
+            daily_report_service = get_daily_report_service(db)
+            report_data = await daily_report_service.generate_from_analysis(
+                analysis_data=result,
+                db=db,
+            )
+            
+            # 리포트 ID를 분석 결과에 추가
+            result["report_id"] = report_data.get("report_id")
+            print(f"[3단계 완료] 일일 리포트 생성 완료 - report_id: {result.get('report_id')}")
+        except Exception as report_error:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"[3단계 경고] 일일 리포트 생성 실패: {report_error}")
+            print(f"상세 에러:\n{error_trace}")
+            # 리포트 생성 실패해도 분석 결과는 반환
+        
+        print("=" * 80)
+        print("[비디오 분석 완료]")
+        print("=" * 80)
         
         return VideoAnalysisResponse(**result)
     except ValueError as e:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session, selectinload
 import json
 
@@ -190,7 +190,7 @@ class DailyReportService:
             return None
 
     def _report_to_dict(self, report: DailyReport) -> Dict[str, Any]:
-        """리포트 모델을 딕셔너리로 변환"""
+        """리포트 모델을 딕셔너리로 변환 (그래프 데이터 포함)"""
         try:
             # time_slots 파싱
             time_slots = []
@@ -229,6 +229,9 @@ class DailyReportService:
                     for rec in report.recommendations
                 ]
             
+            # 그래프 데이터 생성
+            chart_data = self._generate_chart_data(report, risk_priorities)
+            
             # report_date 변환
             report_date_str = ""
             if report.report_date:
@@ -252,11 +255,14 @@ class DailyReportService:
                 "safety_metrics": {
                     "total_monitoring_time": f"{report.total_monitoring_time}분" if report.total_monitoring_time else "",
                     "safe_zone_percentage": int(report.safe_zone_percentage) if report.safe_zone_percentage else 0,
-                    "activity_level": str(report.activity_level) if report.activity_level else ""
+                    "activity_level": str(report.activity_level) if report.activity_level else "",
+                    "incident_count": int(report.incident_count) if report.incident_count else 0,
+                    "safety_score": float(report.safety_score) if report.safety_score else 0,
                 },
                 "time_slots": time_slots,
                 "risk_priorities": risk_priorities,
                 "action_recommendations": action_recommendations,
+                "chart_data": chart_data,  # 그래프 데이터 추가
                 "highlights": [],  # 팀원 모델에 없음
                 "created_at": created_at_str
             }
@@ -271,14 +277,82 @@ class DailyReportService:
                 "safety_metrics": {
                     "total_monitoring_time": "",
                     "safe_zone_percentage": 0,
-                    "activity_level": ""
+                    "activity_level": "",
+                    "incident_count": 0,
+                    "safety_score": 0,
                 },
                 "time_slots": [],
                 "risk_priorities": [],
                 "action_recommendations": [],
+                "chart_data": {},
                 "highlights": [],
                 "created_at": ""
             }
+
+    def _generate_chart_data(self, report: DailyReport, risk_priorities: List[Dict]) -> Dict[str, Any]:
+        """그래프 데이터 생성"""
+        try:
+            # 1. 위험도 분포 데이터 (파이 차트용)
+            risk_distribution = {"high": 0, "medium": 0, "low": 0}
+            for risk in risk_priorities:
+                level = risk.get("level", "low")
+                count = risk.get("count", 1)
+                if level in risk_distribution:
+                    risk_distribution[level] += count
+            
+            risk_pie_data = [
+                {"name": "높음", "value": risk_distribution["high"], "color": "#ef4444"},
+                {"name": "중간", "value": risk_distribution["medium"], "color": "#f59e0b"},
+                {"name": "낮음", "value": risk_distribution["low"], "color": "#10b981"},
+            ]
+            
+            # 2. 시간대별 활동 데이터 (라인 차트용)
+            hourly_data = []
+            if report.hourly_activity_json:
+                try:
+                    time_slots = json.loads(report.hourly_activity_json)
+                    for slot in time_slots:
+                        hourly_data.append({
+                            "time": slot.get("time_range", ""),
+                            "activity": self._convert_activity_to_number(slot.get("activity", "")),
+                            "incidents": slot.get("incidents", 0),
+                            "safety_score": slot.get("safety_score", 0),
+                        })
+                except:
+                    pass
+            
+            # 3. 안전 지표 요약 (게이지 차트용)
+            safety_indicators = {
+                "safety_score": float(report.safety_score) if report.safety_score else 0,
+                "safe_zone_percentage": float(report.safe_zone_percentage) if report.safe_zone_percentage else 0,
+                "incident_count": int(report.incident_count) if report.incident_count else 0,
+            }
+            
+            return {
+                "risk_distribution": risk_pie_data,
+                "hourly_activity": hourly_data,
+                "safety_indicators": safety_indicators,
+            }
+        except Exception as e:
+            print(f"[경고] 그래프 데이터 생성 실패: {e}")
+            return {
+                "risk_distribution": [],
+                "hourly_activity": [],
+                "safety_indicators": {},
+            }
+
+    def _convert_activity_to_number(self, activity_str: str) -> int:
+        """활동 수준 문자열을 숫자로 변환"""
+        if not activity_str:
+            return 50
+        
+        activity_lower = activity_str.lower()
+        if "낮은" in activity_lower or "low" in activity_lower:
+            return 30
+        elif "높은" in activity_lower or "high" in activity_lower:
+            return 90
+        else:  # 중간 또는 기본값
+            return 60
 
 
 def get_daily_report_service(db: Session) -> DailyReportService:
