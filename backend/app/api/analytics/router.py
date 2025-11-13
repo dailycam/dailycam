@@ -1,19 +1,11 @@
-"""API routes for analytics features."""
+"""API routes for analytics features - 기본 구조만 유지."""
 
-from fastapi import APIRouter, Depends
-
-from app.schemas.analytics import AnalyticsRequest, AnalyticsResponse
-from app.services.analytics import AnalyticsService, get_analytics_service
+from fastapi import APIRouter
 
 router = APIRouter()
 
 
-@router.post("/summary", response_model=AnalyticsResponse)
-async def get_analytics_summary(
-    payload: AnalyticsRequest,
-    service: AnalyticsService = Depends(get_analytics_service),
-) -> AnalyticsResponse:
-    """Return an analytics summary for the requested time range."""
-    return await service.summarize(payload)
-
-
+@router.get("/")
+async def analytics_root():
+    """Analytics API 기본 엔드포인트 - 기본 구조만 유지."""
+    return {"message": "Analytics API - 기본 구조만 유지 (실제 기능은 /api/dashboard로 이동됨)"}

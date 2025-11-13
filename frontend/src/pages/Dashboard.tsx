@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   AlertTriangle,
   Shield,
@@ -8,18 +8,60 @@ import {
   Activity,
   CheckCircle2,
   XCircle,
-  Video,
 } from 'lucide-react'
 import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
-import HighlightCard from '../components/VideoHighlights/HighlightCard'
-import VideoPlayer from '../components/VideoHighlights/VideoPlayer'
-import { generateWeeklySafetyData, mockVideoHighlights } from '../utils/mockData'
+import { getDashboardData, type DashboardData } from '../lib/api'
 
 export default function Dashboard() {
-  const weeklyData = generateWeeklySafetyData()
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
-  
-  const todayHighlights = mockVideoHighlights.slice(0, 3)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true)
+        setError(null)
+        const dashboard = await getDashboardData(7)
+        setDashboardData(dashboard)
+      } catch (err: any) {
+        setError(err.message || '데이터를 불러오는데 실패했습니다.')
+        console.error('대시보드 데이터 로딩 오류:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">로딩 중...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600">에러: {error}</div>
+      </div>
+    )
+  }
+
+  if (!dashboardData) {
+    return null
+  }
+
+  // 주간 추이 데이터를 차트 형식으로 변환
+  const weeklyData = dashboardData.weeklyTrend.length > 0
+    ? dashboardData.weeklyTrend.map(item => ({
+        day: item.day,
+        score: item.score,
+        incidents: item.incidents,
+      }))
+    : [] // 빈 배열이면 차트는 표시되지 않음
   
   return (
     <div className="space-y-6">
@@ -33,29 +75,29 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="오늘의 안전도"
-          value="92%"
-          change="+5%"
+          value={`${dashboardData.safetyScore}%`}
+          change={`평균 ${dashboardData.safetyScore.toFixed(1)}%`}
           icon={Shield}
           color="safe"
         />
         <StatCard
           title="감지된 위험"
-          value="3건"
-          change="-2건"
+          value={`${dashboardData.incidentCount}건`}
+          change={`최근 ${dashboardData.rangeDays}일간`}
           icon={AlertTriangle}
           color="warning"
         />
         <StatCard
           title="모니터링 시간"
-          value="8.5시간"
-          change="+1.2시간"
+          value={`${dashboardData.monitoringHours}시간`}
+          change={`최근 ${dashboardData.rangeDays}일간`}
           icon={Clock}
           color="primary"
         />
         <StatCard
           title="활동 패턴"
-          value="정상"
-          change="안정적"
+          value={dashboardData.activityPattern}
+          change="AI 분석 결과"
           icon={Activity}
           color="safe"
         />
@@ -71,12 +113,11 @@ export default function Dashboard() {
           </div>
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
             <p className="text-gray-800 text-base leading-relaxed mb-4">
-              "오늘 아이는 거실에서 안전하게 활동했어요. 다만 오후 2시경 주방 근처(데드존)에 
-              3회 접근했습니다. 모서리 보호대 설치를 권장드립니다."
+              "{dashboardData.summary}"
             </p>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <CheckCircle2 className="w-4 h-4 text-safe" />
-              <span>전반적으로 안전한 하루였습니다</span>
+              <span>AI가 분석한 안전 현황</span>
             </div>
           </div>
         </div>
@@ -102,24 +143,21 @@ export default function Dashboard() {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">위험도 우선순위</h2>
           <div className="space-y-3">
-            <RiskItem
-              level="high"
-              title="주방 근처 반복 접근"
-              time="오후 2:15 - 2:45"
-              count={3}
-            />
-            <RiskItem
-              level="medium"
-              title="계단 입구 접근"
-              time="오전 11:30"
-              count={1}
-            />
-            <RiskItem
-              level="low"
-              title="가구 모서리 접촉"
-              time="오후 1:20"
-              count={2}
-            />
+            {dashboardData.risks.length > 0 ? (
+              dashboardData.risks.map((risk, index) => (
+                <RiskItem
+                  key={index}
+                  level={risk.level}
+                  title={risk.title}
+                  time={risk.time}
+                  count={risk.count}
+                />
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                감지된 위험 항목이 없습니다
+              </div>
+            )}
           </div>
         </div>
 
@@ -127,21 +165,20 @@ export default function Dashboard() {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">즉시 실행 리스트</h2>
           <div className="space-y-3">
-            <ActionItem
-              priority="high"
-              title="주방 출입문 안전 게이트 설치"
-              description="아이가 주방에 자주 접근하고 있습니다"
-            />
-            <ActionItem
-              priority="medium"
-              title="거실 테이블 모서리 보호대 추가"
-              description="충돌 위험이 감지되었습니다"
-            />
-            <ActionItem
-              priority="low"
-              title="세이프존 범위 재설정 검토"
-              description="활동 패턴이 변화했습니다"
-            />
+            {dashboardData.recommendations.length > 0 ? (
+              dashboardData.recommendations.map((rec, index) => (
+                <ActionItem
+                  key={index}
+                  priority={rec.priority}
+                  title={rec.title}
+                  description={rec.description}
+                />
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                추천 사항이 없습니다
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -161,58 +198,38 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="h-64">
-          <SafetyTrendChart data={weeklyData} />
+          {weeklyData.length > 0 ? (
+            <SafetyTrendChart data={weeklyData} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              <p>주간 추이 데이터를 불러오는 중...</p>
+            </div>
+          )}
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-xs text-gray-500 mb-1">평균 안전도</p>
-              <p className="text-lg font-bold text-gray-900">89%</p>
+              <p className="text-lg font-bold text-gray-900">
+                {dashboardData.weeklyTrend.length > 0
+                  ? `${(dashboardData.weeklyTrend.reduce((sum, d) => sum + d.score, 0) / dashboardData.weeklyTrend.length).toFixed(1)}%`
+                  : '0%'}
+              </p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">최고 안전도</p>
-              <p className="text-lg font-bold text-safe">95%</p>
+              <p className="text-lg font-bold text-safe">
+                {dashboardData.weeklyTrend.length > 0
+                  ? `${Math.max(...dashboardData.weeklyTrend.map(d => d.score)).toFixed(1)}%`
+                  : '0%'}
+              </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">개선율</p>
-              <p className="text-lg font-bold text-primary-600">+12%</p>
+              <p className="text-xs text-gray-500 mb-1">총 사건 수</p>
+              <p className="text-lg font-bold text-primary-600">{dashboardData.incidentCount}건</p>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Video Highlights */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Video className="w-5 h-5 text-primary-600" />
-              오늘의 하이라이트 영상
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">AI가 자동으로 생성한 주요 순간</p>
-          </div>
-          <a href="/daily-report" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-            전체 보기 →
-          </a>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {todayHighlights.map((highlight) => (
-            <HighlightCard
-              key={highlight.id}
-              {...highlight}
-              onPlay={() => setSelectedVideo(highlight.id)}
-            />
-          ))}
-        </div>
-
-        {todayHighlights.length === 0 && (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <Video className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600">오늘은 아직 하이라이트 영상이 없습니다</p>
-            <p className="text-sm text-gray-500 mt-1">위험 상황 감지 시 자동으로 생성됩니다</p>
-          </div>
-        )}
       </div>
 
       {/* Quick Actions */}
@@ -234,14 +251,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Video Player Modal */}
-      {selectedVideo && (
-        <VideoPlayer
-          title={todayHighlights.find(h => h.id === selectedVideo)?.title || ''}
-          videoUrl={todayHighlights.find(h => h.id === selectedVideo)?.videoUrl}
-          onClose={() => setSelectedVideo(null)}
-        />
-      )}
     </div>
   )
 }

@@ -1,6 +1,11 @@
 """Service layer for the DailyCam backend."""
 
-from .analytics import AnalyticsService, AnalyticsServiceConfig, get_analytics_service
+from .analytics import AnalyticsService, get_analytics_service
+from .dashboard import (
+    DashboardService,
+    DashboardServiceConfig,
+    get_dashboard_service,
+)
 from .daily_report import (
     DailyReportService,
     DailyReportServiceConfig,
@@ -20,8 +25,10 @@ from .video_highlights import (
 
 __all__ = [
     "AnalyticsService",
-    "AnalyticsServiceConfig",
     "get_analytics_service",
+    "DashboardService",
+    "DashboardServiceConfig",
+    "get_dashboard_service",
     "DailyReportService",
     "DailyReportServiceConfig",
     "get_daily_report_service",
