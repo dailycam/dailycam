@@ -10,13 +10,29 @@
 `backend/.env` 파일을 생성하고 다음 내용을 추가하세요:
 
 ```env
+# Gemini API 키
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# MySQL 데이터베이스 설정
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_password_here
+DB_NAME=dailycam
 ```
 
 **Gemini API 키 발급:**
 1. [Google AI Studio](https://aistudio.google.com/apikey) 접속
 2. "Create API Key" 클릭
 3. 생성된 API 키 복사하여 `.env` 파일에 추가
+
+**MySQL 데이터베이스 설정:**
+1. MySQL 서버가 실행 중인지 확인
+2. `dailycam` 데이터베이스 생성:
+   ```sql
+   CREATE DATABASE dailycam CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+3. `.env` 파일에 MySQL 접속 정보 입력
 
 ### 2. 의존성 설치
 
@@ -90,6 +106,8 @@ python run.py
 
 - **FastAPI** - 현대적인 Python 웹 프레임워크
 - **Google Generative AI** - Gemini 2.5 Flash 모델
+- **SQLAlchemy** - ORM (데이터베이스 추상화)
+- **PyMySQL** - MySQL 데이터베이스 드라이버
 - **Uvicorn** - ASGI 서버
 - **Pydantic** - 데이터 검증
 
