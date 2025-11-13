@@ -28,7 +28,7 @@ export default function IncidentPieChart({ data }: IncidentPieChartProps) {
         x={x}
         y={y}
         fill="white"
-        textAnchor={x > cx ? 'start' : 'end'}
+        textAnchor="middle"
         dominantBaseline="central"
         fontSize={14}
         fontWeight={600}
