@@ -313,6 +313,10 @@ const handleUploadAndStream = async () => {
 2. 백엔드 서버 상태 확인
 3. 비디오 파일이 손상되지 않았는지 확인
 
+## 트러블슈팅
+
+개발 중 발생한 문제들과 해결 방법은 [트러블슈팅 가이드](./LiveStreamTroubleShooting.md)를 참고하세요.
+
 ## 참고 자료
 
 - [FastAPI StreamingResponse 문서](https://fastapi.tiangolo.com/advanced/custom-response/#streamingresponse)

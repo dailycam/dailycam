@@ -1,6 +1,8 @@
 """API routes for live monitoring features."""
 
+import asyncio
 import os
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -54,10 +56,31 @@ async def upload_video_for_streaming(
     try:
         logger.info(f"파일 저장 시작: {temp_file_path}")
         
-        # 기존 파일이 있으면 삭제
+        # 기존 파일이 있으면 삭제 (스트림이 사용 중일 수 있으므로 먼저 스트림 중지)
         if temp_file_path.exists():
-            logger.info(f"기존 파일 삭제: {temp_file_path}")
-            temp_file_path.unlink()
+            logger.info(f"기존 파일 발견: {temp_file_path}")
+            
+            # 해당 카메라의 스트림이 활성화되어 있으면 먼저 중지
+            if camera_id in service.get_active_streams():
+                logger.info(f"기존 스트림 중지 중: {camera_id}")
+                await service.stop_stream(camera_id)
+                # 스트림이 완전히 종료될 때까지 잠시 대기
+                await asyncio.sleep(0.5)
+            
+            # 파일 삭제 시도
+            try:
+                temp_file_path.unlink()
+                logger.info(f"기존 파일 삭제 완료: {temp_file_path}")
+            except PermissionError as e:
+                logger.warning(f"파일 삭제 실패 (사용 중): {e}")
+                # 파일이 사용 중이면 다른 이름으로 저장
+                timestamp = int(time.time())
+                temp_file_path = TEMP_VIDEO_DIR / f"{camera_id}_{timestamp}_{video.filename or 'video'}{file_extension}"
+                logger.info(f"새 파일명으로 저장: {temp_file_path}")
+            except Exception as e:
+                logger.error(f"파일 삭제 중 오류: {e}")
+                # 파일 삭제 실패해도 계속 진행 (덮어쓰기 시도)
+                pass
 
         # 파일 저장 (청크 단위로 읽어서 메모리 효율성 향상)
         total_size = 0
@@ -131,17 +154,22 @@ async def stream_video(
             raise HTTPException(status_code=404, detail=f"비디오 파일을 찾을 수 없습니다: {video_path}")
 
     try:
-        # 기존 스트림이 있으면 먼저 중지
-        if camera_id in service.get_active_streams():
+        # 백그라운드 스트림이 실행 중이 아니면 시작
+        if camera_id not in service.get_active_streams():
             import logging
             logger = logging.getLogger(__name__)
-            logger.info(f"기존 스트림 중지: {camera_id}")
-            service.stop_stream(camera_id)
+            logger.info(f"백그라운드 스트림 시작: {camera_id}")
+            await service.start_background_stream(
+                camera_id=camera_id,
+                video_path=video_path,
+                loop=loop,
+                speed=speed,
+            )
         
         return StreamingResponse(
             service.generate_mjpeg_stream(
                 camera_id=camera_id,
-                video_path=video_path,
+                video_path=None,  # 이미 백그라운드에서 실행 중
                 loop=loop,
                 speed=speed,
             ),
@@ -161,7 +189,7 @@ async def stop_stream(
     service: LiveMonitoringService = Depends(get_live_monitoring_service),
 ):
     """특정 카메라의 스트림을 중지합니다."""
-    service.stop_stream(camera_id)
+    await service.stop_stream(camera_id)
     return {"message": f"카메라 {camera_id}의 스트림이 중지되었습니다."}
 
 

@@ -79,7 +79,8 @@ export async function uploadVideoForStreaming(
 
 /**
  * 스트림 URL을 생성합니다.
- * 타임스탬프를 추가하여 브라우저 캐시를 무효화합니다.
+ * timestamp가 제공되면 타임스탬프를 추가하여 브라우저 캐시를 무효화합니다.
+ * timestamp가 없으면 기존 스트림을 계속 사용합니다.
  * video_path가 제공되면 정확한 파일 경로를 사용합니다.
  */
 export function getStreamUrl(
@@ -89,8 +90,12 @@ export function getStreamUrl(
   timestamp?: number,
   videoPath?: string
 ): string {
-  const ts = timestamp || Date.now()
-  const baseUrl = `${API_BASE_URL}/api/live-monitoring/stream/${cameraId}?loop=${loop}&speed=${speed}&t=${ts}`
+  let baseUrl = `${API_BASE_URL}/api/live-monitoring/stream/${cameraId}?loop=${loop}&speed=${speed}`
+  
+  // timestamp가 제공된 경우에만 추가 (새 스트림 시작 시)
+  if (timestamp !== undefined) {
+    baseUrl += `&t=${timestamp}`
+  }
   
   // video_path가 제공되면 정확한 파일 경로를 쿼리 파라미터로 추가
   if (videoPath) {

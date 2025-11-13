@@ -27,8 +27,60 @@ export default function LiveMonitoring() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [streamSpeed, setStreamSpeed] = useState(1.0)
   const [streamLoop, setStreamLoop] = useState(true)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const [isStreamActive, setIsStreamActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamImgRef = useRef<HTMLImageElement>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const streamCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastVideoPathRef = useRef<string | null>(null)
+
+  // 페이지 로드 시 저장된 스트림 정보 복원
+  useEffect(() => {
+    const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
+    if (savedStreamInfo) {
+      try {
+        const info = JSON.parse(savedStreamInfo)
+        if (info.videoPath) {
+          lastVideoPathRef.current = info.videoPath
+          setStreamLoop(info.streamLoop ?? streamLoop)
+          setStreamSpeed(info.streamSpeed ?? streamSpeed)
+          
+          // 기존 스트림이 계속 실행 중이므로 타임스탬프 없이 URL 생성
+          // (타임스탬프를 추가하면 새 스트림이 시작되어 영상이 초기화됨)
+          const url = getStreamUrl(
+            selectedCamera,
+            info.streamLoop ?? streamLoop,
+            info.streamSpeed ?? streamSpeed,
+            undefined, // 타임스탬프 없음 (기존 스트림 사용)
+            info.videoPath
+          )
+          setStreamUrl(url)
+          setIsStreamActive(true)
+          console.log('저장된 스트림 정보 복원 (기존 스트림 계속 사용):', info)
+        }
+      } catch (e) {
+        console.warn('스트림 정보 복원 실패:', e)
+        localStorage.removeItem(`stream_${selectedCamera}`)
+      }
+    }
+  }, [selectedCamera])
+
+  // 스트림 정보를 localStorage에 저장
+  useEffect(() => {
+    if (streamUrl && lastVideoPathRef.current) {
+      const streamInfo = {
+        videoPath: lastVideoPathRef.current,
+        streamUrl: streamUrl,
+        streamLoop: streamLoop,
+        streamSpeed: streamSpeed,
+        cameraId: selectedCamera,
+      }
+      localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
+    } else {
+      localStorage.removeItem(`stream_${selectedCamera}`)
+    }
+  }, [streamUrl, streamLoop, streamSpeed, selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,6 +129,7 @@ export default function LiveMonitoring() {
       // 타임스탬프를 추가하여 새로운 스트림임을 명확히 함
       // 업로드 응답의 video_path를 사용하여 정확한 파일 경로로 스트림 시작
       const timestamp = Date.now()
+      lastVideoPathRef.current = result.video_path // 나중에 재연결 시 사용
       const url = getStreamUrl(
         selectedCamera,
         streamLoop,
@@ -88,10 +141,15 @@ export default function LiveMonitoring() {
 
       // 스트림 URL을 null로 설정한 후 다시 설정하여 이미지 강제 리로드
       setStreamUrl(null)
+      setReconnectAttempts(0)
+      setIsStreamActive(true)
+      
       // 다음 렌더링 사이클에서 새 URL 설정
       setTimeout(() => {
         setStreamUrl(url)
         setIsPlaying(true)
+        startStreamMonitoring()
+        // localStorage에 저장 (자동으로 useEffect에서 처리됨)
       }, 100)
 
       setShowUploadModal(false)
@@ -109,9 +167,15 @@ export default function LiveMonitoring() {
   // 스트림 중지
   const handleStopStream = async () => {
     try {
+      stopStreamMonitoring() // 모니터링 중지
       await stopStream(selectedCamera)
       setStreamUrl(null)
       setIsPlaying(false)
+      setIsStreamActive(false)
+      setReconnectAttempts(0)
+      lastVideoPathRef.current = null
+      // localStorage에서도 제거
+      localStorage.removeItem(`stream_${selectedCamera}`)
     } catch (error: any) {
       console.error('스트림 중지 오류:', error)
     }
@@ -127,9 +191,91 @@ export default function LiveMonitoring() {
 
   // 스트림 이미지 로드 오류 처리
   const handleStreamError = () => {
-    setStreamUrl(null)
-    setUploadError('스트림 연결에 실패했습니다. 비디오 파일을 다시 업로드해주세요.')
+    console.warn('스트림 이미지 로드 실패, 재연결 시도...')
+    setIsStreamActive(false)
+    
+    // 재연결 시도 (최대 5회)
+    if (reconnectAttempts < 5 && lastVideoPathRef.current) {
+      const newAttempts = reconnectAttempts + 1
+      setReconnectAttempts(newAttempts)
+      
+      console.log(`재연결 시도 ${newAttempts}/5`)
+      
+      // 2초 후 재연결
+      reconnectTimeoutRef.current = setTimeout(() => {
+        const timestamp = Date.now()
+        const url = getStreamUrl(
+          selectedCamera,
+          streamLoop,
+          streamSpeed,
+          timestamp,
+          lastVideoPathRef.current || undefined
+        )
+        setStreamUrl(null)
+        setTimeout(() => {
+          setStreamUrl(url)
+          setIsStreamActive(true)
+        }, 100)
+      }, 2000)
+    } else {
+      setStreamUrl(null)
+      setUploadError('스트림 연결에 실패했습니다. 비디오 파일을 다시 업로드해주세요.')
+      setIsStreamActive(false)
+    }
   }
+
+  // 스트림 이미지 로드 성공 처리
+  const handleStreamLoad = () => {
+    setIsStreamActive(true)
+    setReconnectAttempts(0) // 성공 시 재시도 횟수 리셋
+    console.log('스트림 연결 성공')
+  }
+
+  // 스트림 모니터링 시작
+  const startStreamMonitoring = () => {
+    // 기존 인터벌 정리
+    if (streamCheckIntervalRef.current) {
+      clearInterval(streamCheckIntervalRef.current)
+    }
+
+    // 주기적으로 스트림 상태 확인 (30초마다)
+    streamCheckIntervalRef.current = setInterval(() => {
+      if (streamUrl && streamImgRef.current) {
+        // 이미지가 로드되어 있는지 확인
+        const img = streamImgRef.current
+        if (!img.complete || img.naturalWidth === 0) {
+          console.warn('스트림 이미지가 로드되지 않음, 재연결 시도...')
+          handleStreamError()
+        } else {
+          setIsStreamActive(true)
+        }
+      }
+    }, 30000) // 30초마다 확인
+  }
+
+  // 스트림 모니터링 중지
+  const stopStreamMonitoring = () => {
+    if (streamCheckIntervalRef.current) {
+      clearInterval(streamCheckIntervalRef.current)
+      streamCheckIntervalRef.current = null
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+  }
+
+  // 컴포넌트 언마운트 시에도 스트림과 모니터링 계속 실행
+  // (cleanup 함수를 제거하여 페이지를 떠나도 계속 실행되도록 함)
+
+  // 스트림 URL이 변경되면 모니터링 재시작
+  useEffect(() => {
+    if (streamUrl) {
+      startStreamMonitoring()
+    } else {
+      stopStreamMonitoring()
+    }
+  }, [streamUrl])
 
   return (
     <div className="space-y-6">
@@ -169,14 +315,26 @@ export default function LiveMonitoring() {
             <div className="relative bg-gray-900 aspect-video">
               {/* Video Stream */}
               {streamUrl ? (
-                <img
-                  key={streamUrl} // key를 추가하여 URL 변경 시 이미지 강제 리로드
-                  ref={streamImgRef}
-                  src={streamUrl}
-                  alt="Live Stream"
-                  className="w-full h-full object-contain"
-                  onError={handleStreamError}
-                />
+                <>
+                  <img
+                    key={streamUrl} // key를 추가하여 URL 변경 시 이미지 강제 리로드
+                    ref={streamImgRef}
+                    src={streamUrl}
+                    alt="Live Stream"
+                    className="w-full h-full object-contain"
+                    onError={handleStreamError}
+                    onLoad={handleStreamLoad}
+                  />
+                  {/* 스트림 상태 표시 */}
+                  {!isStreamActive && reconnectAttempts > 0 && (
+                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                      <div className="text-center text-white">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <p className="text-sm">스트림 재연결 중... ({reconnectAttempts}/5)</p>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
