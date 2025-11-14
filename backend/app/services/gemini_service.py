@@ -121,46 +121,6 @@ class GeminiService:
             print(f"상세 에러:\n{error_trace}")
             raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
-    async def analyze_for_daily_report(self, analysis_data: dict) -> dict:
-        """
-        비디오 분석 결과를 기반으로 일일 리포트 데이터를 생성합니다.
-        
-        Args:
-            analysis_data: 비디오 분석 결과 딕셔너리
-            
-        Returns:
-            리포트 데이터 딕셔너리
-        """
-        try:
-            # 리포트 분석 프롬프트 로드
-            prompt = self._load_prompt('daily_report_analysis_prompt.txt')
-            
-            # 분석 데이터를 JSON 문자열로 변환하여 프롬프트에 포함
-            analysis_json = json.dumps(analysis_data, ensure_ascii=False, indent=2)
-            full_prompt = f"{prompt}\n\n다음은 분석된 비디오 데이터입니다:\n\n{analysis_json}"
-            
-            # Gemini API 호출
-            response = self.model.generate_content(full_prompt)
-            
-            # 응답 파싱
-            result_text = response.text.strip()
-            
-            # JSON 추출 (마크다운 코드 블록 제거)
-            if result_text.startswith('```json'):
-                result_text = result_text.replace('```json\n', '').replace('```', '')
-            elif result_text.startswith('```'):
-                result_text = result_text.replace('```\n', '').replace('```', '')
-            
-            # JSON 파싱
-            report_data = json.loads(result_text)
-            
-            return report_data
-            
-        except json.JSONDecodeError as e:
-            raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
-        except Exception as e:
-            raise Exception(f"리포트 분석 중 오류 발생: {str(e)}")
-
     def _load_prompt(self, filename: str) -> str:
         """프롬프트 파일을 로드합니다."""
         prompts_dir = Path(__file__).parent.parent / 'prompts'

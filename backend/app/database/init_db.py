@@ -1,4 +1,4 @@
-"""데이터베이스 초기화 스크립트"""
+"""데이터베이스 초기화 스크립트 - 간단 버전"""
 
 import sys
 from pathlib import Path
@@ -8,17 +8,6 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.database import Base, engine
-from app.models.daily_report.models import (
-    Video,
-    VideoAnalysis,
-    TimelineEvent,
-    AnalysisRecommendation,
-    DailyReport,
-    ReportTimeSlot,
-    ReportRiskPriority,
-    ReportActionRecommendation,
-    Highlight,
-)
 
 
 def init_database():
@@ -40,4 +29,3 @@ def init_database():
 
 if __name__ == "__main__":
     init_database()
-

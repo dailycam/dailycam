@@ -1,8 +1,5 @@
-"""HomeCam schema package."""
+"""HomeCam schema package - 간단 버전 (비디오 분석만)"""
 
-from .request import HomeCamAnalysisRequest
-from .response import HomeCamAnalysisResponse, HomeCamEvent
+# 스키마 없음 (dict 반환)
 
-__all__ = ["HomeCamAnalysisRequest", "HomeCamAnalysisResponse", "HomeCamEvent"]
-
-
+__all__ = []
