@@ -100,6 +100,7 @@ class GeminiService:
                 'safety_score': analysis_data.get('safety_score', 0),
                 'timeline_events': analysis_data.get('timeline_events', []),
                 'summary': analysis_data.get('summary', '분석 완료'),
+                'detailed_analysis': analysis_data.get('detailed_analysis', ''),
                 'recommendations': analysis_data.get('recommendations', [])
             }
             

@@ -276,15 +276,28 @@ export default function CameraSetup() {
                 
                 {/* 분석 결과 상세 */}
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4 max-h-[600px] overflow-y-auto">
-                  {/* 요약 */}
-                  <div>
+                  {/* 간단 요약 */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
                     <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                      <Activity className="w-4 h-4" />
-                      요약
+                      <Activity className="w-4 h-4 text-blue-600" />
+                      📋 요약
                     </h4>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border">
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap font-medium">
                       {analysisResult.summary}
                     </p>
+                  </div>
+                  
+                  {/* 전체 분석 내용 */}
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-primary-600" />
+                      🔍 전체 분석 내용
+                    </h4>
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {analysisResult.detailedAnalysis || analysisResult.summary || '분석 내용이 없습니다.'}
+                      </p>
+                    </div>
                   </div>
                   
                   {/* 통계 카드 */}

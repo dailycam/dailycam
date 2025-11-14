@@ -11,6 +11,7 @@ export interface VideoAnalysisResult {
   safetyScore: number
   timelineEvents: TimelineEvent[]
   summary: string
+  detailedAnalysis?: string
   recommendations: string[]
 }
 
@@ -61,6 +62,7 @@ export async function analyzeVideoWithBackend(file: File): Promise<VideoAnalysis
         severity: event.severity,
       })),
       summary: data.summary || '',
+      detailedAnalysis: data.detailed_analysis || '',
       recommendations: data.recommendations || [],
     }
   } catch (error: any) {
