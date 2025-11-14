@@ -63,21 +63,30 @@ class GeminiService:
             
             # 프롬프트 생성
             prompt = self._create_analysis_prompt()
+            print(f"[프롬프트 로드 완료] 프롬프트 길이: {len(prompt)}자")
+            print(f"[프롬프트 미리보기 (처음 300자)] {prompt[:300]}...")
+            print(f"[프롬프트 미리보기 (마지막 200자)] ...{prompt[-200:]}")
+            print(f"[프롬프트 전체 전달 확인] 프롬프트가 Gemini API에 전체 전달됩니다.")
             
             # Gemini API 호출
+            print("[Gemini API 호출 시작]")
+            print(f"[전달되는 프롬프트 길이] {len(prompt)}자 (전체)")
             response = self.model.generate_content([
                 {
                     'mime_type': mime_type,
                     'data': video_base64
                 },
-                prompt
+                prompt  # 전체 프롬프트가 여기 전달됩니다
             ])
+            print("[Gemini API 호출 완료]")
             
             # 응답 파싱
             if not response or not hasattr(response, 'text'):
                 raise ValueError("Gemini API 응답이 올바르지 않습니다.")
             
             result_text = response.text.strip()
+            print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
+            print(f"[Gemini 원본 응답 미리보기] {result_text[:300]}...")
             
             # JSON 추출 (마크다운 코드 블록 제거)
             if result_text.startswith('```json'):
@@ -88,6 +97,14 @@ class GeminiService:
             # JSON 파싱
             try:
                 analysis_data = json.loads(result_text)
+                print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
+                print(f"[detailed_analysis 존재 여부] {'detailed_analysis' in analysis_data}")
+                if 'detailed_analysis' in analysis_data:
+                    detailed_len = len(str(analysis_data.get('detailed_analysis', '')))
+                    print(f"[detailed_analysis 길이] {detailed_len}자")
+                    print(f"[detailed_analysis 미리보기] {str(analysis_data.get('detailed_analysis', ''))[:200]}...")
+                else:
+                    print("⚠️ [경고] detailed_analysis 필드가 Gemini 응답에 없습니다!")
             except json.JSONDecodeError as json_err:
                 print(f"⚠️ JSON 파싱 실패. 원본 응답:\n{result_text[:500]}")
                 raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
@@ -103,6 +120,8 @@ class GeminiService:
                 'detailed_analysis': analysis_data.get('detailed_analysis', ''),
                 'recommendations': analysis_data.get('recommendations', [])
             }
+            
+            print(f"[최종 결과] detailed_analysis 길이: {len(result.get('detailed_analysis', ''))}자")
             
             return result
             
@@ -123,14 +142,21 @@ class GeminiService:
             raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
     def _load_prompt(self, filename: str) -> str:
-        """프롬프트 파일을 로드합니다."""
+        """프롬프트 파일을 전체 읽어서 반환합니다."""
         prompts_dir = Path(__file__).parent.parent / 'prompts'
         prompt_path = prompts_dir / filename
+        print(f"[프롬프트 파일 경로] {prompt_path}")
+        print(f"[프롬프트 파일 존재 여부] {prompt_path.exists()}")
         try:
             with open(prompt_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()  # 파일 전체를 읽습니다
+                print(f"[프롬프트 파일 로드 성공] 파일 크기: {len(content)}자 (전체 읽음)")
+                print(f"[프롬프트 내용 확인] 'detailed_analysis' 포함 여부: {'detailed_analysis' in content}")
+                return content  # 전체 내용 반환
         except FileNotFoundError:
-            raise FileNotFoundError(f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}")
+            error_msg = f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}"
+            print(f"❌ {error_msg}")
+            raise FileNotFoundError(error_msg)
 
     def _create_analysis_prompt(self) -> str:
         """비디오 분석을 위한 프롬프트 생성"""

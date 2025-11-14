@@ -169,11 +169,12 @@ export default function CameraSetup() {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="relative">
+                <div className="relative max-h-[600px] overflow-hidden rounded-lg bg-gray-900 flex items-center justify-center">
                   <video
                     src={videoPreviewUrl}
                     controls
-                    className="w-full rounded-lg bg-gray-900"
+                    className="w-full h-auto max-h-[600px] rounded-lg"
+                    style={{ maxHeight: '600px', objectFit: 'contain' }}
                   />
                   
                   {/* 분석 결과 오버레이 (동영상 위에 표시) */}
