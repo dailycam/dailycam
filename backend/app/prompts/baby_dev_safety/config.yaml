@@ -1,0 +1,26 @@
+stages:
+  "1":
+    id: "stage_01"
+    age_range_months: [0, 2]
+    prompt_file: "stage_01_0-2m.ko.txt"
+  "2":
+    id: "stage_02"
+    age_range_months: [3, 5]
+    prompt_file: "stage_02_3-5m.ko.txt"
+  "3":
+    id: "stage_03"
+    age_range_months: [6, 8]
+    prompt_file: "stage_03_6-8m.ko.txt"
+  "4":
+    id: "stage_04"
+    age_range_months: [9, 11]
+    prompt_file: "stage_04_9-11m.ko.txt"
+  "5":
+    id: "stage_05"
+    age_range_months: [12, 17]
+    prompt_file: "stage_05_12-17m.ko.txt"
+  "6":
+    id: "stage_06"
+    age_range_months: [18, 23]
+    prompt_file: "stage_06_18-23m.ko.txt"
+

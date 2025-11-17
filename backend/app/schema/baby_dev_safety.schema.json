@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "assumed_stage": "1 | 2 | 3 | 4 | 5 | 6",
+    "age_months": 10,
+    "observation_duration_minutes": 30
+  },
+  "stage_consistency": {
+    "match_level": "전형적 | 약간빠름 | 약간느림 | 많이다름 | 판단불가",
+    "evidence": [
+      "관찰 근거 텍스트 1",
+      "관찰 근거 텍스트 2"
+    ],
+    "suggested_stage_for_next_analysis": "1 | 2 | 3 | 4 | 5 | 6 | other"
+  },
+  "development_analysis": {
+    "summary": "이 발달 단계에서 관찰된 전반적 발달 수준 요약",
+    "skills": [
+      {
+        "name": "기술명(예: 가구잡고 일어서기)",
+        "category": "대근육운동 | 소근육운동 | 인지 | 언어 | 사회정서",
+        "present": true,
+        "frequency": 12,
+        "level": "없음 | 초기 | 중간 | 숙련",
+        "examples": ["해당 행동이 관찰된 장면 설명 1", "장면 설명 2"]
+      }
+    ],
+    "next_stage_signs": [
+      {
+        "name": "다음 단계 기술명(예: 손을 놓고 1~2걸음 걷기)",
+        "present": true,
+        "frequency": 3,
+        "comment": "다음 단계(5단계)로 넘어가는 징후로 보이는 이유 설명"
+      }
+    ]
+  },
+  "safety_analysis": {
+    "overall_safety_level": "매우낮음 | 낮음 | 중간 | 높음 | 매우높음",
+    "adult_presence": "항상동반 | 자주동반 | 드물게동반 | 거의없음 | 판단불가",
+    "environment_risks": [
+      {
+        "risk_type": "낙상 | 충돌 | 끼임 | 질식/삼킴 | 화상 | 기타",
+        "severity": "경미 | 중간 | 심각 | 잠재적",
+        "trigger_behavior": "예: 가구를 잡고 걷다가 발이 미끄러짐",
+        "environment_factor": "예: 모서리 보호대 없음, 미끄러운 바닥, 작은 물건 흩어져 있음",
+        "has_safety_device": true,
+        "safety_device_type": "모서리보호대 | 서랍잠금장치 | 문스토퍼 | 계단안전문 | 미끄럼방지매트 | 기타",
+        "comment": "위험 판단 이유와 개선점 설명"
+      }
+    ],
+    "critical_events": [
+      {
+        "event_type": "실제사고 | 사고직전위험상황",
+        "timestamp_range": "00:03:10-00:03:18",
+        "description": "무슨 일이 있었는지 간단 요약",
+        "estimated_outcome": "큰부상가능 | 경미한부상가능 | 놀람/정서적스트레스 | 기타"
+      }
+    ]
+  },
+  "disclaimer": "이 평가는 영상 기반 관찰에 따른 참고용 발달·안전 분석이며, 의학적 진단이나 전문 평가를 대체하지 않습니다."
+}
+

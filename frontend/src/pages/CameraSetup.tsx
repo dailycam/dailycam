@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Upload,
   Play,
@@ -18,7 +18,17 @@ export default function CameraSetup() {
   const [analysisProgress, setAnalysisProgress] = useState(0)
   const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [ageMonths, setAgeMonths] = useState<number | undefined>(undefined)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 비디오 미리보기 URL 정리 (메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl) {
+        URL.revokeObjectURL(videoPreviewUrl)
+      }
+    }
+  }, [videoPreviewUrl])
 
   // 비디오 파일 선택 핸들러
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,9 +40,16 @@ export default function CameraSetup() {
         return
       }
 
+      // 이전 비디오 미리보기 URL 정리
+      if (videoPreviewUrl) {
+        URL.revokeObjectURL(videoPreviewUrl)
+      }
+
+      // 상태 초기화
       setVideoFile(file)
       setAnalysisError(null)
       setAnalysisResult(null)
+      setAnalysisProgress(0)
 
       // 비디오 미리보기 URL 생성
       const url = URL.createObjectURL(file)
@@ -44,9 +61,11 @@ export default function CameraSetup() {
   const handleAnalyzeVideo = async () => {
     if (!videoFile) return
 
-    setIsAnalyzing(true)
+    // 이전 분석 결과 완전히 정리
+    setAnalysisResult(null)
     setAnalysisError(null)
     setAnalysisProgress(0)
+    setIsAnalyzing(true)
 
     let progressInterval: NodeJS.Timeout | null = null
     let timeoutId: NodeJS.Timeout | null = null
@@ -72,9 +91,10 @@ export default function CameraSetup() {
         setAnalysisProgress(0)
       }, 5 * 60 * 1000) // 5분
 
-      // 백엔드 API 호출 (Gemini 분석만)
-      console.log('[분석 시작] 비디오 분석 API 호출...')
-      const result = await analyzeVideoWithBackend(videoFile)
+      // 백엔드 API 호출 (VLM 프롬프트 분석)
+      // stage를 제공하지 않으면 자동으로 발달 단계를 판단합니다
+      console.log('[분석 시작] VLM 비디오 분석 API 호출 (자동 발달 단계 판단)...')
+      const result = await analyzeVideoWithBackend(videoFile, undefined, ageMonths) // stage를 제공하지 않으면 자동 판단
       
       // 타임아웃 정리
       if (timeoutId) {
@@ -87,7 +107,8 @@ export default function CameraSetup() {
       }
       
       setAnalysisProgress(100)
-      setAnalysisResult(result)
+      // 분석 결과를 깊은 복사하여 설정 (이전 객체 참조 제거)
+      setAnalysisResult(JSON.parse(JSON.stringify(result)))
       console.log('[분석 완료] 비디오 분석 성공:', result)
     } catch (error: any) {
       console.error('분석 오류:', error)
@@ -111,28 +132,36 @@ export default function CameraSetup() {
 
   // 분석 초기화
   const handleReset = () => {
+    // 비디오 미리보기 URL 정리
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl)
+    }
+    
     setVideoFile(null)
     setVideoPreviewUrl(null)
     setAnalysisResult(null)
     setAnalysisError(null)
     setAnalysisProgress(0)
+    setAgeMonths(undefined)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  // 안전도 점수 색상
-  const getSafetyScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600'
-    if (score >= 60) return 'text-yellow-600'
+  // 안전도 레벨 색상
+  const getSafetyLevelColor = (level: string) => {
+    if (level === '매우높음' || level === '높음') return 'text-green-600'
+    if (level === '중간') return 'text-yellow-600'
     return 'text-red-600'
   }
 
-  // 안전도 점수 배지
-  const getSafetyScoreBadge = (score: number) => {
-    if (score >= 80) return { text: '안전', color: 'bg-green-100 text-green-700' }
-    if (score >= 60) return { text: '주의', color: 'bg-yellow-100 text-yellow-700' }
-    return { text: '위험', color: 'bg-red-100 text-red-700' }
+  // 안전도 레벨 배지
+  const getSafetyLevelBadge = (level: string) => {
+    if (level === '매우높음') return { text: '매우 안전', color: 'bg-green-100 text-green-700' }
+    if (level === '높음') return { text: '안전', color: 'bg-green-100 text-green-700' }
+    if (level === '중간') return { text: '주의', color: 'bg-yellow-100 text-yellow-700' }
+    if (level === '낮음') return { text: '위험', color: 'bg-red-100 text-red-700' }
+    return { text: '매우 위험', color: 'bg-red-100 text-red-700' }
   }
 
   return (
@@ -180,43 +209,62 @@ export default function CameraSetup() {
                   {/* 분석 결과 오버레이 (동영상 위에 표시) */}
                   {analysisResult && (
                     <div className="absolute top-4 left-4 right-4 space-y-2">
-                      {/* 안전도 점수 */}
-                      <div className="bg-black/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Shield className="w-5 h-5" />
-                            <span className="text-sm font-medium">안전도 점수</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-2xl font-bold ${getSafetyScoreColor(analysisResult.safetyScore)}`}>
-                              {analysisResult.safetyScore}
-                            </span>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${getSafetyScoreBadge(analysisResult.safetyScore).color}`}>
-                              {getSafetyScoreBadge(analysisResult.safetyScore).text}
-                            </span>
+                      {/* 안전도 레벨 */}
+                      {analysisResult.safety_analysis?.overall_safety_level && (
+                        <div className="bg-black/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-5 h-5" />
+                              <span className="text-sm font-medium">안전도</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-lg font-bold ${getSafetyLevelColor(analysisResult.safety_analysis?.overall_safety_level || '중간')}`}>
+                                {analysisResult.safety_analysis?.overall_safety_level}
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${getSafetyLevelBadge(analysisResult.safety_analysis?.overall_safety_level || '중간').color}`}>
+                                {getSafetyLevelBadge(analysisResult.safety_analysis?.overall_safety_level || '중간').text}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* 위험 통계 */}
-                      {analysisResult.totalIncidents > 0 && (
+                      {analysisResult.safety_analysis?.environment_risks && analysisResult.safety_analysis.environment_risks.length > 0 && (
                         <div className="bg-red-600/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg">
                           <div className="flex items-center gap-4 text-sm">
                             <div className="flex items-center gap-1">
                               <AlertTriangle className="w-4 h-4" />
-                              <span>전체 사건: {analysisResult.totalIncidents}건</span>
+                              <span>환경 위험: {analysisResult.safety_analysis.environment_risks.length}건</span>
                             </div>
-                            {analysisResult.falls > 0 && (
-                              <span>넘어짐: {analysisResult.falls}건</span>
-                            )}
-                            {analysisResult.dangerousActions > 0 && (
-                              <span>위험 행동: {analysisResult.dangerousActions}건</span>
+                            {analysisResult.safety_analysis?.critical_events && analysisResult.safety_analysis.critical_events.length > 0 && (
+                              <span>중요 사건: {analysisResult.safety_analysis.critical_events.length}건</span>
                             )}
                           </div>
                         </div>
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* 개월 수 선택 */}
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    아이의 개월 수 (선택사항)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="36"
+                    value={ageMonths || ''}
+                    onChange={(e) => setAgeMonths(e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="개월 수를 입력하세요"
+                    disabled={isAnalyzing}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    개월 수를 입력하면 발달 단계 판단에 참고로 사용됩니다. 입력하지 않으면 영상만으로 판단합니다.
+                  </p>
                 </div>
 
                 <div className="flex gap-2">
@@ -277,94 +325,302 @@ export default function CameraSetup() {
                 
                 {/* 분석 결과 상세 */}
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4 max-h-[600px] overflow-y-auto">
-                  {/* 간단 요약 */}
+                  {/* 메타 정보 */}
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                      <div>
+                        <span className="text-gray-500">발달 단계: </span>
+                        <span className="font-medium">{analysisResult.meta?.assumed_stage || '알 수 없음'}단계</span>
+                      </div>
+                      {analysisResult.meta?.age_months && (
+                        <div>
+                          <span className="text-gray-500">개월 수: </span>
+                          <span className="font-medium">{analysisResult.meta?.age_months}개월</span>
+                        </div>
+                      )}
+                    </div>
+                    {/* 발달 단계 자동 판단 정보 */}
+                    {analysisResult.stage_determination && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-medium text-blue-600">자동 판단 정보</span>
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            analysisResult.stage_determination?.confidence === '높음' ? 'bg-green-100 text-green-700' :
+                            analysisResult.stage_determination?.confidence === '중간' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            신뢰도: {analysisResult.stage_determination?.confidence || '알 수 없음'}
+                          </span>
+                        </div>
+                        {analysisResult.stage_determination?.evidence && analysisResult.stage_determination.evidence.length > 0 && (
+                          <div className="text-xs text-gray-600">
+                            <p className="font-medium mb-1">판단 근거:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                              {analysisResult.stage_determination.evidence.slice(0, 3).map((ev: any, idx: number) => (
+                                <li key={idx}>
+                                  {typeof ev === 'string' ? (
+                                    ev
+                                  ) : (
+                                    <>
+                                      {ev.comment && <span>{ev.comment}</span>}
+                                      {!ev.comment && ev.description && <span>{ev.description}</span>}
+                                      {!ev.comment && !ev.description && <span>{JSON.stringify(ev)}</span>}
+                                    </>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 발달 분석 요약 */}
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
                     <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-blue-600" />
-                      📋 요약
+                      📋 발달 분석 요약
                     </h4>
                     <p className="text-sm text-gray-800 whitespace-pre-wrap font-medium">
-                      {analysisResult.summary}
+                      {analysisResult.development_analysis?.summary || '분석 요약 정보가 없습니다.'}
                     </p>
                   </div>
-                  
-                  {/* 전체 분석 내용 */}
-                  <div className="bg-white rounded-lg p-4 border border-gray-200">
-                    <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-primary-600" />
-                      🔍 전체 분석 내용
-                    </h4>
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {analysisResult.detailedAnalysis || analysisResult.summary || '분석 내용이 없습니다.'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* 통계 카드 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white p-3 rounded border">
-                      <p className="text-xs text-gray-500 mb-1">전체 사건</p>
-                      <p className="text-2xl font-bold text-gray-900">{analysisResult.totalIncidents}건</p>
-                    </div>
-                    <div className="bg-white p-3 rounded border">
-                      <p className="text-xs text-gray-500 mb-1">넘어짐</p>
-                      <p className="text-2xl font-bold text-red-600">{analysisResult.falls}건</p>
-                    </div>
-                    <div className="bg-white p-3 rounded border">
-                      <p className="text-xs text-gray-500 mb-1">위험 행동</p>
-                      <p className="text-2xl font-bold text-orange-600">{analysisResult.dangerousActions}건</p>
-                    </div>
-                    <div className="bg-white p-3 rounded border">
-                      <p className="text-xs text-gray-500 mb-1">안전도 점수</p>
-                      <p className={`text-2xl font-bold ${getSafetyScoreColor(analysisResult.safetyScore)}`}>
-                        {analysisResult.safetyScore}점
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* 타임라인 이벤트 */}
-                  {analysisResult.timelineEvents && analysisResult.timelineEvents.length > 0 && (
-                    <div>
+
+                  {/* 다음 단계 징후 */}
+                  {analysisResult.development_analysis?.next_stage_signs && analysisResult.development_analysis.next_stage_signs.length > 0 && (
+                    <div className="bg-white rounded-lg p-4 border border-blue-200">
                       <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
-                        타임라인 이벤트
+                        <Activity className="w-4 h-4 text-blue-600" />
+                        다음 단계 발달 징후
                       </h4>
                       <div className="space-y-2">
-                        {analysisResult.timelineEvents.map((event: any, idx: number) => (
-                          <div key={idx} className="text-sm bg-white p-3 rounded border-l-4 border-primary-500">
+                        {analysisResult.development_analysis.next_stage_signs.map((sign: any, idx: number) => (
+                          <div key={idx} className="bg-blue-50 p-3 rounded border-l-4 border-blue-500">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-gray-900">{event.timestamp}</span>
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                event.severity === 'high' ? 'bg-red-100 text-red-700' :
-                                event.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
-                                {event.severity === 'high' ? '높음' : event.severity === 'medium' ? '중간' : '낮음'}
-                              </span>
+                              <span className="text-sm font-medium text-blue-900">{sign.name || '다음 단계 기술'}</span>
+                              {sign.present && (
+                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">관찰됨</span>
+                              )}
                             </div>
-                            <p className="text-gray-700">{event.description}</p>
+                            {sign.comment && (
+                              <p className="text-xs text-gray-700">{sign.comment}</p>
+                            )}
+                            {sign.frequency && (
+                              <p className="text-xs text-gray-600 mt-1">빈도: {sign.frequency}회</p>
+                            )}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  
-                  {/* 추천 사항 */}
-                  {analysisResult.recommendations && analysisResult.recommendations.length > 0 && (
+
+                  {/* 발달 단계 일치도 */}
+                  {analysisResult.stage_consistency && (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="font-semibold text-gray-900 mb-2">발달 단계 일치도</h4>
+                      <div className="space-y-2">
+                        {analysisResult.stage_consistency?.match_level && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">일치 수준: </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              analysisResult.stage_consistency.match_level === '전형적' ? 'bg-green-100 text-green-700' :
+                              analysisResult.stage_consistency.match_level === '약간빠름' || analysisResult.stage_consistency.match_level === '약간느림' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {analysisResult.stage_consistency.match_level}
+                            </span>
+                          </div>
+                        )}
+                        {analysisResult.stage_consistency?.evidence && analysisResult.stage_consistency.evidence.length > 0 && (
+                          <div className="text-sm text-gray-700">
+                            <p className="font-medium mb-1">근거:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                              {analysisResult.stage_consistency.evidence.map((ev: any, idx: number) => (
+                                <li key={idx}>
+                                  {typeof ev === 'string' ? (
+                                    ev
+                                  ) : (
+                                    <>
+                                      {ev.comment && <span>{ev.comment}</span>}
+                                      {!ev.comment && ev.description && <span>{ev.description}</span>}
+                                      {!ev.comment && !ev.description && <span>{JSON.stringify(ev)}</span>}
+                                    </>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 안전 분석 */}
+                  {analysisResult.safety_analysis && (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-primary-600" />
+                        안전 분석
+                      </h4>
+                      <div className="space-y-3">
+                        {analysisResult.safety_analysis?.overall_safety_level && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">전체 안전도: </span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${getSafetyLevelBadge(analysisResult.safety_analysis.overall_safety_level).color}`}>
+                              {analysisResult.safety_analysis.overall_safety_level}
+                            </span>
+                          </div>
+                        )}
+                        {analysisResult.safety_analysis?.adult_presence && (
+                          <div className="space-y-1">
+                            {typeof analysisResult.safety_analysis.adult_presence === 'string' ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-600">보호자 동반: </span>
+                                <span className="text-sm font-medium">{analysisResult.safety_analysis.adult_presence}</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-600">보호자 동반: </span>
+                                  <span className="text-sm font-medium">
+                                    {(analysisResult.safety_analysis.adult_presence as any).present ? '동반됨' : '동반 안됨'}
+                                  </span>
+                                </div>
+                                {(analysisResult.safety_analysis.adult_presence as any).interaction_type && (
+                                  <p className="text-xs text-gray-500">
+                                    상호작용: {(analysisResult.safety_analysis.adult_presence as any).interaction_type}
+                                  </p>
+                                )}
+                                {(analysisResult.safety_analysis.adult_presence as any).distance_to_child && (
+                                  <p className="text-xs text-gray-500">
+                                    거리: {(analysisResult.safety_analysis.adult_presence as any).distance_to_child}
+                                  </p>
+                                )}
+                                {(analysisResult.safety_analysis.adult_presence as any).comment && (
+                                  <p className="text-xs text-gray-500">
+                                    {(analysisResult.safety_analysis.adult_presence as any).comment}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      {analysisResult.safety_analysis?.environment_risks && analysisResult.safety_analysis.environment_risks.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 mb-2">환경 위험 요소 ({analysisResult.safety_analysis.environment_risks.length}건)</p>
+                          <div className="space-y-2">
+                            {analysisResult.safety_analysis.environment_risks.map((risk, idx) => (
+                              <div key={idx} className="bg-gray-50 p-3 rounded border-l-4 border-red-500">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs font-medium text-red-700">{risk.risk_type || '위험'}</span>
+                                  {risk.severity && (
+                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                      risk.severity === '심각' ? 'bg-red-100 text-red-700' :
+                                      risk.severity === '중간' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {risk.severity}
+                                    </span>
+                                  )}
+                                </div>
+                                {risk.comment && (
+                                  <p className="text-xs text-gray-700">{risk.comment}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 중요 사건 */}
+                  {analysisResult.safety_analysis?.critical_events && analysisResult.safety_analysis.critical_events.length > 0 && (
                     <div>
                       <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        추천 사항
+                        <AlertCircle className="w-4 h-4" />
+                        중요 사건
                       </h4>
-                      <ul className="text-sm text-gray-700 space-y-2 bg-white p-3 rounded border">
-                        {analysisResult.recommendations.map((rec: string, idx: number) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="text-primary-600 mt-0.5">•</span>
-                            <span>{rec}</span>
-                          </li>
+                      <div className="space-y-2">
+                        {analysisResult.safety_analysis.critical_events.map((event, idx) => (
+                          <div key={idx} className="text-sm bg-white p-3 rounded border-l-4 border-red-500">
+                            <div className="flex items-center gap-2 mb-1">
+                              {event.timestamp_range && (
+                                <span className="font-medium text-gray-900">{event.timestamp_range}</span>
+                              )}
+                              {event.event_type && (
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  event.event_type === '실제사고' ? 'bg-red-100 text-red-700' :
+                                  'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {event.event_type}
+                                </span>
+                              )}
+                            </div>
+                            {event.description && (
+                              <p className="text-gray-700 mb-1">{event.description}</p>
+                            )}
+                            {event.estimated_outcome && (
+                              <p className="text-xs text-gray-500">예상 결과: {event.estimated_outcome}</p>
+                            )}
+                          </div>
                         ))}
-                      </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 발달 기술 */}
+                  {analysisResult.development_analysis?.skills && analysisResult.development_analysis.skills.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">관찰된 발달 기술</h4>
+                      <div className="space-y-2">
+                        {analysisResult.development_analysis.skills.filter((skill: any) => skill.present !== false).map((skill: any, idx: number) => (
+                          <div key={idx} className="bg-white p-3 rounded border">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium">{skill.name || '발달 기술'}</span>
+                              {skill.category && (
+                                <span className="text-xs text-gray-500">{skill.category}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                              {skill.frequency !== undefined && skill.frequency !== null && (
+                                <span>빈도: {skill.frequency}회</span>
+                              )}
+                              {skill.level && (
+                                <span>수준: {
+                                  typeof skill.level === 'string' 
+                                    ? skill.level 
+                                    : (typeof skill.level === 'object' && skill.level !== null)
+                                      ? ((skill.level as any).level || (skill.level as any).value || '알 수 없음')
+                                      : '알 수 없음'
+                                }</span>
+                              )}
+                            </div>
+                            {skill.level && typeof skill.level === 'object' && skill.level !== null && 'comment' in skill.level && (skill.level as any).comment && (
+                              <p className="text-xs text-gray-500 mt-1">{(skill.level as any).comment}</p>
+                            )}
+                            {skill.examples && skill.examples.length > 0 && (
+                              <div className="mt-2 text-xs text-gray-500">
+                                <p className="font-medium mb-1">예시:</p>
+                                <ul className="list-disc list-inside space-y-1">
+                                  {skill.examples.slice(0, 2).map((example: any, exIdx: number) => (
+                                    <li key={exIdx}>{typeof example === 'string' ? example : String(example)}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 디스클레이머 */}
+                  {analysisResult.disclaimer && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-xs text-yellow-800">{analysisResult.disclaimer}</p>
                     </div>
                   )}
                 </div>

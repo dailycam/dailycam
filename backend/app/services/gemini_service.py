@@ -3,10 +3,12 @@
 import base64
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional, Tuple
 
 import google.generativeai as genai
+import yaml
 from dotenv import load_dotenv
 from fastapi import UploadFile
 
@@ -161,6 +163,351 @@ class GeminiService:
     def _create_analysis_prompt(self) -> str:
         """비디오 분석을 위한 프롬프트 생성"""
         return self._load_prompt('video_analysis_prompt.txt')
+
+    async def _determine_stage(
+        self,
+        video_bytes: bytes,
+        mime_type: str,
+        age_months: Optional[int] = None,
+    ) -> dict:
+        """
+        영상을 분석하여 가장 적절한 발달 단계를 판단합니다.
+        
+        Args:
+            video_bytes: 비디오 바이트 데이터
+            mime_type: 비디오 MIME 타입
+            age_months: 아이의 개월 수 (선택, 참고용)
+            
+        Returns:
+            발달 단계 판단 결과 딕셔너리 (detected_stage, confidence, evidence 등)
+        """
+        # backend/app/prompts/baby_dev_safety 디렉토리 찾기
+        prompts_dir = Path(__file__).parent.parent / 'prompts'
+        baby_dev_safety_dir = prompts_dir / 'baby_dev_safety'
+        
+        # 초기 판단용 헤더 프롬프트 로드
+        common_header_path = baby_dev_safety_dir / 'common_header.ko.txt'
+        if not common_header_path.exists():
+            raise FileNotFoundError(f"공통 헤더 파일을 찾을 수 없습니다: {common_header_path}")
+        
+        with open(common_header_path, 'r', encoding='utf-8') as f:
+            stage_determination_prompt = f.read()
+        
+        # 메타데이터 추가 (age_months가 제공된 경우)
+        if age_months is not None:
+            metadata_section = f"\n\n[메타데이터]\n- age_months: {age_months}\n"
+            stage_determination_prompt = f"{stage_determination_prompt}{metadata_section}"
+        
+        # Base64 인코딩
+        video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+        
+        # Gemini API 호출 - 발달 단계 판단
+        print("[발달 단계 판단 시작]")
+        response = self.model.generate_content([
+            {
+                'mime_type': mime_type,
+                'data': video_base64
+            },
+            stage_determination_prompt
+        ])
+        
+        if not response or not hasattr(response, 'text'):
+            raise ValueError("Gemini API 응답이 올바르지 않습니다.")
+        
+        result_text = response.text.strip()
+        print(f"[발달 단계 판단 응답 길이] {len(result_text)}자")
+        
+        # JSON 추출
+        cleaned_text = result_text
+        if '```json' in cleaned_text:
+            start = cleaned_text.find('```json')
+            if start != -1:
+                start = cleaned_text.find('\n', start) + 1
+                end = cleaned_text.find('```', start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        elif '```' in cleaned_text:
+            start = cleaned_text.find('```')
+            if start != -1:
+                start = cleaned_text.find('\n', start) + 1
+                end = cleaned_text.find('```', start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        
+        # 중괄호 카운팅으로 JSON 추출
+        first_brace = cleaned_text.find('{')
+        if first_brace != -1:
+            brace_count = 0
+            last_brace = first_brace
+            for i in range(first_brace, len(cleaned_text)):
+                char = cleaned_text[i]
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        last_brace = i
+                        break
+            if brace_count == 0:
+                cleaned_text = cleaned_text[first_brace:last_brace + 1]
+        
+        # JSON 파싱
+        try:
+            stage_result = json.loads(cleaned_text)
+            detected_stage = stage_result.get('detected_stage')
+            print(f"[발달 단계 판단 완료] 단계: {detected_stage}, 신뢰도: {stage_result.get('confidence', '알 수 없음')}")
+            return stage_result
+        except json.JSONDecodeError as json_err:
+            print(f"⚠️ 발달 단계 판단 JSON 파싱 실패: {str(json_err)}")
+            print(f"[추출된 텍스트]\n{cleaned_text[:500]}")
+            raise ValueError(f"발달 단계 판단 결과를 파싱할 수 없습니다: {str(json_err)}")
+    
+    def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None) -> str:
+        """
+        VLM 발달 단계별 프롬프트를 로드합니다.
+        
+        Args:
+            stage: 발달 단계 ("1", "2", "3", "4", "5", "6")
+            age_months: 아이의 개월 수 (선택)
+            
+        Returns:
+            공통 헤더 + 단계별 프롬프트가 결합된 프롬프트 문자열
+        """
+        # backend/app/prompts/baby_dev_safety 디렉토리 찾기
+        prompts_dir = Path(__file__).parent.parent / 'prompts'
+        baby_dev_safety_dir = prompts_dir / 'baby_dev_safety'
+        
+        if not baby_dev_safety_dir.exists():
+            raise FileNotFoundError(
+                f"VLM 프롬프트 디렉토리를 찾을 수 없습니다: {baby_dev_safety_dir}"
+            )
+        
+        # config.yaml 읽기
+        config_path = baby_dev_safety_dir / 'config.yaml'
+        if not config_path.exists():
+            raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {config_path}")
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        if stage not in config['stages']:
+            raise ValueError(f"지원하지 않는 발달 단계입니다: {stage}. 지원 단계: {list(config['stages'].keys())}")
+        
+        stage_config = config['stages'][stage]
+        prompt_file = stage_config['prompt_file']
+        
+        # 단계별 프롬프트 로드 (공통 헤더는 단계별 프롬프트 내부에 포함되어 있음)
+        stage_prompt_path = baby_dev_safety_dir / prompt_file
+        if not stage_prompt_path.exists():
+            raise FileNotFoundError(f"단계별 프롬프트 파일을 찾을 수 없습니다: {stage_prompt_path}")
+        
+        with open(stage_prompt_path, 'r', encoding='utf-8') as f:
+            stage_prompt = f.read()
+        
+        # 메타데이터 추가 (age_months가 제공된 경우)
+        metadata_section = ""
+        if age_months is not None:
+            metadata_section = f"\n\n[메타데이터]\n- age_months: {age_months}\n- assumed_stage: {stage}\n"
+        
+        # 프롬프트 결합: 단계별 프롬프트 + 메타데이터
+        combined_prompt = f"{stage_prompt}{metadata_section}"
+        
+        print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자")
+        
+        return combined_prompt
+
+    async def analyze_video_vlm(
+        self,
+        video_file: Optional[UploadFile] = None,
+        video_bytes: Optional[bytes] = None,
+        content_type: Optional[str] = None,
+        stage: Optional[str] = None,
+        age_months: Optional[int] = None,
+    ) -> dict:
+        """
+        VLM 프롬프트를 사용하여 비디오를 분석합니다.
+        2단계 프로세스: 1) 발달 단계 판단, 2) 해당 단계 프롬프트로 상세 분석
+        
+        Args:
+            video_file: 업로드된 비디오 파일 (선택)
+            video_bytes: 비디오 바이트 데이터 (선택)
+            content_type: 비디오 MIME 타입
+            stage: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
+            age_months: 아이의 개월 수 (선택)
+            
+        Returns:
+            VLM 스키마에 맞는 분석 결과 딕셔너리
+        """
+        try:
+            # 비디오 파일 읽기
+            if video_file:
+                video_bytes = await video_file.read()
+                mime_type = video_file.content_type or "video/mp4"
+            elif video_bytes:
+                mime_type = content_type or "video/mp4"
+            else:
+                raise ValueError("video_file 또는 video_bytes 중 하나는 필수입니다.")
+            
+            # 1단계: 발달 단계 자동 판단 (stage가 제공되지 않은 경우)
+            detected_stage = stage
+            stage_determination_result = None
+            if stage is None:
+                print("[1단계] 발달 단계 자동 판단 시작...")
+                stage_determination_result = await self._determine_stage(
+                    video_bytes=video_bytes,
+                    mime_type=mime_type,
+                    age_months=age_months,
+                )
+                detected_stage = stage_determination_result.get('detected_stage')
+                if not detected_stage:
+                    raise ValueError("발달 단계를 판단할 수 없습니다.")
+                print(f"[1단계 완료] 판단된 발달 단계: {detected_stage}단계")
+            else:
+                print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
+                detected_stage = stage
+            
+            # Base64 인코딩
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+            
+            # 2단계: 판단된 단계의 프롬프트로 상세 분석
+            print(f"[2단계] {detected_stage}단계 프롬프트로 상세 분석 시작...")
+            
+            # age_months 업데이트 (판단 결과에 추정값이 있으면 사용)
+            if age_months is None and stage_determination_result:
+                estimated_age = stage_determination_result.get('age_months_estimate')
+                if estimated_age:
+                    age_months = estimated_age
+                    print(f"[개월 수] 판단 결과에서 추정: {age_months}개월")
+            
+            # VLM 프롬프트 생성
+            prompt = self._load_vlm_prompt(stage=detected_stage, age_months=age_months)
+            print(f"[VLM 프롬프트 로드 완료] 프롬프트 길이: {len(prompt)}자")
+            
+            # Gemini API 호출
+            print("[Gemini API 호출 시작 (VLM 모드)]")
+            response = self.model.generate_content([
+                {
+                    'mime_type': mime_type,
+                    'data': video_base64
+                },
+                prompt
+            ])
+            print("[Gemini API 호출 완료]")
+            
+            # 응답 파싱
+            if not response or not hasattr(response, 'text'):
+                raise ValueError("Gemini API 응답이 올바르지 않습니다.")
+            
+            result_text = response.text.strip()
+            print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
+            print(f"[Gemini 원본 응답 미리보기 (처음 500자)]\n{result_text[:500]}")
+            
+            # JSON 추출 - 여러 방법 시도
+            json_text = None
+            
+            # 방법 1: 마크다운 코드 블록 제거
+            cleaned_text = result_text
+            if '```json' in cleaned_text:
+                # ```json ... ``` 패턴 찾기
+                start = cleaned_text.find('```json')
+                if start != -1:
+                    start = cleaned_text.find('\n', start) + 1
+                    end = cleaned_text.find('```', start)
+                    if end != -1:
+                        cleaned_text = cleaned_text[start:end].strip()
+                        print("[JSON 추출 방법] 마크다운 코드 블록(```json)에서 추출")
+            elif '```' in cleaned_text:
+                # ``` ... ``` 패턴 찾기
+                start = cleaned_text.find('```')
+                if start != -1:
+                    start = cleaned_text.find('\n', start) + 1
+                    end = cleaned_text.find('```', start)
+                    if end != -1:
+                        cleaned_text = cleaned_text[start:end].strip()
+                        print("[JSON 추출 방법] 마크다운 코드 블록(```)에서 추출")
+            
+            # 방법 2: 중괄호를 카운트하여 정확한 JSON 객체 추출
+            first_brace = cleaned_text.find('{')
+            if first_brace != -1:
+                brace_count = 0
+                last_brace = first_brace
+                
+                for i in range(first_brace, len(cleaned_text)):
+                    char = cleaned_text[i]
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            last_brace = i
+                            break
+                
+                if brace_count == 0:
+                    json_text = cleaned_text[first_brace:last_brace + 1]
+                    print(f"[JSON 추출 방법] 중괄호 카운팅으로 추출 (길이: {len(json_text)}자)")
+                else:
+                    # 중괄호가 맞지 않으면 마지막 } 사용
+                    last_brace = cleaned_text.rfind('}')
+                    if last_brace != -1 and last_brace > first_brace:
+                        json_text = cleaned_text[first_brace:last_brace + 1]
+                        print("[JSON 추출 방법] 첫 번째 { 부터 마지막 } 까지 추출 (중괄호 불일치)")
+            
+            if not json_text:
+                print(f"⚠️ JSON을 찾을 수 없습니다. 원본 응답:\n{result_text[:1000]}")
+                raise ValueError("AI 응답에서 JSON을 찾을 수 없습니다.")
+            
+            # JSON 파싱
+            try:
+                analysis_data = json.loads(json_text)
+                print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
+                
+                # 판단 결과 정보 추가 (자동 판단한 경우)
+                if stage_determination_result:
+                    # stage_determination 정보 추가
+                    analysis_data['stage_determination'] = {
+                        'detected_stage': stage_determination_result.get('detected_stage'),
+                        'confidence': stage_determination_result.get('confidence'),
+                        'evidence': stage_determination_result.get('evidence', []),
+                        'alternative_stages': stage_determination_result.get('alternative_stages', [])
+                    }
+                    
+                    # meta.assumed_stage를 판단된 단계로 업데이트
+                    if 'meta' not in analysis_data:
+                        analysis_data['meta'] = {}
+                    # assumed_stage가 없거나 비어있으면 판단된 단계로 설정
+                    if 'assumed_stage' not in analysis_data['meta'] or not analysis_data['meta'].get('assumed_stage'):
+                        analysis_data['meta']['assumed_stage'] = detected_stage
+                    
+                    # 개월 수 추정값이 있으면 meta에 추가 (기존 값이 없을 때만)
+                    if age_months is None:
+                        estimated_age = stage_determination_result.get('age_months_estimate')
+                        if estimated_age and ('age_months' not in analysis_data['meta'] or analysis_data['meta'].get('age_months') is None):
+                            analysis_data['meta']['age_months'] = estimated_age
+                    
+                    print(f"[2단계 완료] 상세 분석 완료. 최종 발달 단계: {detected_stage}단계")
+                
+                return analysis_data
+            except json.JSONDecodeError as json_err:
+                print(f"⚠️ JSON 파싱 실패.")
+                print(f"[추출된 JSON 텍스트 (처음 500자)]\n{json_text[:500]}")
+                print(f"[추출된 JSON 텍스트 (마지막 500자)]\n{json_text[-500:]}")
+                print(f"[에러 위치] {json_err}")
+                raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
+            
+        except json.JSONDecodeError as e:
+            import traceback
+            print(f"❌ JSON 파싱 오류: {str(e)}")
+            print(f"상세:\n{traceback.format_exc()}")
+            raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
+        except ValueError as e:
+            raise
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            error_msg = str(e)
+            print(f"❌ Gemini VLM 비디오 분석 오류: {error_msg}")
+            print(f"상세 에러:\n{error_trace}")
+            raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
 
 # 싱글톤 인스턴스

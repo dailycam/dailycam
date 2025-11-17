@@ -1,6 +1,6 @@
 """API routes for home camera integration - 간단 버전 (Gemini 분석만)"""
 
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
 
 from app.services.gemini_service import GeminiService, get_gemini_service
 
@@ -10,13 +10,18 @@ router = APIRouter()
 @router.post("/analyze-video")
 async def analyze_video(
     video: UploadFile = File(..., description="분석할 비디오 파일"),
+    stage: str = Query(None, description="발달 단계 (1, 2, 3, 4, 5, 6). None이면 자동 판단"),
+    age_months: int = Query(None, description="아이의 개월 수"),
     gemini_service: GeminiService = Depends(get_gemini_service),
 ) -> dict:
     """
-    비디오 파일을 업로드하여 Gemini 2.5 Flash로 분석하고 텍스트 결과를 반환합니다.
+    비디오 파일을 업로드하여 VLM 프롬프트로 분석하고 결과를 반환합니다.
+    2단계 프로세스: 1) 발달 단계 자동 판단 (stage가 None인 경우), 2) 해당 단계 프롬프트로 상세 분석
     
     - **video**: 비디오 파일 (mp4, mov, avi 등)
-    - 반환: 분석 결과 (텍스트)
+    - **stage**: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
+    - **age_months**: 아이의 개월 수 (선택사항, 참고용)
+    - 반환: VLM 스키마에 맞는 분석 결과
     """
     # 비디오 파일 타입 검증
     if not video.content_type or not video.content_type.startswith('video/'):
@@ -25,19 +30,33 @@ async def analyze_video(
             detail="비디오 파일만 업로드 가능합니다."
         )
     
+    # 발달 단계 검증 (제공된 경우)
+    if stage is not None and stage not in ["1", "2", "3", "4", "5", "6"]:
+        raise HTTPException(
+            status_code=400,
+            detail="발달 단계는 '1', '2', '3', '4', '5', '6' 중 하나여야 합니다."
+        )
+    
     try:
-        print("[비디오 분석 시작]")
+        print("[VLM 비디오 분석 시작]")
+        if stage:
+            print(f"[발달 단계] 제공됨: {stage}단계")
+        else:
+            print("[발달 단계] 자동 판단 모드")
+        print(f"[개월 수] {age_months}")
         
         # 비디오 파일 읽기
         video_content = await video.read()
         
-        # Gemini로 비디오 분석
-        result = await gemini_service.analyze_video(
+        # VLM 프롬프트로 비디오 분석 (stage가 None이면 자동 판단)
+        result = await gemini_service.analyze_video_vlm(
             video_bytes=video_content,
             content_type=video.content_type or "video/mp4",
+            stage=stage,
+            age_months=age_months,
         )
         
-        print("[비디오 분석 완료]")
+        print("[VLM 비디오 분석 완료]")
         
         return result
     except ValueError as e:
@@ -46,7 +65,7 @@ async def analyze_video(
         import traceback
         error_trace = traceback.format_exc()
         error_msg = str(e)
-        print(f"❌ 비디오 분석 오류: {error_msg}")
+        print(f"❌ VLM 비디오 분석 오류: {error_msg}")
         print(f"상세 에러:\n{error_trace}")
         raise HTTPException(
             status_code=500,
