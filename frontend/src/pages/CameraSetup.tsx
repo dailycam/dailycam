@@ -45,11 +45,12 @@ export default function CameraSetup() {
         URL.revokeObjectURL(videoPreviewUrl)
       }
 
-      // 상태 초기화
+      // 상태 완전히 초기화
       setVideoFile(file)
       setAnalysisError(null)
       setAnalysisResult(null)
       setAnalysisProgress(0)
+      setIsAnalyzing(false)
 
       // 비디오 미리보기 URL 생성
       const url = URL.createObjectURL(file)
@@ -108,8 +109,15 @@ export default function CameraSetup() {
       
       setAnalysisProgress(100)
       // 분석 결과를 깊은 복사하여 설정 (이전 객체 참조 제거)
-      setAnalysisResult(JSON.parse(JSON.stringify(result)))
-      console.log('[분석 완료] 비디오 분석 성공:', result)
+      try {
+        const cleanResult = JSON.parse(JSON.stringify(result))
+        setAnalysisResult(cleanResult)
+        console.log('[분석 완료] 비디오 분석 성공:', cleanResult)
+      } catch (parseError) {
+        console.error('[분석 결과 파싱 오류]', parseError)
+        // 파싱 실패 시 원본 결과를 그대로 사용 (안전한 fallback)
+        setAnalysisResult(result)
+      }
     } catch (error: any) {
       console.error('분석 오류:', error)
       setAnalysisError(error.message || '비디오 분석 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.')
@@ -207,7 +215,7 @@ export default function CameraSetup() {
                   />
                   
                   {/* 분석 결과 오버레이 (동영상 위에 표시) */}
-                  {analysisResult && (
+                  {!isAnalyzing && analysisResult && (
                     <div className="absolute top-4 left-4 right-4 space-y-2">
                       {/* 안전도 레벨 */}
                       {analysisResult.safety_analysis?.overall_safety_level && (
@@ -316,7 +324,7 @@ export default function CameraSetup() {
 
           {/* 분석 결과 상세 표시 (동영상 옆) */}
           <div className="space-y-4">
-            {analysisResult ? (
+            {!isAnalyzing && analysisResult ? (
               <div className="h-full space-y-4">
                 <div className="flex items-center gap-2 mb-4">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -352,7 +360,7 @@ export default function CameraSetup() {
                             신뢰도: {analysisResult.stage_determination?.confidence || '알 수 없음'}
                           </span>
                         </div>
-                        {analysisResult.stage_determination?.evidence && analysisResult.stage_determination.evidence.length > 0 && (
+                        {analysisResult.stage_determination?.evidence && Array.isArray(analysisResult.stage_determination.evidence) && analysisResult.stage_determination.evidence.length > 0 && (
                           <div className="text-xs text-gray-600">
                             <p className="font-medium mb-1">판단 근거:</p>
                             <ul className="list-disc list-inside space-y-1">
@@ -432,7 +440,7 @@ export default function CameraSetup() {
                             </span>
                           </div>
                         )}
-                        {analysisResult.stage_consistency?.evidence && analysisResult.stage_consistency.evidence.length > 0 && (
+                        {analysisResult.stage_consistency?.evidence && Array.isArray(analysisResult.stage_consistency.evidence) && analysisResult.stage_consistency.evidence.length > 0 && (
                           <div className="text-sm text-gray-700">
                             <p className="font-medium mb-1">근거:</p>
                             <ul className="list-disc list-inside space-y-1">
