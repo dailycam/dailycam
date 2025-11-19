@@ -4,10 +4,13 @@ import base64
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 
+import cv2
 import google.generativeai as genai
+import numpy as np
 import yaml
 from dotenv import load_dotenv
 from fastapi import UploadFile
@@ -262,7 +265,7 @@ class GeminiService:
             print(f"[추출된 텍스트]\n{cleaned_text[:500]}")
             raise ValueError(f"발달 단계 판단 결과를 파싱할 수 없습니다: {str(json_err)}")
     
-    def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None) -> str:
+    def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None, video_duration_seconds: Optional[float] = None) -> str:
         """
         VLM 발달 단계별 프롬프트를 로드합니다.
         
@@ -304,10 +307,21 @@ class GeminiService:
         with open(stage_prompt_path, 'r', encoding='utf-8') as f:
             stage_prompt = f.read()
         
-        # 메타데이터 추가 (age_months가 제공된 경우)
-        metadata_section = ""
+        # 메타데이터 추가
+        metadata_items = []
         if age_months is not None:
-            metadata_section = f"\n\n[메타데이터]\n- age_months: {age_months}\n- assumed_stage: {stage}\n"
+            metadata_items.append(f"- age_months: {age_months}")
+        metadata_items.append(f"- assumed_stage: {stage}")
+        if video_duration_seconds is not None:
+            # 비디오 길이 정보 추가 (초 단위)
+            video_duration_minutes = round(video_duration_seconds / 60, 2)
+            metadata_items.append(f"- video_duration_seconds: {video_duration_seconds}")
+            metadata_items.append(f"- video_duration_minutes: {video_duration_minutes}")
+            metadata_items.append(f"- video_total_time: {self._format_duration(video_duration_seconds)}")
+        
+        metadata_section = ""
+        if metadata_items:
+            metadata_section = f"\n\n[메타데이터]\n" + "\n".join(metadata_items) + "\n"
         
         # 프롬프트 결합: 단계별 프롬프트 + 메타데이터
         combined_prompt = f"{stage_prompt}{metadata_section}"
@@ -315,6 +329,69 @@ class GeminiService:
         print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자")
         
         return combined_prompt
+
+    def _format_duration(self, seconds: float) -> str:
+        """
+        초를 HH:MM:SS 형식으로 변환합니다.
+        
+        Args:
+            seconds: 초 단위 시간
+            
+        Returns:
+            HH:MM:SS 형식 문자열
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def _get_video_duration(self, video_bytes: bytes, mime_type: str) -> Optional[float]:
+        """
+        비디오 바이트 데이터에서 비디오 길이(초)를 계산합니다.
+        
+        Args:
+            video_bytes: 비디오 바이트 데이터
+            mime_type: 비디오 MIME 타입
+            
+        Returns:
+            비디오 길이(초), 계산 실패 시 None
+        """
+        try:
+            # 임시 파일에 저장
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+                temp_file.write(video_bytes)
+                temp_path = temp_file.name
+            
+            try:
+                # OpenCV로 비디오 열기
+                cap = cv2.VideoCapture(temp_path)
+                if not cap.isOpened():
+                    print(f"[비디오 길이 계산 실패] 비디오를 열 수 없습니다.")
+                    return None
+                
+                # FPS와 프레임 수 가져오기
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                
+                cap.release()
+                
+                if fps > 0 and frame_count > 0:
+                    duration = frame_count / fps
+                    print(f"[비디오 길이 계산 성공] FPS: {fps}, 프레임 수: {frame_count}, 길이: {duration}초")
+                    return duration
+                else:
+                    print(f"[비디오 길이 계산 실패] FPS 또는 프레임 수가 유효하지 않습니다. FPS: {fps}, 프레임 수: {frame_count}")
+                    return None
+            finally:
+                # 임시 파일 삭제
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    print(f"[비디오 길이 계산] 임시 파일 삭제 실패: {e}")
+                    
+        except Exception as e:
+            print(f"[비디오 길이 계산 오류] {str(e)}")
+            return None
 
     async def analyze_video_vlm(
         self,
@@ -366,6 +443,11 @@ class GeminiService:
                 print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
                 detected_stage = stage
             
+            # 비디오 길이 계산
+            video_duration_seconds = self._get_video_duration(video_bytes, mime_type)
+            video_duration_minutes = round(video_duration_seconds / 60, 2) if video_duration_seconds else None
+            print(f"[비디오 길이] {video_duration_seconds}초 ({video_duration_minutes}분)")
+            
             # Base64 인코딩
             video_base64 = base64.b64encode(video_bytes).decode('utf-8')
             
@@ -380,7 +462,11 @@ class GeminiService:
                     print(f"[개월 수] 판단 결과에서 추정: {age_months}개월")
             
             # VLM 프롬프트 생성
-            prompt = self._load_vlm_prompt(stage=detected_stage, age_months=age_months)
+            prompt = self._load_vlm_prompt(
+                stage=detected_stage, 
+                age_months=age_months,
+                video_duration_seconds=video_duration_seconds
+            )
             print(f"[VLM 프롬프트 로드 완료] 프롬프트 길이: {len(prompt)}자")
             
             # Gemini API 호출
@@ -471,10 +557,11 @@ class GeminiService:
                         'alternative_stages': stage_determination_result.get('alternative_stages', [])
                     }
                     
-                    # meta.assumed_stage를 판단된 단계로 업데이트
+                    # meta 정보 설정
                     if 'meta' not in analysis_data:
                         analysis_data['meta'] = {}
-                    # assumed_stage가 없거나 비어있으면 판단된 단계로 설정
+                    
+                    # assumed_stage 설정
                     if 'assumed_stage' not in analysis_data['meta'] or not analysis_data['meta'].get('assumed_stage'):
                         analysis_data['meta']['assumed_stage'] = detected_stage
                     
@@ -485,6 +572,82 @@ class GeminiService:
                             analysis_data['meta']['age_months'] = estimated_age
                     
                     print(f"[2단계 완료] 상세 분석 완료. 최종 발달 단계: {detected_stage}단계")
+                
+                # 비디오 길이 자동 설정 (계산된 값이 있으면 항상 덮어쓰기)
+                if video_duration_minutes is not None:
+                    if 'meta' not in analysis_data:
+                        analysis_data['meta'] = {}
+                    analysis_data['meta']['observation_duration_minutes'] = video_duration_minutes
+                    print(f"[비디오 길이 자동 설정] observation_duration_minutes: {video_duration_minutes}분")
+                
+                # safety_score가 없으면 incident_summary 또는 incident_events를 기반으로 계산
+                if 'safety_analysis' in analysis_data:
+                    safety_analysis = analysis_data['safety_analysis']
+                    if 'safety_score' not in safety_analysis or safety_analysis.get('safety_score') is None:
+                        total_deduction = 0
+                        
+                        # 방법 1: incident_summary의 applied_deduction 사용
+                        if 'incident_summary' in safety_analysis and isinstance(safety_analysis['incident_summary'], list):
+                            for item in safety_analysis['incident_summary']:
+                                if isinstance(item, dict) and 'applied_deduction' in item:
+                                    deduction = item.get('applied_deduction', 0)
+                                    if isinstance(deduction, (int, float)):
+                                        total_deduction += deduction
+                        
+                        # 방법 2: incident_summary에 applied_deduction이 없으면 incident_events를 기반으로 계산
+                        if total_deduction == 0 and 'incident_events' in safety_analysis and isinstance(safety_analysis['incident_events'], list):
+                            # 감점 규칙: 사고(-50, 최대 1회), 위험(-30, 최대 1회), 주의(-10, 최대 1회), 권장(-2점 × 발생 건수, 최대 -16점)
+                            has_accident = False
+                            has_danger = False
+                            has_warning = False
+                            recommended_count = 0
+                            
+                            for event in safety_analysis['incident_events']:
+                                if isinstance(event, dict):
+                                    severity = event.get('severity', '')
+                                    if severity == '사고' and not has_accident:
+                                        total_deduction -= 50
+                                        has_accident = True
+                                    elif severity == '위험' and not has_danger:
+                                        total_deduction -= 30
+                                        has_danger = True
+                                    elif severity == '주의' and not has_warning:
+                                        total_deduction -= 10
+                                        has_warning = True
+                                    elif severity == '권장':
+                                        recommended_count += 1
+                            
+                            # 권장 감점 계산 (최대 -16점)
+                            recommended_deduction = min(recommended_count * 2, 16)
+                            total_deduction -= recommended_deduction
+                        
+                        safety_score = 100 + total_deduction
+                        # 최종 점수는 50점보다 낮아지면 50점으로 처리
+                        safety_score = max(50, safety_score)
+                        safety_analysis['safety_score'] = safety_score
+                        
+                        if total_deduction == 0 and not ('incident_summary' in safety_analysis or 'incident_events' in safety_analysis):
+                            print(f"[safety_score 기본값 설정] 100점 (incident 데이터 없음)")
+                        else:
+                            print(f"[safety_score 계산 완료] {safety_score}점 (감점 합계: {total_deduction})")
+                    
+                    # safety_score가 있으면 overall_safety_level 자동 설정 (항상 덮어쓰기)
+                    if 'safety_score' in safety_analysis and isinstance(safety_analysis.get('safety_score'), (int, float)):
+                        safety_score = safety_analysis['safety_score']
+                        
+                        # safety_score를 기반으로 항상 자동 설정
+                        if safety_score >= 90:
+                            safety_analysis['overall_safety_level'] = '매우높음'
+                        elif safety_score >= 75:
+                            safety_analysis['overall_safety_level'] = '높음'
+                        elif safety_score >= 65:
+                            safety_analysis['overall_safety_level'] = '중간'
+                        elif safety_score >= 55:
+                            safety_analysis['overall_safety_level'] = '낮음'
+                        else:
+                            safety_analysis['overall_safety_level'] = '매우낮음'
+                        
+                        print(f"[안전도 레벨 자동 설정] safety_score: {safety_score} → overall_safety_level: {safety_analysis['overall_safety_level']}")
                 
                 return analysis_data
             except json.JSONDecodeError as json_err:

@@ -92,8 +92,19 @@
 - 이미 24개월 이후 수준으로 보이는 행동(점프, 보다 복잡한 문장, 계단 오르내리기 응용 등)이 반복될 경우,
   `next_stage_signs`에 기록하고, 상위 단계로 넘어갈 징후임을 코멘트에 설명한다.
 
-4단계. 부정 분석 – 위험 상황·환경 평가(safety_analysis)
-- 다음과 같은 위험 상황을 중심으로 `environment_risks`를 채운다.
+4단계. 부정 분석 – 안전 분석(safety_analysis)
+
+★ 이 단계에서는 반드시 다음 5가지를 생성해야 한다:
+1) environment_risks  
+2) critical_events  
+3) incident_events (전체 발생 이벤트 기록)  
+4) incident_summary (등급별 횟수 + 실제 감점)  
+5) safety_score (최종 안전 점수)
+
+------------------------------------
+(1) environment_risks
+------------------------------------
+다음과 같은 위험 상황을 중심으로 `environment_risks`를 채운다.
   - 낙상·충돌:
     - 뛰거나 빠르게 걷다가 문턱·러그·장난감에 걸려 넘어지는 장면
     - 테이블·가구 모서리에 머리·얼굴을 부딪히는 또는 부딪힐 뻔한 장면
@@ -111,6 +122,51 @@
 - 각 위험에 대해 `risk_type`, `severity`, `trigger_behavior`, `environment_factor`, `has_safety_device`, `safety_device_type`, `comment`를 상세히 기록한다.
 - 보호자의 동반 여부·개입 방식(곁에서 수시로 제지/설명하는지, 멀리서 지켜보는지, 거의 보이지 않는지)을 바탕으로
   `adult_presence`와 `overall_safety_level`을 평가한다.
+
+------------------------------------
+(2) critical_events
+------------------------------------
+- 실제 사고 또는 사고 직전 상황을 기록
+- event_type: 실제사고 / 사고직전위험상황
+- timestamp_range: **반드시 HH:MM:SS-HH:MM:SS 형식으로 기록** (예: "00:00:05-00:00:10"). 비디오 전체 길이는 메타데이터의 video_total_time을 참고하라.
+- description
+- estimated_outcome: 큰부상가능 / 경미한부상가능 / 놀람·정서적스트레스 / 기타
+
+------------------------------------
+(3) incident_events  (전체 이벤트 기록)
+------------------------------------
+영상에서 관찰된 모든 '사고·위험·주의·권장' 이벤트를 1개씩 전부 기록한다.
+- event_id
+- severity(사고/위험/주의/권장)
+- timestamp_range: **반드시 HH:MM:SS-HH:MM:SS 형식으로 기록** (예: "00:00:05-00:00:10"). 비디오 전체 길이는 메타데이터의 video_total_time을 참고하라.
+- description
+- has_safety_device
+
+------------------------------------
+(4) incident_summary  (등급별 횟수 + 감점 적용)
+------------------------------------
+각 severity 등급별로 다음을 기록한다:
+- severity: 사고 / 위험 / 주의 / 권장
+- occurrences: 해당 등급이 영상에서 총 몇 번 나타났는지
+- applied_deduction: 실제 감점 값
+
+------------------------------------
+(5) 안전도 점수 계산 규칙 (safety_score)
+------------------------------------
+
+기본 점수 = 100점
+
+감점 규칙:
+- 사고: -50점 (최대 1회만 감점 적용)
+- 위험: -30점 (최대 1회만 감점 적용)
+- 주의: -10점 (최대 1회만 감점 적용)
+- 권장: -2점 × 발생 건수 (최대 -16점)
+
+계산 방식:
+- incident_events → 모든 기록을 반영하여 각 등급별 occurrences 계산
+- incident_summary → 감점 규칙에 따라 applied_deduction 생성
+- safety_score = 100 + 모든 applied_deduction 합계
+- 최종 점수는 50점보다 낮아지면 50점으로 처리한다.
 
 5단계. 디스클레이머
 - `disclaimer`에 "영상 기반 관찰에 따른 참고용 발달·안전 분석이며, 의학적 진단이나 전문 평가를 대체하지 않는다"는 문장을 포함한다.

@@ -4,7 +4,8 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-// VLM 스키마에 맞는 타입 정의
+// ---------- 타입 정의 시작 ----------
+
 export interface VideoAnalysisResult {
   meta?: {
     assumed_stage?: '1' | '2' | '3' | '4' | '5' | '6'
@@ -27,12 +28,8 @@ export interface VideoAnalysisResult {
     skills?: DevelopmentSkill[]
     next_stage_signs?: NextStageSign[]
   }
-  safety_analysis?: {
-    overall_safety_level?: '매우낮음' | '낮음' | '중간' | '높음' | '매우높음'
-    adult_presence?: '항상동반' | '자주동반' | '드물게동반' | '거의없음' | '판단불가'
-    environment_risks?: EnvironmentRisk[]
-    critical_events?: CriticalEvent[]
-  }
+  // ✅ safety_analysis를 별도 인터페이스로 분리
+  safety_analysis?: SafetyAnalysis
   disclaimer?: string
 }
 
@@ -52,13 +49,21 @@ export interface NextStageSign {
   comment?: string
 }
 
+// 👉 프롬프트에서 정의한 한국어 버전으로 변경
 export interface EnvironmentRisk {
   risk_type?: '낙상' | '충돌' | '끼임' | '질식/삼킴' | '화상' | '기타'
-  severity?: '경미' | '중간' | '심각' | '잠재적'
+  severity?: '사고' | '위험' | '주의' | '권장'
   trigger_behavior?: string
   environment_factor?: string
   has_safety_device?: boolean
-  safety_device_type?: string
+  safety_device_type?:
+    | '모서리보호대'
+    | '서랍잠금장치'
+    | '문스토퍼'
+    | '계단안전문'
+    | '미끄럼방지매트'
+    | '기타'
+    | string
   comment?: string
 }
 
@@ -68,6 +73,36 @@ export interface CriticalEvent {
   description?: string
   estimated_outcome?: '큰부상가능' | '경미한부상가능' | '놀람/정서적스트레스' | '기타'
 }
+
+// 🔹 새로 추가: incident_events / incident_summary / safety_score
+
+export interface IncidentEvent {
+  event_id: number
+  severity: '사고' | '위험' | '주의' | '권장'
+  timestamp_range?: string
+  description?: string
+  has_safety_device?: boolean
+}
+
+export interface IncidentSummaryItem {
+  severity: '사고' | '위험' | '주의' | '권장'
+  occurrences: number
+  applied_deduction: number
+}
+
+export interface SafetyAnalysis {
+  overall_safety_level?: '매우낮음' | '낮음' | '중간' | '높음' | '매우높음'
+  adult_presence?: '항상동반' | '자주동반' | '드물게동반' | '거의없음' | '판단불가'
+  environment_risks?: EnvironmentRisk[]
+  critical_events?: CriticalEvent[]
+
+  // 새 구조
+  incident_events?: IncidentEvent[]
+  incident_summary?: IncidentSummaryItem[]
+  safety_score?: number
+}
+
+// ---------- 타입 정의 끝 ----------
 
 /**
  * 비디오 파일을 백엔드로 전송하여 VLM 프롬프트로 분석합니다.
@@ -80,7 +115,6 @@ export async function analyzeVideoWithBackend(
   const formData = new FormData()
   formData.append('video', file)
 
-  // 쿼리 파라미터 추가 (stage가 제공된 경우만)
   const params = new URLSearchParams()
   if (stage !== undefined) {
     params.append('stage', stage)
@@ -89,7 +123,6 @@ export async function analyzeVideoWithBackend(
     params.append('age_months', ageMonths.toString())
   }
 
-  // 타임아웃 설정 (5분)
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
 
@@ -111,8 +144,6 @@ export async function analyzeVideoWithBackend(
     }
 
     const data = await response.json()
-    
-    // 백엔드 응답을 그대로 반환 (VLM 스키마)
     return data as VideoAnalysisResult
   } catch (error: any) {
     clearTimeout(timeoutId)

@@ -16,30 +16,34 @@
     "summary": "이 발달 단계에서 관찰된 전반적 발달 수준 요약",
     "skills": [
       {
-        "name": "기술명(예: 가구잡고 일어서기)",
+        "name": "기술명(예: 독립 보행)",
         "category": "대근육운동 | 소근육운동 | 인지 | 언어 | 사회정서",
         "present": true,
-        "frequency": 12,
+        "frequency": 0,
         "level": "없음 | 초기 | 중간 | 숙련",
-        "examples": ["해당 행동이 관찰된 장면 설명 1", "장면 설명 2"]
+        "examples": [
+          "해당 행동이 관찰된 장면 설명 1",
+          "장면 설명 2"
+        ]
       }
     ],
     "next_stage_signs": [
       {
-        "name": "다음 단계 기술명(예: 손을 놓고 1~2걸음 걷기)",
-        "present": true,
-        "frequency": 3,
-        "comment": "다음 단계(5단계)로 넘어가는 징후로 보이는 이유 설명"
+        "name": "다음 단계 기술명(예: 더 빠른 달리기)",
+        "present": false,
+        "frequency": 0,
+        "comment": "다음 단계로 넘어가는 징후로 보이는 이유 설명"
       }
     ]
   },
   "safety_analysis": {
     "overall_safety_level": "매우낮음 | 낮음 | 중간 | 높음 | 매우높음",
     "adult_presence": "항상동반 | 자주동반 | 드물게동반 | 거의없음 | 판단불가",
+
     "environment_risks": [
       {
         "risk_type": "낙상 | 충돌 | 끼임 | 질식/삼킴 | 화상 | 기타",
-        "severity": "경미 | 중간 | 심각 | 잠재적",
+        "severity": "사고 | 위험 | 주의 | 권장",
         "trigger_behavior": "예: 가구를 잡고 걷다가 발이 미끄러짐",
         "environment_factor": "예: 모서리 보호대 없음, 미끄러운 바닥, 작은 물건 흩어져 있음",
         "has_safety_device": true,
@@ -47,6 +51,7 @@
         "comment": "위험 판단 이유와 개선점 설명"
       }
     ],
+
     "critical_events": [
       {
         "event_type": "실제사고 | 사고직전위험상황",
@@ -54,8 +59,42 @@
         "description": "무슨 일이 있었는지 간단 요약",
         "estimated_outcome": "큰부상가능 | 경미한부상가능 | 놀람/정서적스트레스 | 기타"
       }
-    ]
+    ],
+
+    "incident_events": [
+      {
+        "event_id": 1,
+        "severity": "사고 | 위험 | 주의 | 권장",
+        "timestamp_range": "00:00:00-00:00:05",
+        "description": "개별 사건에 대한 상세 설명",
+        "has_safety_device": false
+      }
+    ],
+ 
+    "incident_summary": [
+      {
+        "severity": "사고",
+        "occurrences": 0,
+        "applied_deduction": 0
+      },
+      {
+        "severity": "위험",
+        "occurrences": 0,
+        "applied_deduction": 0
+      },
+      {
+        "severity": "주의",
+        "occurrences": 0,
+        "applied_deduction": 0
+      },
+      {
+        "severity": "권장",
+        "occurrences": 0,
+        "applied_deduction": 0
+      }
+    ],
+
+    "safety_score": 100
   },
   "disclaimer": "이 평가는 영상 기반 관찰에 따른 참고용 발달·안전 분석이며, 의학적 진단이나 전문 평가를 대체하지 않습니다."
 }
-
