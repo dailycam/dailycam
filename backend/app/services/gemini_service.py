@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 
 import cv2
 import google.generativeai as genai
@@ -44,18 +44,26 @@ class GeminiService:
             model_name='gemini-2.5-flash',
             generation_config=generation_config
         )
+        
+        # 프롬프트 캐시 딕셔너리 초기화
+        self.prompt_cache = {}
 
     def _load_prompt(self, filename: str) -> str:
-        """프롬프트 파일을 전체 읽어서 반환합니다."""
+        """프롬프트 파일을 캐시하여 반환합니다."""
+        # 캐시 확인
+        if filename in self.prompt_cache:
+            return self.prompt_cache[filename]
+        
         prompts_dir = Path(__file__).parent.parent / 'prompts'
         prompt_path = prompts_dir / filename
-        print(f"[프롬프트 파일 경로] {prompt_path}")
-        print(f"[프롬프트 파일 존재 여부] {prompt_path.exists()}")
+        
         try:
             with open(prompt_path, 'r', encoding='utf-8') as f:
-                content = f.read()  # 파일 전체를 읽습니다
-                print(f"[프롬프트 파일 로드 성공] 파일 크기: {len(content)}자 (전체 읽음)")
-                return content  # 전체 내용 반환
+                content = f.read()
+                # 캐시에 저장
+                self.prompt_cache[filename] = content
+                print(f"[프롬프트 캐시 등록] {filename} ({len(content)}자)")
+                return content
         except FileNotFoundError:
             error_msg = f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}"
             print(f"❌ {error_msg}")
@@ -191,9 +199,8 @@ class GeminiService:
 
     async def analyze_video_vlm(
         self,
-        video_file: Optional[UploadFile] = None,
-        video_bytes: Optional[bytes] = None,
-        content_type: Optional[str] = None,
+        video_bytes: bytes,
+        content_type: str,
         stage: Optional[str] = None,
         age_months: Optional[int] = None,
         generation_params: Optional[dict] = None,
@@ -203,8 +210,7 @@ class GeminiService:
         3단계 프로세스: 1) VLM으로 메타데이터 추출, 2) LLM으로 발달 단계 판단, 3) LLM으로 상세 분석
         
         Args:
-            video_file: 업로드된 비디오 파일 (선택)
-            video_bytes: 비디오 바이트 데이터 (선택)
+            video_bytes: 비디오 바이트 데이터
             content_type: 비디오 MIME 타입
             stage: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
             age_months: 아이의 개월 수 (선택)
@@ -214,14 +220,8 @@ class GeminiService:
             VLM 스키마에 맞는 분석 결과 딕셔너리
         """
         try:
-            # 비디오 파일 읽기
-            if video_file:
-                video_bytes = await video_file.read()
-                mime_type = video_file.content_type or "video/mp4"
-            elif video_bytes:
-                mime_type = content_type or "video/mp4"
-            else:
-                raise ValueError("video_file 또는 video_bytes 중 하나는 필수입니다.")
+            # 비디오 파일 읽기 코드 제거 - 이미 라우터에서 읽은 video_bytes 사용
+            mime_type = content_type or "video/mp4"
             
             # ========================================
             # [1차 VLM] 비디오 → 메타데이터 추출
@@ -515,8 +515,8 @@ class GeminiService:
                 return analysis_data
             except json.JSONDecodeError as json_err:
                 print(f"⚠️ JSON 파싱 실패.")
-                print(f"[추출된 JSON 텍스트 (처음 500자)]\n{json_text[:500]}")
-                print(f"[추출된 JSON 텍스트 (마지막 500자)]\n{json_text[-500:]}")
+                print(f"[추출된 JSON 텍스트 (처음 500자)]\n{result_text[:500]}")
+                print(f"[추출된 JSON 텍스트 (마지막 500자)]\n{result_text[-500:]}")
                 print(f"[에러 위치] {json_err}")
                 raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
             

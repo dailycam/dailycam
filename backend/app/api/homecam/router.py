@@ -1,6 +1,7 @@
 """API routes for home camera integration - 간단 버전 (Gemini 분석만)"""
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
+import time  # 시간 측정을 위한 import 추가
 
 from app.services.gemini_service import GeminiService, get_gemini_service
 
@@ -45,17 +46,17 @@ async def analyze_video(
     
     try:
         print("[VLM 비디오 분석 시작]")
+        start_time = time.time()  # 분석 시작 시간 기록
+        
         if stage:
             print(f"[발달 단계] 제공됨: {stage}단계")
         else:
             print("[발달 단계] 자동 판단 모드")
-        print(f"[개월 수] {age_months}")
-        print(f"[AI 설정] Temp: {temperature}, TopK: {top_k}, TopP: {top_p}")
-        
-        # 비디오 파일 읽기
+
+        # 비디오 내용 읽기
         video_content = await video.read()
         
-        # VLM 프롬프트로 비디오 분석 (stage가 None이면 자동 판단)
+        # Gemini 서비스를 통해 분석 (video_file 대신 video_content 전달)
         result = await gemini_service.analyze_video_vlm(
             video_bytes=video_content,
             content_type=video.content_type or "video/mp4",
@@ -68,7 +69,9 @@ async def analyze_video(
             }
         )
         
-        print("[VLM 비디오 분석 완료]")
+        end_time = time.time()  # 분석 종료 시간 기록
+        analysis_time = end_time - start_time
+        print(f"[VLM 비디오 분석 완료] 총 소요 시간: {analysis_time:.2f}초")
         
         return result
     except ValueError as e:
