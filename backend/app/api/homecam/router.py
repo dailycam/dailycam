@@ -12,6 +12,9 @@ async def analyze_video(
     video: UploadFile = File(..., description="분석할 비디오 파일"),
     stage: str = Query(None, description="발달 단계 (1, 2, 3, 4, 5, 6). None이면 자동 판단"),
     age_months: int = Query(None, description="아이의 개월 수"),
+    temperature: float = Query(0.4, description="AI 창의성 (0.0 ~ 1.0)"),
+    top_k: int = Query(30, description="어휘 다양성"),
+    top_p: float = Query(0.95, description="문장 자연스러움"),
     gemini_service: GeminiService = Depends(get_gemini_service),
 ) -> dict:
     """
@@ -21,6 +24,9 @@ async def analyze_video(
     - **video**: 비디오 파일 (mp4, mov, avi 등)
     - **stage**: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
     - **age_months**: 아이의 개월 수 (선택사항, 참고용)
+    - **temperature**: AI 창의성 (기본값: 0.4)
+    - **top_k**: 어휘 다양성 (기본값: 30)
+    - **top_p**: 문장 자연스러움 (기본값: 0.95)
     - 반환: VLM 스키마에 맞는 분석 결과
     """
     # 비디오 파일 타입 검증
@@ -44,6 +50,7 @@ async def analyze_video(
         else:
             print("[발달 단계] 자동 판단 모드")
         print(f"[개월 수] {age_months}")
+        print(f"[AI 설정] Temp: {temperature}, TopK: {top_k}, TopP: {top_p}")
         
         # 비디오 파일 읽기
         video_content = await video.read()
@@ -54,6 +61,11 @@ async def analyze_video(
             content_type=video.content_type or "video/mp4",
             stage=stage,
             age_months=age_months,
+            generation_params={
+                "temperature": temperature,
+                "top_k": top_k,
+                "top_p": top_p
+            }
         )
         
         print("[VLM 비디오 분석 완료]")

@@ -110,7 +110,10 @@ export interface SafetyAnalysis {
 export async function analyzeVideoWithBackend(
   file: File,
   stage?: '1' | '2' | '3' | '4' | '5' | '6',
-  ageMonths?: number
+  ageMonths?: number,
+  temperature?: number,
+  topK?: number,
+  topP?: number
 ): Promise<VideoAnalysisResult> {
   const formData = new FormData()
   formData.append('video', file)
@@ -121,6 +124,15 @@ export async function analyzeVideoWithBackend(
   }
   if (ageMonths !== undefined) {
     params.append('age_months', ageMonths.toString())
+  }
+  if (temperature !== undefined) {
+    params.append('temperature', temperature.toString())
+  }
+  if (topK !== undefined) {
+    params.append('top_k', topK.toString())
+  }
+  if (topP !== undefined) {
+    params.append('top_p', topP.toString())
   }
 
   const controller = new AbortController()

@@ -19,6 +19,13 @@ export default function CameraSetup() {
   const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [ageMonths, setAgeMonths] = useState<number | undefined>(undefined)
+
+  // AI 파라미터 설정 상태
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
+  const [temperature, setTemperature] = useState(0.4)
+  const [topK, setTopK] = useState(30)
+  const [topP, setTopP] = useState(0.95)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 비디오 미리보기 URL 정리 (메모리 누수 방지)
@@ -94,7 +101,8 @@ export default function CameraSetup() {
 
       // 백엔드 API 호출 (VLM 프롬프트 분석)
       console.log('[분석 시작] VLM 비디오 분석 API 호출 (자동 발달 단계 판단)...')
-      const result = await analyzeVideoWithBackend(videoFile, undefined, ageMonths)
+      console.log(`[AI 설정] Temp: ${temperature}, TopK: ${topK}, TopP: ${topP}`)
+      const result = await analyzeVideoWithBackend(videoFile, undefined, ageMonths, temperature, topK, topP)
 
       // 타임아웃 정리
       if (timeoutId) {
@@ -147,6 +155,13 @@ export default function CameraSetup() {
     setAnalysisError(null)
     setAnalysisProgress(0)
     setAgeMonths(undefined)
+
+    // AI 파라미터 초기화
+    setTemperature(0.4)
+    setTopK(30)
+    setTopP(0.95)
+    setShowAdvancedSettings(false)
+
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -225,67 +240,83 @@ export default function CameraSetup() {
                       {/* 안전도 레벨 + 점수 */}
                       {(analysisResult.safety_analysis?.overall_safety_level ||
                         typeof analysisResult.safety_analysis?.safety_score === 'number') && (
-                        <div className="bg-black/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <Shield className="w-5 h-5" />
-                                <span className="text-sm font-medium">안전도</span>
+                          <div className="bg-black/80 backdrop-blur-sm text-white px-4 py-3 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="w-5 h-5" />
+                                  <span className="text-sm font-medium">안전도</span>
+                                </div>
+                                {typeof analysisResult.safety_analysis.safety_score === 'number' && (
+                                  <span
+                                    className={`text-xs font-semibold ${getSafetyScoreColor(
+                                      analysisResult.safety_analysis.safety_score
+                                    )}`}
+                                  >
+                                    안전 점수: {analysisResult.safety_analysis.safety_score} / 100
+                                  </span>
+                                )}
                               </div>
-                              {typeof analysisResult.safety_analysis.safety_score === 'number' && (
-                                <span
-                                  className={`text-xs font-semibold ${getSafetyScoreColor(
-                                    analysisResult.safety_analysis.safety_score
-                                  )}`}
-                                >
-                                  안전 점수: {analysisResult.safety_analysis.safety_score} / 100
-                                </span>
-                              )}
-                            </div>
-                            {analysisResult.safety_analysis?.overall_safety_level && (
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-lg font-bold ${getSafetyLevelColor(
-                                    analysisResult.safety_analysis.overall_safety_level
-                                  )}`}
-                                >
-                                  {analysisResult.safety_analysis.overall_safety_level}
-                                </span>
-                                <span
-                                  className={`px-2 py-1 rounded text-xs font-medium ${
-                                    getSafetyLevelBadge(
+                              {analysisResult.safety_analysis?.overall_safety_level && (
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`text-lg font-bold ${getSafetyLevelColor(
+                                      analysisResult.safety_analysis.overall_safety_level
+                                    )}`}
+                                  >
+                                    {analysisResult.safety_analysis.overall_safety_level}
+                                  </span>
+                                  <span
+                                    className={`px-2 py-1 rounded text-xs font-medium ${getSafetyLevelBadge(
                                       analysisResult.safety_analysis.overall_safety_level
                                     ).color
-                                  }`}
-                                >
-                                  {
-                                    getSafetyLevelBadge(
-                                      analysisResult.safety_analysis.overall_safety_level
-                                    ).text
-                                  }
-                                </span>
-                              </div>
-                            )}
+                                      }`}
+                                  >
+                                    {
+                                      getSafetyLevelBadge(
+                                        analysisResult.safety_analysis.overall_safety_level
+                                      ).text
+                                    }
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* 위험 통계 */}
-                      {analysisResult.safety_analysis?.environment_risks &&
-                        analysisResult.safety_analysis.environment_risks.length > 0 && (
+                      {((analysisResult.safety_analysis?.environment_risks &&
+                        analysisResult.safety_analysis.environment_risks.length > 0) ||
+                        (analysisResult.safety_analysis?.critical_events &&
+                          analysisResult.safety_analysis.critical_events.length > 0) ||
+                        (analysisResult.safety_analysis?.incident_events &&
+                          analysisResult.safety_analysis.incident_events.length > 0)) && (
                           <div className="bg-red-600/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg">
                             <div className="flex items-center gap-4 text-sm">
-                              <div className="flex items-center gap-1">
-                                <AlertTriangle className="w-4 h-4" />
-                                <span>
-                                  환경 위험: {analysisResult.safety_analysis.environment_risks.length}건
-                                </span>
-                              </div>
+                              {analysisResult.safety_analysis?.environment_risks &&
+                                analysisResult.safety_analysis.environment_risks.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span>
+                                      환경 위험: {analysisResult.safety_analysis.environment_risks.length}건
+                                    </span>
+                                  </div>
+                                )}
                               {analysisResult.safety_analysis?.critical_events &&
                                 analysisResult.safety_analysis.critical_events.length > 0 && (
-                                  <span>
-                                    중요 사건: {analysisResult.safety_analysis.critical_events.length}건
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <span>
+                                      중요 사건: {analysisResult.safety_analysis.critical_events.length}건
+                                    </span>
+                                  </div>
+                                )}
+                              {analysisResult.safety_analysis?.incident_events &&
+                                analysisResult.safety_analysis.incident_events.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <span>
+                                      상세 사건: {analysisResult.safety_analysis.incident_events.length}건
+                                    </span>
+                                  </div>
                                 )}
                             </div>
                           </div>
@@ -315,6 +346,126 @@ export default function CameraSetup() {
                     개월 수를 입력하면 발달 단계 판단에 참고로 사용됩니다. 입력하지 않으면 영상만으로
                     판단합니다.
                   </p>
+                </div>
+
+                {/* 고급 설정 (AI 파라미터 튜닝) */}
+                <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-gray-900">고급 설정 (AI 파라미터 튜닝)</h3>
+                    <button
+                      onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                      className="text-xs text-primary-600 hover:text-primary-700"
+                    >
+                      {showAdvancedSettings ? '숨기기' : '표시하기'}
+                    </button>
+                  </div>
+
+                  {showAdvancedSettings && (
+                    <div className="space-y-4 pt-2 border-t border-gray-100">
+                      {/* 프리셋 버튼 */}
+                      <div className="flex gap-2 mb-2">
+                        <button
+                          onClick={() => {
+                            setTemperature(0.2)
+                            setTopK(10)
+                            setTopP(0.7)
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+                        >
+                          Set A (보수적)
+                          <div className="text-[10px] text-gray-500 font-normal mt-0.5">정확성 중심</div>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTemperature(0.4)
+                            setTopK(30)
+                            setTopP(0.8)
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors border border-blue-200"
+                        >
+                          Set B (밸런스)
+                          <div className="text-[10px] text-blue-500 font-normal mt-0.5">공감+팩트</div>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTemperature(0.8)
+                            setTopK(80)
+                            setTopP(1.0)
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors border border-purple-200"
+                        >
+                          Set C (창의적)
+                          <div className="text-[10px] text-purple-500 font-normal mt-0.5">풍부한 표현</div>
+                        </button>
+                      </div>
+
+                      {/* Temperature */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-gray-700">
+                            Temperature (창의성): {temperature}
+                          </label>
+                          <span className="text-xs text-gray-500">0.0 ~ 1.0</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={temperature}
+                          onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          낮을수록 사실적이고 일관된 답변, 높을수록 창의적이고 다양한 답변
+                        </p>
+                      </div>
+
+                      {/* Top K */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-gray-700">
+                            Top K (어휘 다양성): {topK}
+                          </label>
+                          <span className="text-xs text-gray-500">1 ~ 40</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="40"
+                          step="1"
+                          value={topK}
+                          onChange={(e) => setTopK(parseInt(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          다음 단어 선택 시 고려할 후보군의 크기
+                        </p>
+                      </div>
+
+                      {/* Top P */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-gray-700">
+                            Top P (문장 자연스러움): {topP}
+                          </label>
+                          <span className="text-xs text-gray-500">0.0 ~ 1.0</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={topP}
+                          onChange={(e) => setTopP(parseFloat(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          누적 확률 분포를 기반으로 한 샘플링 (높을수록 자연스러움)
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -401,13 +552,12 @@ export default function CameraSetup() {
                             자동 판단 정보
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded text-xs ${
-                              analysisResult.stage_determination?.confidence === '높음'
-                                ? 'bg-green-100 text-green-700'
-                                : analysisResult.stage_determination?.confidence === '중간'
+                            className={`px-2 py-0.5 rounded text-xs ${analysisResult.stage_determination?.confidence === '높음'
+                              ? 'bg-green-100 text-green-700'
+                              : analysisResult.stage_determination?.confidence === '중간'
                                 ? 'bg-yellow-100 text-yellow-700'
                                 : 'bg-gray-100 text-gray-700'
-                            }`}
+                              }`}
                           >
                             신뢰도: {analysisResult.stage_determination?.confidence || '알 수 없음'}
                           </span>
@@ -506,14 +656,13 @@ export default function CameraSetup() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">일치 수준: </span>
                             <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${
-                                analysisResult.stage_consistency.match_level === '전형적'
-                                  ? 'bg-green-100 text-green-700'
-                                  : analysisResult.stage_consistency.match_level === '약간빠름' ||
-                                    analysisResult.stage_consistency.match_level === '약간느림'
+                              className={`px-2 py-1 rounded text-xs font-medium ${analysisResult.stage_consistency.match_level === '전형적'
+                                ? 'bg-green-100 text-green-700'
+                                : analysisResult.stage_consistency.match_level === '약간빠름' ||
+                                  analysisResult.stage_consistency.match_level === '약간느림'
                                   ? 'bg-yellow-100 text-yellow-700'
                                   : 'bg-red-100 text-red-700'
-                              }`}
+                                }`}
                             >
                               {analysisResult.stage_consistency.match_level}
                             </span>
@@ -587,11 +736,10 @@ export default function CameraSetup() {
                                   <span className="text-xs text-gray-600">전체 안전도</span>
                                   <div>
                                     <span
-                                      className={`px-3 py-1.5 rounded-md text-sm font-semibold ${
-                                        getSafetyLevelBadge(
-                                          analysisResult.safety_analysis.overall_safety_level
-                                        ).color
-                                      }`}
+                                      className={`px-3 py-1.5 rounded-md text-sm font-semibold ${getSafetyLevelBadge(
+                                        analysisResult.safety_analysis.overall_safety_level
+                                      ).color
+                                        }`}
                                     >
                                       {analysisResult.safety_analysis.overall_safety_level}
                                     </span>
@@ -636,10 +784,9 @@ export default function CameraSetup() {
                                     return (
                                       <div
                                         key={idx}
-                                        className={`flex items-center justify-between p-2 rounded border ${
-                                          severityColors[severity] ||
+                                        className={`flex items-center justify-between p-2 rounded border ${severityColors[severity] ||
                                           'bg-gray-100 text-gray-700 border-gray-300'
-                                        }`}
+                                          }`}
                                       >
                                         <div className="flex items-center gap-2">
                                           <span className="text-xs font-medium">
@@ -685,22 +832,20 @@ export default function CameraSetup() {
                                     return (
                                       <div
                                         key={idx}
-                                        className={`p-2 rounded border-l-4 ${
-                                          severityColors[severity] ||
+                                        className={`p-2 rounded border-l-4 ${severityColors[severity] ||
                                           'border-gray-500 bg-gray-50'
-                                        }`}
+                                          }`}
                                       >
                                         <div className="flex items-center gap-2 mb-1">
                                           <span
-                                            className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                              severity === '사고'
-                                                ? 'bg-red-100 text-red-700'
-                                                : severity === '위험'
+                                            className={`px-2 py-0.5 rounded text-xs font-medium ${severity === '사고'
+                                              ? 'bg-red-100 text-red-700'
+                                              : severity === '위험'
                                                 ? 'bg-orange-100 text-orange-700'
                                                 : severity === '주의'
-                                                ? 'bg-yellow-100 text-yellow-700'
-                                                : 'bg-blue-100 text-blue-700'
-                                            }`}
+                                                  ? 'bg-yellow-100 text-yellow-700'
+                                                  : 'bg-blue-100 text-blue-700'
+                                              }`}
                                           >
                                             {severity}
                                           </span>
@@ -732,7 +877,7 @@ export default function CameraSetup() {
                         {analysisResult.safety_analysis?.adult_presence && (
                           <div className="space-y-1">
                             {typeof analysisResult.safety_analysis.adult_presence ===
-                            'string' ? (
+                              'string' ? (
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-gray-600">보호자 동반: </span>
                                 <span className="text-sm font-medium">
@@ -752,33 +897,33 @@ export default function CameraSetup() {
                                 </div>
                                 {(analysisResult.safety_analysis.adult_presence as any)
                                   .interaction_type && (
-                                  <p className="text-xs text-gray-500">
-                                    상호작용:{' '}
-                                    {
-                                      (analysisResult.safety_analysis.adult_presence as any)
-                                        .interaction_type
-                                    }
-                                  </p>
-                                )}
+                                    <p className="text-xs text-gray-500">
+                                      상호작용:{' '}
+                                      {
+                                        (analysisResult.safety_analysis.adult_presence as any)
+                                          .interaction_type
+                                      }
+                                    </p>
+                                  )}
                                 {(analysisResult.safety_analysis.adult_presence as any)
                                   .distance_to_child && (
-                                  <p className="text-xs text-gray-500">
-                                    거리:{' '}
-                                    {
-                                      (analysisResult.safety_analysis.adult_presence as any)
-                                        .distance_to_child
-                                    }
-                                  </p>
-                                )}
+                                    <p className="text-xs text-gray-500">
+                                      거리:{' '}
+                                      {
+                                        (analysisResult.safety_analysis.adult_presence as any)
+                                          .distance_to_child
+                                      }
+                                    </p>
+                                  )}
                                 {(analysisResult.safety_analysis.adult_presence as any)
                                   .comment && (
-                                  <p className="text-xs text-gray-500">
-                                    {
-                                      (analysisResult.safety_analysis.adult_presence as any)
-                                        .comment
-                                    }
-                                  </p>
-                                )}
+                                    <p className="text-xs text-gray-500">
+                                      {
+                                        (analysisResult.safety_analysis.adult_presence as any)
+                                          .comment
+                                      }
+                                    </p>
+                                  )}
                               </div>
                             )}
                           </div>
@@ -804,15 +949,14 @@ export default function CameraSetup() {
                                         </span>
                                         {risk.severity && (
                                           <span
-                                            className={`px-2 py-0.5 rounded text-xs ${
-                                              risk.severity === '사고'
-                                                ? 'bg-red-100 text-red-700'
-                                                : risk.severity === '위험'
+                                            className={`px-2 py-0.5 rounded text-xs ${risk.severity === '사고'
+                                              ? 'bg-red-100 text-red-700'
+                                              : risk.severity === '위험'
                                                 ? 'bg-orange-100 text-orange-700'
                                                 : risk.severity === '주의'
-                                                ? 'bg-yellow-100 text-yellow-700'
-                                                : 'bg-gray-100 text-gray-700'
-                                            }`}
+                                                  ? 'bg-yellow-100 text-yellow-700'
+                                                  : 'bg-gray-100 text-gray-700'
+                                              }`}
                                           >
                                             {risk.severity}
                                           </span>
@@ -856,11 +1000,10 @@ export default function CameraSetup() {
                                   )}
                                   {event.event_type && (
                                     <span
-                                      className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                        event.event_type === '실제사고'
-                                          ? 'bg-red-100 text-red-700'
-                                          : 'bg-orange-100 text-orange-700'
-                                      }`}
+                                      className={`px-2 py-0.5 rounded text-xs font-medium ${event.event_type === '실제사고'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-orange-100 text-orange-700'
+                                        }`}
                                     >
                                       {event.event_type}
                                     </span>
@@ -913,10 +1056,10 @@ export default function CameraSetup() {
                                         ? skill.level
                                         : typeof skill.level === 'object' &&
                                           skill.level !== null
-                                        ? (skill.level as any).level ||
+                                          ? (skill.level as any).level ||
                                           (skill.level as any).value ||
                                           '알 수 없음'
-                                        : '알 수 없음'}
+                                          : '알 수 없음'}
                                     </span>
                                   )}
                                 </div>

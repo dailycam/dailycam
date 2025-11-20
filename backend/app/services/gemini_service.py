@@ -3,14 +3,12 @@
 import base64
 import json
 import os
-import re
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import cv2
 import google.generativeai as genai
-import numpy as np
 import yaml
 from dotenv import load_dotenv
 from fastapi import UploadFile
@@ -34,117 +32,18 @@ class GeminiService:
             )
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
-
-    async def analyze_video(
-        self, 
-        video_file: Optional[UploadFile] = None,
-        video_bytes: Optional[bytes] = None,
-        content_type: Optional[str] = None,
-    ) -> dict:
-        """
-        비디오 파일을 분석하여 안전 정보를 반환합니다.
         
-        Args:
-            video_file: 업로드된 비디오 파일 (선택)
-            video_bytes: 비디오 바이트 데이터 (선택, video_file이 없을 때 사용)
-            content_type: 비디오 MIME 타입 (video_bytes 사용 시 필수)
-            
-        Returns:
-            분석 결과 딕셔너리
-        """
-        try:
-            # 비디오 파일 읽기
-            if video_file:
-                video_bytes = await video_file.read()
-                mime_type = video_file.content_type or "video/mp4"
-            elif video_bytes:
-                mime_type = content_type or "video/mp4"
-            else:
-                raise ValueError("video_file 또는 video_bytes 중 하나는 필수입니다.")
-            
-            # Base64 인코딩
-            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-            
-            # 프롬프트 생성
-            prompt = self._create_analysis_prompt()
-            print(f"[프롬프트 로드 완료] 프롬프트 길이: {len(prompt)}자")
-            print(f"[프롬프트 미리보기 (처음 300자)] {prompt[:300]}...")
-            print(f"[프롬프트 미리보기 (마지막 200자)] ...{prompt[-200:]}")
-            print(f"[프롬프트 전체 전달 확인] 프롬프트가 Gemini API에 전체 전달됩니다.")
-            
-            # Gemini API 호출
-            print("[Gemini API 호출 시작]")
-            print(f"[전달되는 프롬프트 길이] {len(prompt)}자 (전체)")
-            response = self.model.generate_content([
-                {
-                    'mime_type': mime_type,
-                    'data': video_base64
-                },
-                prompt  # 전체 프롬프트가 여기 전달됩니다
-            ])
-            print("[Gemini API 호출 완료]")
-            
-            # 응답 파싱
-            if not response or not hasattr(response, 'text'):
-                raise ValueError("Gemini API 응답이 올바르지 않습니다.")
-            
-            result_text = response.text.strip()
-            print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
-            print(f"[Gemini 원본 응답 미리보기] {result_text[:300]}...")
-            
-            # JSON 추출 (마크다운 코드 블록 제거)
-            if result_text.startswith('```json'):
-                result_text = result_text.replace('```json\n', '').replace('```', '')
-            elif result_text.startswith('```'):
-                result_text = result_text.replace('```\n', '').replace('```', '')
-            
-            # JSON 파싱
-            try:
-                analysis_data = json.loads(result_text)
-                print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
-                print(f"[detailed_analysis 존재 여부] {'detailed_analysis' in analysis_data}")
-                if 'detailed_analysis' in analysis_data:
-                    detailed_len = len(str(analysis_data.get('detailed_analysis', '')))
-                    print(f"[detailed_analysis 길이] {detailed_len}자")
-                    print(f"[detailed_analysis 미리보기] {str(analysis_data.get('detailed_analysis', ''))[:200]}...")
-                else:
-                    print("⚠️ [경고] detailed_analysis 필드가 Gemini 응답에 없습니다!")
-            except json.JSONDecodeError as json_err:
-                print(f"⚠️ JSON 파싱 실패. 원본 응답:\n{result_text[:500]}")
-                raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
-            
-            # 응답 데이터 정규화
-            result = {
-                'total_incidents': analysis_data.get('total_incidents', 0),
-                'falls': analysis_data.get('falls', 0),
-                'dangerous_actions': analysis_data.get('dangerous_actions', 0),
-                'safety_score': analysis_data.get('safety_score', 0),
-                'timeline_events': analysis_data.get('timeline_events', []),
-                'summary': analysis_data.get('summary', '분석 완료'),
-                'detailed_analysis': analysis_data.get('detailed_analysis', ''),
-                'recommendations': analysis_data.get('recommendations', [])
-            }
-            
-            print(f"[최종 결과] detailed_analysis 길이: {len(result.get('detailed_analysis', ''))}자")
-            
-            return result
-            
-        except json.JSONDecodeError as e:
-            import traceback
-            print(f"❌ JSON 파싱 오류: {str(e)}")
-            print(f"상세:\n{traceback.format_exc()}")
-            raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
-        except ValueError as e:
-            # ValueError는 그대로 전달
-            raise
-        except Exception as e:
-            import traceback
-            error_trace = traceback.format_exc()
-            error_msg = str(e)
-            print(f"❌ Gemini 비디오 분석 오류: {error_msg}")
-            print(f"상세 에러:\n{error_trace}")
-            raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
+        # GenerationConfig 설정
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.4,  # 따뜻한 말투와 공감 능력을 위해 상향 조정
+            top_k=30,         # 다양한 감성 어휘 사용을 위해 후보군 확보
+            top_p=0.95        # 자연스러운 문장 구사
+        )
+        
+        self.model = genai.GenerativeModel(
+            model_name='gemini-2.5-flash',
+            generation_config=generation_config
+        )
 
     def _load_prompt(self, filename: str) -> str:
         """프롬프트 파일을 전체 읽어서 반환합니다."""
@@ -156,114 +55,11 @@ class GeminiService:
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 content = f.read()  # 파일 전체를 읽습니다
                 print(f"[프롬프트 파일 로드 성공] 파일 크기: {len(content)}자 (전체 읽음)")
-                print(f"[프롬프트 내용 확인] 'detailed_analysis' 포함 여부: {'detailed_analysis' in content}")
                 return content  # 전체 내용 반환
         except FileNotFoundError:
             error_msg = f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}"
             print(f"❌ {error_msg}")
             raise FileNotFoundError(error_msg)
-
-    def _create_analysis_prompt(self) -> str:
-        """비디오 분석을 위한 프롬프트 생성"""
-        return self._load_prompt('video_analysis_prompt.txt')
-
-    async def _determine_stage(
-        self,
-        video_bytes: bytes,
-        mime_type: str,
-        age_months: Optional[int] = None,
-    ) -> dict:
-        """
-        영상을 분석하여 가장 적절한 발달 단계를 판단합니다.
-        
-        Args:
-            video_bytes: 비디오 바이트 데이터
-            mime_type: 비디오 MIME 타입
-            age_months: 아이의 개월 수 (선택, 참고용)
-            
-        Returns:
-            발달 단계 판단 결과 딕셔너리 (detected_stage, confidence, evidence 등)
-        """
-        # backend/app/prompts/baby_dev_safety 디렉토리 찾기
-        prompts_dir = Path(__file__).parent.parent / 'prompts'
-        baby_dev_safety_dir = prompts_dir / 'baby_dev_safety'
-        
-        # 초기 판단용 헤더 프롬프트 로드
-        common_header_path = baby_dev_safety_dir / 'common_header.ko.txt'
-        if not common_header_path.exists():
-            raise FileNotFoundError(f"공통 헤더 파일을 찾을 수 없습니다: {common_header_path}")
-        
-        with open(common_header_path, 'r', encoding='utf-8') as f:
-            stage_determination_prompt = f.read()
-        
-        # 메타데이터 추가 (age_months가 제공된 경우)
-        if age_months is not None:
-            metadata_section = f"\n\n[메타데이터]\n- age_months: {age_months}\n"
-            stage_determination_prompt = f"{stage_determination_prompt}{metadata_section}"
-        
-        # Base64 인코딩
-        video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-        
-        # Gemini API 호출 - 발달 단계 판단
-        print("[발달 단계 판단 시작]")
-        response = self.model.generate_content([
-            {
-                'mime_type': mime_type,
-                'data': video_base64
-            },
-            stage_determination_prompt
-        ])
-        
-        if not response or not hasattr(response, 'text'):
-            raise ValueError("Gemini API 응답이 올바르지 않습니다.")
-        
-        result_text = response.text.strip()
-        print(f"[발달 단계 판단 응답 길이] {len(result_text)}자")
-        
-        # JSON 추출
-        cleaned_text = result_text
-        if '```json' in cleaned_text:
-            start = cleaned_text.find('```json')
-            if start != -1:
-                start = cleaned_text.find('\n', start) + 1
-                end = cleaned_text.find('```', start)
-                if end != -1:
-                    cleaned_text = cleaned_text[start:end].strip()
-        elif '```' in cleaned_text:
-            start = cleaned_text.find('```')
-            if start != -1:
-                start = cleaned_text.find('\n', start) + 1
-                end = cleaned_text.find('```', start)
-                if end != -1:
-                    cleaned_text = cleaned_text[start:end].strip()
-        
-        # 중괄호 카운팅으로 JSON 추출
-        first_brace = cleaned_text.find('{')
-        if first_brace != -1:
-            brace_count = 0
-            last_brace = first_brace
-            for i in range(first_brace, len(cleaned_text)):
-                char = cleaned_text[i]
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        last_brace = i
-                        break
-            if brace_count == 0:
-                cleaned_text = cleaned_text[first_brace:last_brace + 1]
-        
-        # JSON 파싱
-        try:
-            stage_result = json.loads(cleaned_text)
-            detected_stage = stage_result.get('detected_stage')
-            print(f"[발달 단계 판단 완료] 단계: {detected_stage}, 신뢰도: {stage_result.get('confidence', '알 수 없음')}")
-            return stage_result
-        except json.JSONDecodeError as json_err:
-            print(f"⚠️ 발달 단계 판단 JSON 파싱 실패: {str(json_err)}")
-            print(f"[추출된 텍스트]\n{cleaned_text[:500]}")
-            raise ValueError(f"발달 단계 판단 결과를 파싱할 수 없습니다: {str(json_err)}")
     
     def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None, video_duration_seconds: Optional[float] = None) -> str:
         """
@@ -400,10 +196,11 @@ class GeminiService:
         content_type: Optional[str] = None,
         stage: Optional[str] = None,
         age_months: Optional[int] = None,
+        generation_params: Optional[dict] = None,
     ) -> dict:
         """
-        VLM 프롬프트를 사용하여 비디오를 분석합니다.
-        2단계 프로세스: 1) 발달 단계 판단, 2) 해당 단계 프롬프트로 상세 분석
+        메타데이터 방식으로 비디오를 분석합니다.
+        3단계 프로세스: 1) VLM으로 메타데이터 추출, 2) LLM으로 발달 단계 판단, 3) LLM으로 상세 분석
         
         Args:
             video_file: 업로드된 비디오 파일 (선택)
@@ -411,6 +208,7 @@ class GeminiService:
             content_type: 비디오 MIME 타입
             stage: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
             age_months: 아이의 개월 수 (선택)
+            generation_params: AI 생성 설정 (temperature, top_k, top_p)
             
         Returns:
             VLM 스키마에 맞는 분석 결과 딕셔너리
@@ -425,34 +223,94 @@ class GeminiService:
             else:
                 raise ValueError("video_file 또는 video_bytes 중 하나는 필수입니다.")
             
-            # 1단계: 발달 단계 자동 판단 (stage가 제공되지 않은 경우)
+            # ========================================
+            # [1차 VLM] 비디오 → 메타데이터 추출
+            # ========================================
+            print("[1차 VLM] 비디오에서 메타데이터 추출 중...")
+            
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+            
+            # 메타데이터 추출 프롬프트 로드
+            metadata_prompt = self._load_prompt('video_metadata_extraction.txt')
+            
+            # VLM 호출
+            response = self.model.generate_content([
+                {
+                    'mime_type': mime_type,
+                    'data': video_base64
+                },
+                metadata_prompt
+            ])
+            
+            # 메타데이터 파싱
+            metadata_text = response.text.strip()
+            metadata = self._extract_and_parse_json(metadata_text)
+            
+            print(f"[1차 완료] 관찰 {len(metadata.get('timeline_observations', []))}개, "
+                  f"안전 이벤트 {len(metadata.get('safety_observations', []))}개")
+            
+            # 비디오 길이 (메타데이터에서 가져오기, 없으면 계산)
+            video_duration_seconds = metadata.get('video_metadata', {}).get('total_duration_seconds')
+            if not video_duration_seconds:
+                video_duration_seconds = self._get_video_duration(video_bytes, mime_type)
+                if video_duration_seconds and 'video_metadata' in metadata:
+                    metadata['video_metadata']['total_duration_seconds'] = video_duration_seconds
+            
+            video_duration_minutes = round(video_duration_seconds / 60, 2) if video_duration_seconds else None
+            print(f"[비디오 길이] {video_duration_seconds}초 ({video_duration_minutes}분)")
+            
+            # ========================================
+            # [2차 LLM] 메타데이터 → 발달 단계 판단
+            # ========================================
             detected_stage = stage
             stage_determination_result = None
+            
             if stage is None:
-                print("[1단계] 발달 단계 자동 판단 시작...")
-                stage_determination_result = await self._determine_stage(
-                    video_bytes=video_bytes,
-                    mime_type=mime_type,
-                    age_months=age_months,
-                )
+                print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
+                
+                # 기존 common_header 프롬프트 로드
+                stage_prompt = self._load_prompt('baby_dev_safety/common_header.ko.txt')
+                
+                # 프롬프트 앞에 메타데이터 추가
+                combined_prompt = f"""[입력 방식]
+비디오 대신 비디오에서 추출된 메타데이터를 제공합니다.
+이 메타데이터를 바탕으로 발달 단계를 판단하세요.
+
+[메타데이터]
+```json
+{json.dumps(metadata, ensure_ascii=False, indent=2)}
+```
+
+{stage_prompt}
+
+[판단 방법]
+- timeline_observations에서 관찰된 행동 패턴 분석
+- behavior_summary에서 각 행동의 빈도 확인
+- 위 발달 단계 기준과 비교하여 판단
+- evidence에는 메타데이터의 구체적인 빈도/지속시간 포함
+"""
+                
+                # LLM 호출 (비디오 없이 텍스트만!)
+                response = self.model.generate_content(combined_prompt)
+                
+                # 결과 파싱
+                result_text = response.text.strip()
+                stage_determination_result = self._extract_and_parse_json(result_text)
                 detected_stage = stage_determination_result.get('detected_stage')
+                
                 if not detected_stage:
                     raise ValueError("발달 단계를 판단할 수 없습니다.")
-                print(f"[1단계 완료] 판단된 발달 단계: {detected_stage}단계")
+                
+                print(f"[2차 완료] 판단된 단계: {detected_stage}, "
+                      f"신뢰도: {stage_determination_result.get('confidence')}")
             else:
                 print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
                 detected_stage = stage
             
-            # 비디오 길이 계산
-            video_duration_seconds = self._get_video_duration(video_bytes, mime_type)
-            video_duration_minutes = round(video_duration_seconds / 60, 2) if video_duration_seconds else None
-            print(f"[비디오 길이] {video_duration_seconds}초 ({video_duration_minutes}분)")
-            
-            # Base64 인코딩
-            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-            
-            # 2단계: 판단된 단계의 프롬프트로 상세 분석
-            print(f"[2단계] {detected_stage}단계 프롬프트로 상세 분석 시작...")
+            # ========================================
+            # [3차 LLM] 메타데이터 → 상세 분석
+            # ========================================
+            print(f"[3차 LLM] {detected_stage}단계 기준으로 상세 분석 중...")
             
             # age_months 업데이트 (판단 결과에 추정값이 있으면 사용)
             if age_months is None and stage_determination_result:
@@ -461,23 +319,77 @@ class GeminiService:
                     age_months = estimated_age
                     print(f"[개월 수] 판단 결과에서 추정: {age_months}개월")
             
-            # VLM 프롬프트 생성
-            prompt = self._load_vlm_prompt(
-                stage=detected_stage, 
+            # 기존 단계별 프롬프트 로드
+            stage_prompt = self._load_vlm_prompt(
+                stage=detected_stage,
                 age_months=age_months,
                 video_duration_seconds=video_duration_seconds
             )
-            print(f"[VLM 프롬프트 로드 완료] 프롬프트 길이: {len(prompt)}자")
             
-            # Gemini API 호출
-            print("[Gemini API 호출 시작 (VLM 모드)]")
-            response = self.model.generate_content([
-                {
-                    'mime_type': mime_type,
-                    'data': video_base64
-                },
-                prompt
-            ])
+            # 프롬프트 앞에 메타데이터 추가
+            combined_prompt = f"""[입력 방식 - 중요!]
+비디오를 직접 보는 것이 아니라, 비디오에서 이미 추출된 메타데이터를 분석합니다.
+메타데이터에는 timeline_observations, behavior_summary, safety_observations 등이 포함되어 있습니다.
+
+[메타데이터]
+```json
+{json.dumps(metadata, ensure_ascii=False, indent=2)}
+```
+
+{stage_prompt}
+
+[메타데이터 기반 분석 방법]
+아래 프롬프트에서 "탐지", "관찰", "기록" 등의 표현은 메타데이터를 분석하는 것으로 해석하세요.
+
+1. development_analysis.skills 생성:
+   - behavior_summary에서 각 행동의 빈도(count)와 지속시간(total_duration_seconds) 확인
+   - timeline_observations에서 해당 행동의 구체적 예시(examples) 추출
+   - frequency는 behavior_summary의 count 값 사용
+   - examples는 timeline_observations에서 해당 action의 detail 사용
+   
+   예시:
+   behavior_summary에 "혼자 앉기": {{"count": 12, "total_duration_seconds": 360}}이 있고
+   timeline_observations에 [{{"action": "혼자 앉기", "detail": "지지 없이 30초간 앉음", "timestamp": "00:00:05"}}]가 있으면
+   →  skills에 {{"name": "혼자 앉기", "present": true, "frequency": 12, "examples": ["00:00:05 - 지지 없이 30초간 앉음"]}}
+
+2. safety_analysis.incident_events 생성:
+   - safety_observations의 각 항목을 incident_events로 변환
+   - event_id는 "E001", "E002" 형식으로 순차 부여
+   - severity는 safety_observations의 severity 값 사용
+   - timestamp_range는 safety_observations의 timestamp 사용
+   - description은 safety_observations의 description + detail 결합
+
+3. safety_analysis.environment_risks 생성:
+   - environment.hazards_identified의 각 항목을 environment_risks로 변환
+   - risk_type은 hazards의 type 사용
+   - severity는 hazards의 severity 사용
+   - environment_factor는 hazards의 description 사용
+
+4. development_analysis.summary 생성:
+   - behavior_summary의 전체 패턴을 보고 2-3문장으로 요약
+   - 빈도가 높은 행동들을 중심으로 서술
+
+5. 출력 스키마:
+   - 위 프롬프트의 JSON 스키마를 정확히 따를 것
+   - 모든 필수 필드 포함
+"""
+            
+            # GenerationConfig 설정
+            generation_config = None
+            if generation_params:
+                print(f"[Generation Config] 사용자 설정 적용: {generation_params}")
+                generation_config = genai.types.GenerationConfig(
+                    temperature=generation_params.get('temperature', 0.4),
+                    top_k=generation_params.get('top_k', 30),
+                    top_p=generation_params.get('top_p', 0.95)
+                )
+            
+            # LLM 호출 (비디오 없이 텍스트만!)
+            print("[Gemini API 호출 시작 (LLM 모드)]")
+            response = self.model.generate_content(
+                combined_prompt,
+                generation_config=generation_config
+            )
             print("[Gemini API 호출 완료]")
             
             # 응답 파싱
@@ -649,6 +561,11 @@ class GeminiService:
                         
                         print(f"[안전도 레벨 자동 설정] safety_score: {safety_score} → overall_safety_level: {safety_analysis['overall_safety_level']}")
                 
+                # 메타데이터도 결과에 포함 (시각화/디버깅용)
+                analysis_data['_extracted_metadata'] = metadata
+                
+                print(f"[3차 완료] 상세 분석 완료")
+                
                 return analysis_data
             except json.JSONDecodeError as json_err:
                 print(f"⚠️ JSON 파싱 실패.")
@@ -668,9 +585,54 @@ class GeminiService:
             import traceback
             error_trace = traceback.format_exc()
             error_msg = str(e)
-            print(f"❌ Gemini VLM 비디오 분석 오류: {error_msg}")
+            print(f"❌ Gemini 메타데이터 기반 비디오 분석 오류: {error_msg}")
             print(f"상세 에러:\n{error_trace}")
             raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
+    
+    def _extract_and_parse_json(self, text: str) -> dict:
+        """텍스트에서 JSON 추출 및 파싱"""
+        cleaned_text = text
+        
+        # 마크다운 코드 블록 제거
+        if '```json' in cleaned_text:
+            start = cleaned_text.find('```json')
+            if start != -1:
+                start = cleaned_text.find('\n', start) + 1
+                end = cleaned_text.find('```', start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        elif '```' in cleaned_text:
+            start = cleaned_text.find('```')
+            if start != -1:
+                start = cleaned_text.find('\n', start) + 1
+                end = cleaned_text.find('```', start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        
+        # 중괄호 카운팅으로 JSON 추출
+        first_brace = cleaned_text.find('{')
+        if first_brace != -1:
+            brace_count = 0
+            last_brace = first_brace
+            for i in range(first_brace, len(cleaned_text)):
+                char = cleaned_text[i]
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        last_brace = i
+                        break
+            if brace_count == 0:
+                cleaned_text = cleaned_text[first_brace:last_brace + 1]
+        
+        # JSON 파싱
+        try:
+            return json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON 파싱 실패: {str(e)}")
+            print(f"[추출된 텍스트 (처음 500자)]\n{cleaned_text[:500]}")
+            raise ValueError(f"JSON 파싱 실패: {str(e)}")
 
 
 # 싱글톤 인스턴스
