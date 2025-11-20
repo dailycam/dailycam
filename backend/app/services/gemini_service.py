@@ -400,63 +400,9 @@ class GeminiService:
             print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
             print(f"[Gemini 원본 응답 미리보기 (처음 500자)]\n{result_text[:500]}")
             
-            # JSON 추출 - 여러 방법 시도
-            json_text = None
-            
-            # 방법 1: 마크다운 코드 블록 제거
-            cleaned_text = result_text
-            if '```json' in cleaned_text:
-                # ```json ... ``` 패턴 찾기
-                start = cleaned_text.find('```json')
-                if start != -1:
-                    start = cleaned_text.find('\n', start) + 1
-                    end = cleaned_text.find('```', start)
-                    if end != -1:
-                        cleaned_text = cleaned_text[start:end].strip()
-                        print("[JSON 추출 방법] 마크다운 코드 블록(```json)에서 추출")
-            elif '```' in cleaned_text:
-                # ``` ... ``` 패턴 찾기
-                start = cleaned_text.find('```')
-                if start != -1:
-                    start = cleaned_text.find('\n', start) + 1
-                    end = cleaned_text.find('```', start)
-                    if end != -1:
-                        cleaned_text = cleaned_text[start:end].strip()
-                        print("[JSON 추출 방법] 마크다운 코드 블록(```)에서 추출")
-            
-            # 방법 2: 중괄호를 카운트하여 정확한 JSON 객체 추출
-            first_brace = cleaned_text.find('{')
-            if first_brace != -1:
-                brace_count = 0
-                last_brace = first_brace
-                
-                for i in range(first_brace, len(cleaned_text)):
-                    char = cleaned_text[i]
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            last_brace = i
-                            break
-                
-                if brace_count == 0:
-                    json_text = cleaned_text[first_brace:last_brace + 1]
-                    print(f"[JSON 추출 방법] 중괄호 카운팅으로 추출 (길이: {len(json_text)}자)")
-                else:
-                    # 중괄호가 맞지 않으면 마지막 } 사용
-                    last_brace = cleaned_text.rfind('}')
-                    if last_brace != -1 and last_brace > first_brace:
-                        json_text = cleaned_text[first_brace:last_brace + 1]
-                        print("[JSON 추출 방법] 첫 번째 { 부터 마지막 } 까지 추출 (중괄호 불일치)")
-            
-            if not json_text:
-                print(f"⚠️ JSON을 찾을 수 없습니다. 원본 응답:\n{result_text[:1000]}")
-                raise ValueError("AI 응답에서 JSON을 찾을 수 없습니다.")
-            
-            # JSON 파싱
+            # JSON 추출 및 파싱
             try:
-                analysis_data = json.loads(json_text)
+                analysis_data = self._extract_and_parse_json(result_text)
                 print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
                 
                 # 판단 결과 정보 추가 (자동 판단한 경우)
@@ -623,8 +569,15 @@ class GeminiService:
                     if brace_count == 0:
                         last_brace = i
                         break
+            
             if brace_count == 0:
                 cleaned_text = cleaned_text[first_brace:last_brace + 1]
+            else:
+                # 중괄호가 맞지 않으면 마지막 } 사용 (Fallback)
+                last_brace = cleaned_text.rfind('}')
+                if last_brace != -1 and last_brace > first_brace:
+                    cleaned_text = cleaned_text[first_brace:last_brace + 1]
+                    print("[JSON 추출] 중괄호 불일치, 첫 { 부터 마지막 } 까지 추출")
         
         # JSON 파싱
         try:
