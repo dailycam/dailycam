@@ -61,10 +61,13 @@ class GeminiService:
             # 1. 직접 경로 시도
             if (prompts_dir / filename).exists():
                 prompt_path = prompts_dir / filename
-            # 2. baby_dev_safety/analysis 시도
-            elif (prompts_dir / 'baby_dev_safety' / 'analysis' / filename).exists():
-                prompt_path = prompts_dir / 'baby_dev_safety' / 'analysis' / filename
-            # 3. baby_dev_safety/extraction 시도
+            # 2. baby_dev_safety/common 시도
+            elif (prompts_dir / 'baby_dev_safety' / 'common' / filename).exists():
+                prompt_path = prompts_dir / 'baby_dev_safety' / 'common' / filename
+            # 3. baby_dev_safety/stages 시도
+            elif (prompts_dir / 'baby_dev_safety' / 'stages' / filename).exists():
+                prompt_path = prompts_dir / 'baby_dev_safety' / 'stages' / filename
+            # 4. baby_dev_safety/extraction 시도
             elif (prompts_dir / 'baby_dev_safety' / 'extraction' / filename).exists():
                 prompt_path = prompts_dir / 'baby_dev_safety' / 'extraction' / filename
             else:
@@ -81,6 +84,30 @@ class GeminiService:
             error_msg = f"프롬프트 파일을 찾을 수 없습니다: {filename}"
             print(f"❌ {error_msg}")
             raise FileNotFoundError(error_msg)
+    
+    def _determine_stage_from_age_months(self, age_months: int) -> str:
+        """
+        개월 수를 기준으로 초기 발달 단계를 결정합니다.
+        이는 AI 분석의 시작점(기준점)으로 사용되며, AI는 실제 관찰을 통해 다른 단계를 제안할 수 있습니다.
+        
+        Args:
+            age_months: 아이의 개월 수
+            
+        Returns:
+            발달 단계 문자열 ("1", "2", "3", "4", "5", "6")
+        """
+        if age_months <= 2:
+            return "1"
+        elif age_months <= 5:
+            return "2"
+        elif age_months <= 8:
+            return "3"
+        elif age_months <= 11:
+            return "4"
+        elif age_months <= 17:
+            return "5"
+        else:  # 18개월 이상
+            return "6"
     
     def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None, video_duration_seconds: Optional[float] = None) -> str:
         """
@@ -116,16 +143,16 @@ class GeminiService:
         stage_config = config['stages'][stage]
         prompt_file = stage_config['prompt_file']
         
-        # 단계별 프롬프트 로드 (analysis 폴더 내)
-        stage_prompt_path = baby_dev_safety_dir / 'analysis' / prompt_file
+        # 단계별 프롬프트 로드 (stages 폴더 내)
+        stage_prompt_path = baby_dev_safety_dir / 'stages' / prompt_file
         if not stage_prompt_path.exists():
             raise FileNotFoundError(f"단계별 프롬프트 파일을 찾을 수 없습니다: {stage_prompt_path}")
         
         with open(stage_prompt_path, 'r', encoding='utf-8') as f:
             stage_prompt = f.read()
 
-        # 공통 안전 규칙 로드 (analysis 폴더 내)
-        common_rules_path = baby_dev_safety_dir / 'analysis' / 'common_safety_rules.ko.txt'
+        # 공통 안전 규칙 로드 (common 폴더 내)
+        common_rules_path = baby_dev_safety_dir / 'common' / 'safety_rules.ko.txt'
         if not common_rules_path.exists():
             raise FileNotFoundError(f"공통 안전 규칙 파일을 찾을 수 없습니다: {common_rules_path}")
             
@@ -392,18 +419,35 @@ class GeminiService:
             # ========================================
             detected_stage = stage
             stage_determination_result = None
+            initial_stage_from_age = None
             
             if stage is None:
+                # age_months가 제공된 경우, 이를 기반으로 초기 단계 결정
+                if age_months is not None:
+                    initial_stage_from_age = self._determine_stage_from_age_months(age_months)
+                    print(f"[발달 단계 초기화] age_months={age_months}개월 → 초기 단계: {initial_stage_from_age}단계")
+                
                 print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
                 
-                # 기존 common_header 프롬프트 로드 (경로 변경됨)
-                stage_prompt = self._load_prompt('common_header.ko.txt')
+                # 기존 common_header 프롬프트 로드 (common 폴더로 변경됨)
+                stage_prompt = self._load_prompt('header.ko.txt')
+                
+                # age_months 정보를 프롬프트에 추가
+                age_hint = ""
+                if age_months is not None and initial_stage_from_age is not None:
+                    age_hint = f"""
+[개월 수 정보]
+- 이 아이의 개월 수: {age_months}개월
+- 개월 수 기반 예상 단계: {initial_stage_from_age}단계
+- 이 정보를 참고하되, 실제 관찰된 행동 패턴이 더 중요합니다.
+- 관찰된 행동이 예상 단계와 다르다면, 관찰 결과를 우선하여 판단하세요.
+"""
                 
                 # 프롬프트 앞에 메타데이터 추가
                 combined_prompt = f"""[입력 방식]
 비디오 대신 비디오에서 추출된 메타데이터를 제공합니다.
 이 메타데이터를 바탕으로 발달 단계를 판단하세요.
-
+{age_hint}
 [메타데이터]
 ```json
 {json.dumps(metadata, ensure_ascii=False, indent=2)}
@@ -429,8 +473,13 @@ class GeminiService:
                 if not detected_stage:
                     raise ValueError("발달 단계를 판단할 수 없습니다.")
                 
-                print(f"[2차 완료] 판단된 단계: {detected_stage}, "
-                      f"신뢰도: {stage_determination_result.get('confidence')}")
+                # 초기 단계와 AI 판단 결과 비교 로깅
+                if initial_stage_from_age and detected_stage != initial_stage_from_age:
+                    print(f"[발달 단계 조정] 초기 {initial_stage_from_age}단계 → AI 판단 {detected_stage}단계 "
+                          f"(신뢰도: {stage_determination_result.get('confidence')})")
+                else:
+                    print(f"[2차 완료] 판단된 단계: {detected_stage}, "
+                          f"신뢰도: {stage_determination_result.get('confidence')}")
             else:
                 print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
                 detected_stage = stage
