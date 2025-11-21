@@ -58,6 +58,19 @@ class GeminiService:
         prompt_path = prompts_dir / filename
         
         try:
+            # 1. 직접 경로 시도
+            if (prompts_dir / filename).exists():
+                prompt_path = prompts_dir / filename
+            # 2. baby_dev_safety/analysis 시도
+            elif (prompts_dir / 'baby_dev_safety' / 'analysis' / filename).exists():
+                prompt_path = prompts_dir / 'baby_dev_safety' / 'analysis' / filename
+            # 3. baby_dev_safety/extraction 시도
+            elif (prompts_dir / 'baby_dev_safety' / 'extraction' / filename).exists():
+                prompt_path = prompts_dir / 'baby_dev_safety' / 'extraction' / filename
+            else:
+                # 못 찾으면 기본 경로로 설정하고 에러 발생 유도
+                prompt_path = prompts_dir / filename
+
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 # 캐시에 저장
@@ -65,7 +78,7 @@ class GeminiService:
                 print(f"[프롬프트 캐시 등록] {filename} ({len(content)}자)")
                 return content
         except FileNotFoundError:
-            error_msg = f"프롬프트 파일을 찾을 수 없습니다: {prompt_path}"
+            error_msg = f"프롬프트 파일을 찾을 수 없습니다: {filename}"
             print(f"❌ {error_msg}")
             raise FileNotFoundError(error_msg)
     
@@ -103,13 +116,21 @@ class GeminiService:
         stage_config = config['stages'][stage]
         prompt_file = stage_config['prompt_file']
         
-        # 단계별 프롬프트 로드 (공통 헤더는 단계별 프롬프트 내부에 포함되어 있음)
-        stage_prompt_path = baby_dev_safety_dir / prompt_file
+        # 단계별 프롬프트 로드 (analysis 폴더 내)
+        stage_prompt_path = baby_dev_safety_dir / 'analysis' / prompt_file
         if not stage_prompt_path.exists():
             raise FileNotFoundError(f"단계별 프롬프트 파일을 찾을 수 없습니다: {stage_prompt_path}")
         
         with open(stage_prompt_path, 'r', encoding='utf-8') as f:
             stage_prompt = f.read()
+
+        # 공통 안전 규칙 로드 (analysis 폴더 내)
+        common_rules_path = baby_dev_safety_dir / 'analysis' / 'common_safety_rules.ko.txt'
+        if not common_rules_path.exists():
+            raise FileNotFoundError(f"공통 안전 규칙 파일을 찾을 수 없습니다: {common_rules_path}")
+            
+        with open(common_rules_path, 'r', encoding='utf-8') as f:
+            common_safety_rules = f.read()
         
         # 메타데이터 추가
         metadata_items = []
@@ -127,10 +148,10 @@ class GeminiService:
         if metadata_items:
             metadata_section = f"\n\n[메타데이터]\n" + "\n".join(metadata_items) + "\n"
         
-        # 프롬프트 결합: 단계별 프롬프트 + 메타데이터
-        combined_prompt = f"{stage_prompt}{metadata_section}"
+        # 프롬프트 결합: 단계별 프롬프트 + 공통 안전 규칙 + 메타데이터
+        combined_prompt = f"{stage_prompt}\n\n{common_safety_rules}{metadata_section}"
         
-        print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자")
+        print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자 (공통 규칙 포함)")
         
         return combined_prompt
 
@@ -197,6 +218,99 @@ class GeminiService:
             print(f"[비디오 길이 계산 오류] {str(e)}")
             return None
 
+    def _optimize_video(self, video_bytes: bytes) -> bytes:
+        """
+        비디오 최적화: 해상도 축소 및 FPS 조정
+        - 해상도: 높이 480px (비율 유지)
+        - FPS: 1fps (초당 1프레임)
+        """
+        print("[비디오 최적화] 전처리 시작...")
+        
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as input_temp:
+            input_temp.write(video_bytes)
+            input_path = input_temp.name
+            
+        output_path = input_path.replace('.mp4', '_opt.mp4')
+        
+        try:
+            cap = cv2.VideoCapture(input_path)
+            if not cap.isOpened():
+                print("[비디오 최적화] 비디오 열기 실패, 원본 사용")
+                return video_bytes
+                
+            # 원본 정보
+            orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            orig_fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # 최적화 목표 (480p, 1fps)
+            target_height = 480
+            target_fps = 1.0
+            
+            # 이미 최적화된 상태(또는 그보다 작은 경우)라면 패스
+            if orig_height <= target_height and orig_fps <= 2:
+                 print(f"[비디오 최적화] 이미 최적화된 상태임 ({orig_width}x{orig_height}, {orig_fps}fps)")
+                 cap.release()
+                 return video_bytes
+
+            # 비율 유지하며 리사이징
+            scale = target_height / orig_height
+            target_width = int(orig_width * scale)
+            
+            print(f"[비디오 최적화] {orig_width}x{orig_height} {orig_fps}fps -> {target_width}x{target_height} {target_fps}fps")
+
+            # Writer 설정 (mp4v 코덱 사용)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, target_fps, (target_width, target_height))
+            
+            # 프레임 처리: 원본 FPS에 맞춰 스킵
+            step = int(orig_fps / target_fps)
+            if step < 1: step = 1
+            
+            count = 0
+            processed_frames = 0
+            
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
+                if count % step == 0:
+                    # 리사이징
+                    resized = cv2.resize(frame, (target_width, target_height))
+                    out.write(resized)
+                    processed_frames += 1
+                
+                count += 1
+                
+            cap.release()
+            out.release()
+            
+            # 최적화된 파일 읽기
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                print("[비디오 최적화] 출력 파일 생성 실패, 원본 사용")
+                return video_bytes
+
+            with open(output_path, 'rb') as f:
+                optimized_bytes = f.read()
+                
+            reduction_ratio = (1 - len(optimized_bytes) / len(video_bytes)) * 100
+            print(f"[비디오 최적화 완료] {len(video_bytes)/1024/1024:.2f}MB -> {len(optimized_bytes)/1024/1024:.2f}MB ({reduction_ratio:.1f}% 감소)")
+            return optimized_bytes
+            
+        except Exception as e:
+            print(f"[비디오 최적화 오류] {e}")
+            return video_bytes # 오류 시 원본 반환
+        finally:
+            # 정리
+            try:
+                if os.path.exists(input_path): os.unlink(input_path)
+                if os.path.exists(output_path): os.unlink(output_path)
+            except Exception as e:
+                print(f"[비디오 최적화] 임시 파일 삭제 실패: {e}")
+
     async def analyze_video_vlm(
         self,
         video_bytes: bytes,
@@ -224,23 +338,37 @@ class GeminiService:
             mime_type = content_type or "video/mp4"
             
             # ========================================
+            # [0단계] 비디오 최적화 (전처리)
+            # ========================================
+            optimized_video_bytes = self._optimize_video(video_bytes)
+            
+            # ========================================
             # [1차 VLM] 비디오 → 메타데이터 추출
             # ========================================
             print("[1차 VLM] 비디오에서 메타데이터 추출 중...")
             
-            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+            video_base64 = base64.b64encode(optimized_video_bytes).decode('utf-8')
             
-            # 메타데이터 추출 프롬프트 로드
-            metadata_prompt = self._load_prompt('video_metadata_extraction.txt')
+            # 메타데이터 추출 프롬프트 로드 (이름 변경됨)
+            metadata_prompt = self._load_prompt('vlm_metadata.ko.txt')
             
-            # VLM 호출
-            response = self.model.generate_content([
-                {
-                    'mime_type': mime_type,
-                    'data': video_base64
-                },
-                metadata_prompt
-            ])
+            # VLM 호출 (사실 기반 추출을 위해 temperature=0.0 설정)
+            vlm_generation_config = genai.types.GenerationConfig(
+                temperature=0.0,
+                top_k=32,
+                top_p=0.95
+            )
+            
+            response = self.model.generate_content(
+                [
+                    {
+                        'mime_type': mime_type,
+                        'data': video_base64
+                    },
+                    metadata_prompt
+                ],
+                generation_config=vlm_generation_config
+            )
             
             # 메타데이터 파싱
             metadata_text = response.text.strip()
@@ -268,8 +396,8 @@ class GeminiService:
             if stage is None:
                 print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
                 
-                # 기존 common_header 프롬프트 로드
-                stage_prompt = self._load_prompt('baby_dev_safety/common_header.ko.txt')
+                # 기존 common_header 프롬프트 로드 (경로 변경됨)
+                stage_prompt = self._load_prompt('common_header.ko.txt')
                 
                 # 프롬프트 앞에 메타데이터 추가
                 combined_prompt = f"""[입력 방식]
@@ -356,20 +484,33 @@ class GeminiService:
    - safety_observations의 각 항목을 incident_events로 변환
    - event_id는 "E001", "E002" 형식으로 순차 부여
    - severity는 safety_observations의 severity 값 사용
-   - timestamp_range는 safety_observations의 timestamp 사용
-   - description은 safety_observations의 description + detail 결합
+   - timestamp_range는 safety_observations의 timestamp 사용 (단일 시점인 경우 +5초 하여 "HH:MM:SS-HH:MM:SS" 범위로 변환 필수)
+   - description은 safety_observations의 description에 trigger_behavior와 environment_factor를 포함하여 상세히 기술
+   - has_safety_device는 safety_observations의 has_safety_device 값 사용
 
-3. safety_analysis.environment_risks 생성:
+3. safety_analysis.critical_events 생성:
+   - safety_observations 중 severity가 '사고발생' 또는 '위험'인 항목은 critical_events에도 별도로 기록
+   - event_type은 severity에 따라 '실제사고' 또는 '사고직전위험상황'으로 분류
+   - estimated_outcome은 상황에 맞춰 추론
+
+4. safety_analysis.environment_risks 생성:
    - environment.hazards_identified의 각 항목을 environment_risks로 변환
    - risk_type은 hazards의 type 사용
    - severity는 hazards의 severity 사용
    - environment_factor는 hazards의 description 사용
+   - has_safety_device와 safety_device_type은 environment.safety_devices 목록을 참고하여 해당 위험 요소에 대한 안전장치가 있는지 추론하여 기입
 
-4. development_analysis.summary 생성:
+5. safety_analysis.overall_safety_level 평가:
+   - adult_presence 정보를 적극 반영하여 보호자의 개입 수준과 동반 여부를 고려해 안전 레벨을 판단
+
+6. development_analysis.next_stage_signs 생성:
+   - behavior_summary나 timeline_observations에서 현재 단계보다 더 발달된 행동(다음 단계 특징)이 관찰되면 이를 추출하여 기록
+
+7. development_analysis.summary 생성:
    - behavior_summary의 전체 패턴을 보고 2-3문장으로 요약
    - 빈도가 높은 행동들을 중심으로 서술
 
-5. 출력 스키마:
+8. 출력 스키마:
    - 위 프롬프트의 JSON 스키마를 정확히 따를 것
    - 모든 필수 필드 포함
 """
@@ -454,7 +595,7 @@ class GeminiService:
                         
                         # 방법 2: incident_summary에 applied_deduction이 없으면 incident_events를 기반으로 계산
                         if total_deduction == 0 and 'incident_events' in safety_analysis and isinstance(safety_analysis['incident_events'], list):
-                            # 감점 규칙: 사고(-50, 최대 1회), 위험(-30, 최대 1회), 주의(-10, 최대 1회), 권장(-2점 × 발생 건수, 최대 -16점)
+                            # 감점 규칙: 사고/사고발생(-50, 최대 1회), 위험(-30, 최대 1회), 주의(-10, 최대 1회), 권장(-2점 × 발생 건수, 최대 -16점)
                             has_accident = False
                             has_danger = False
                             has_warning = False
@@ -463,7 +604,8 @@ class GeminiService:
                             for event in safety_analysis['incident_events']:
                                 if isinstance(event, dict):
                                     severity = event.get('severity', '')
-                                    if severity == '사고' and not has_accident:
+                                    # '사고' 또는 '사고발생' 모두 처리
+                                    if (severity == '사고' or severity == '사고발생') and not has_accident:
                                         total_deduction -= 50
                                         has_accident = True
                                     elif severity == '위험' and not has_danger:
