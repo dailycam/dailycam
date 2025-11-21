@@ -628,28 +628,29 @@ class GeminiService:
                     analysis_data['meta']['observation_duration_minutes'] = video_duration_minutes
                     print(f"[비디오 길이 자동 설정] observation_duration_minutes: {video_duration_minutes}분")
                 
-                # safety_score가 없으면 incident_summary 또는 incident_events를 기반으로 계산
+                # safety_score를 항상 백엔드에서 재계산 (AI 응답값 무시)
                 if 'safety_analysis' in analysis_data:
                     safety_analysis = analysis_data['safety_analysis']
-                    if 'safety_score' not in safety_analysis or safety_analysis.get('safety_score') is None:
-                        total_deduction = 0
+                    total_deduction = 0
+                    
+                    # 방법 1: incident_summary의 applied_deduction 사용
+                    if 'incident_summary' in safety_analysis and isinstance(safety_analysis['incident_summary'], list):
+                        for item in safety_analysis['incident_summary']:
+                            if isinstance(item, dict) and 'applied_deduction' in item:
+                                deduction = item.get('applied_deduction', 0)
+                                if isinstance(deduction, (int, float)):
+                                    total_deduction += deduction
+                    
+                    # 방법 2: incident_summary에 applied_deduction이 없으면 incident_events와 environment_risks를 기반으로 계산
+                    if total_deduction == 0:
+                        # 감점 규칙: 사고/사고발생(-50, 최대 1회), 위험(-30, 최대 1회), 주의(-10, 최대 1회), 권장(-2점 × 발생 건수, 최대 -16점)
+                        has_accident = False
+                        has_danger = False
+                        has_warning = False
+                        recommended_count = 0
                         
-                        # 방법 1: incident_summary의 applied_deduction 사용
-                        if 'incident_summary' in safety_analysis and isinstance(safety_analysis['incident_summary'], list):
-                            for item in safety_analysis['incident_summary']:
-                                if isinstance(item, dict) and 'applied_deduction' in item:
-                                    deduction = item.get('applied_deduction', 0)
-                                    if isinstance(deduction, (int, float)):
-                                        total_deduction += deduction
-                        
-                        # 방법 2: incident_summary에 applied_deduction이 없으면 incident_events를 기반으로 계산
-                        if total_deduction == 0 and 'incident_events' in safety_analysis and isinstance(safety_analysis['incident_events'], list):
-                            # 감점 규칙: 사고/사고발생(-50, 최대 1회), 위험(-30, 최대 1회), 주의(-10, 최대 1회), 권장(-2점 × 발생 건수, 최대 -16점)
-                            has_accident = False
-                            has_danger = False
-                            has_warning = False
-                            recommended_count = 0
-                            
+                        # incident_events에서 감점 계산
+                        if 'incident_events' in safety_analysis and isinstance(safety_analysis['incident_events'], list):
                             for event in safety_analysis['incident_events']:
                                 if isinstance(event, dict):
                                     severity = event.get('severity', '')
@@ -665,19 +666,38 @@ class GeminiService:
                                         has_warning = True
                                     elif severity == '권장':
                                         recommended_count += 1
-                            
-                            # 권장 감점 계산 (최대 -16점)
-                            recommended_deduction = min(recommended_count * 2, 16)
-                            total_deduction -= recommended_deduction
                         
-                        safety_score = 100 + total_deduction
-                        # 최종 점수는 50점보다 낮아지면 50점으로 처리
-                        safety_score = max(50, safety_score)
-                        safety_analysis['safety_score'] = safety_score
+                        # environment_risks에서도 감점 계산 (중복 방지를 위해 이미 감점된 등급은 건너뜀)
+                        if 'environment_risks' in safety_analysis and isinstance(safety_analysis['environment_risks'], list):
+                            for risk in safety_analysis['environment_risks']:
+                                if isinstance(risk, dict):
+                                    severity = risk.get('severity', '')
+                                    # '사고' 또는 '사고발생' 모두 처리
+                                    if (severity == '사고' or severity == '사고발생') and not has_accident:
+                                        total_deduction -= 50
+                                        has_accident = True
+                                    elif severity == '위험' and not has_danger:
+                                        total_deduction -= 30
+                                        has_danger = True
+                                    elif severity == '주의' and not has_warning:
+                                        total_deduction -= 10
+                                        has_warning = True
+                                    elif severity == '권장':
+                                        recommended_count += 1
                         
-                        if total_deduction == 0 and not ('incident_summary' in safety_analysis or 'incident_events' in safety_analysis):
-                            print(f"[safety_score 기본값 설정] 100점 (incident 데이터 없음)")
-                        else:
+                        # 권장 감점 계산 (최대 -16점)
+                        recommended_deduction = min(recommended_count * 2, 16)
+                        total_deduction -= recommended_deduction
+                    
+                    # safety_score 계산 및 덮어쓰기 (AI 응답값 무시)
+                    safety_score = 100 + total_deduction
+                    # 최종 점수는 50점보다 낮아지면 50점으로 처리
+                    safety_score = max(50, safety_score)
+                    safety_analysis['safety_score'] = safety_score
+                    
+                    if total_deduction == 0:
+                        print(f"[safety_score 재계산] 100점 (감점 없음)")
+                    else:
                             print(f"[safety_score 계산 완료] {safety_score}점 (감점 합계: {total_deduction})")
                     
                     # safety_score가 있으면 overall_safety_level 자동 설정 (항상 덮어쓰기)
