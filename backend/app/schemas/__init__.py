@@ -1,39 +1,5 @@
-"""Pydantic schemas for the DailyCam backend."""
+"""Pydantic schemas - 간단 버전 (비디오 분석만)"""
 
-from .analytics import AnalyticsRequest, AnalyticsResponse
-from .dashboard import (
-    DashboardRequest,
-    DashboardResponse,
-    RecommendationItem,
-    RiskItem,
-    WeeklyTrendData,
-)
-from .daily_report import DailyReportRequest, DailyReportResponse
-from .homecam import HomeCamAnalysisRequest, HomeCamAnalysisResponse, HomeCamEvent
-from .live_monitoring import LiveMonitoringRequest, LiveMonitoringResponse
-from .video_highlights import (
-    VideoHighlight,
-    VideoHighlightsRequest,
-    VideoHighlightsResponse,
-)
+# 스키마 없음 (dict 반환)
 
-__all__ = [
-    "AnalyticsRequest",
-    "AnalyticsResponse",
-    "DashboardRequest",
-    "DashboardResponse",
-    "WeeklyTrendData",
-    "RiskItem",
-    "RecommendationItem",
-    "DailyReportRequest",
-    "DailyReportResponse",
-    "HomeCamAnalysisRequest",
-    "HomeCamAnalysisResponse",
-    "HomeCamEvent",
-    "LiveMonitoringRequest",
-    "LiveMonitoringResponse",
-    "VideoHighlight",
-    "VideoHighlightsRequest",
-    "VideoHighlightsResponse",
-]
-
+__all__ = []

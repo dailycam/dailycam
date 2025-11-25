@@ -1,45 +1,34 @@
-"""API routes for home camera integration."""
+"""API routes for home camera integration - 간단 버전 (Gemini 분석만)"""
 
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
+import time  # 시간 측정을 위한 import 추가
 
-from app.database import get_db
-from app.schemas.homecam import HomeCamAnalysisRequest, HomeCamAnalysisResponse
-from app.schemas.homecam.video_analysis import VideoAnalysisResponse
-from app.services.dashboard.service import get_dashboard_service
-from app.services.homecam import HomeCamService, get_homecam_service
 from app.services.gemini_service import GeminiService, get_gemini_service
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 
-@router.post("/analyze", response_model=HomeCamAnalysisResponse)
-async def analyze_homecam_feed(
-    payload: HomeCamAnalysisRequest,
-    service: HomeCamService = Depends(get_homecam_service),
-) -> HomeCamAnalysisResponse:
-    """
-    Analyze a home camera feed snapshot or clip and derive structured insights.
-
-    This endpoint is intentionally lightweight so that frontend work can start
-    before the Gemini integration is complete.
-    """
-    return await service.analyze(payload)
-
-
-@router.post("/analyze-video", response_model=VideoAnalysisResponse)
+@router.post("/analyze-video")
 async def analyze_video(
     video: UploadFile = File(..., description="분석할 비디오 파일"),
-    user_id: str = "default_user",  # TODO: 실제 인증에서 가져오기
+    stage: str = Query(None, description="발달 단계 (1, 2, 3, 4, 5, 6). None이면 자동 판단"),
+    age_months: int = Query(None, description="아이의 개월 수"),
+    temperature: float = Query(0.4, description="AI 창의성 (0.0 ~ 1.0)"),
+    top_k: int = Query(30, description="어휘 다양성"),
+    top_p: float = Query(0.95, description="문장 자연스러움"),
     gemini_service: GeminiService = Depends(get_gemini_service),
-    db: Session = Depends(get_db),
-) -> VideoAnalysisResponse:
+) -> dict:
     """
-    비디오 파일을 업로드하여 Gemini 2.5 Flash로 안전 분석을 수행하고,
-    결과를 대시보드 테이블에 자동 저장합니다.
+    비디오 파일을 업로드하여 VLM 프롬프트로 분석하고 결과를 반환합니다.
+    2단계 프로세스: 1) 발달 단계 자동 판단 (stage가 None인 경우), 2) 해당 단계 프롬프트로 상세 분석
     
     - **video**: 비디오 파일 (mp4, mov, avi 등)
-    - 반환: 넘어짐, 위험 행동 등의 분석 결과
+    - **stage**: 발달 단계 ("1", "2", "3", "4", "5", "6"). None이면 자동 판단
+    - **age_months**: 아이의 개월 수 (선택사항, 참고용)
+    - **temperature**: AI 창의성 (기본값: 0.4)
+    - **top_k**: 어휘 다양성 (기본값: 30)
+    - **top_p**: 문장 자연스러움 (기본값: 0.95)
+    - 반환: VLM 스키마에 맞는 분석 결과
     """
     # 비디오 파일 타입 검증
     if not video.content_type or not video.content_type.startswith('video/'):
@@ -48,44 +37,50 @@ async def analyze_video(
             detail="비디오 파일만 업로드 가능합니다."
         )
     
+    # 발달 단계 검증 (제공된 경우)
+    if stage is not None and stage not in ["1", "2", "3", "4", "5", "6"]:
+        raise HTTPException(
+            status_code=400,
+            detail="발달 단계는 '1', '2', '3', '4', '5', '6' 중 하나여야 합니다."
+        )
+    
     try:
-        # 비디오 파일 읽기
+        print("[VLM 비디오 분석 시작]")
+        start_time = time.time()  # 분석 시작 시간 기록
+        
+        if stage:
+            print(f"[발달 단계] 제공됨: {stage}단계")
+        else:
+            print("[발달 단계] 자동 판단 모드")
+
+        # 비디오 내용 읽기
         video_content = await video.read()
-        file_size = len(video_content)
         
-        # 대략적인 비디오 길이 추정 (1MB ≈ 1분 가정, 매우 근사치)
-        estimated_duration_seconds = (file_size / (1024 * 1024)) * 60
-        
-        # Gemini로 비디오 분석 (bytes 직접 전달)
-        result = await gemini_service.analyze_video(
+        # Gemini 서비스를 통해 분석 (video_file 대신 video_content 전달)
+        result = await gemini_service.analyze_video_vlm(
             video_bytes=video_content,
             content_type=video.content_type or "video/mp4",
+            stage=stage,
+            age_months=age_months,
+            generation_params={
+                "temperature": temperature,
+                "top_k": top_k,
+                "top_p": top_p
+            }
         )
         
-        # 대시보드 테이블에 저장
-        try:
-            dashboard_service = get_dashboard_service(db)
-            dashboard_service.save_video_analysis_to_dashboard(
-                user_id=user_id,
-                video_analysis_result=result,
-                video_duration_seconds=estimated_duration_seconds,
-            )
-        except Exception as db_error:
-            # DB 저장 실패해도 분석 결과는 반환
-            import traceback
-            error_trace = traceback.format_exc()
-            print(f"⚠️ 대시보드 데이터 저장 실패: {db_error}")
-            print(f"상세 에러:\n{error_trace}")
-            # 에러를 무시하고 분석 결과만 반환
+        end_time = time.time()  # 분석 종료 시간 기록
+        analysis_time = end_time - start_time
+        print(f"[VLM 비디오 분석 완료] 총 소요 시간: {analysis_time:.2f}초")
         
-        return VideoAnalysisResponse(**result)
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
         error_msg = str(e)
-        print(f"❌ 비디오 분석 오류: {error_msg}")
+        print(f"❌ VLM 비디오 분석 오류: {error_msg}")
         print(f"상세 에러:\n{error_trace}")
         raise HTTPException(
             status_code=500,

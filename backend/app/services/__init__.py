@@ -1,45 +1,8 @@
-"""Service layer for the DailyCam backend."""
+"""Service layer - 간단 버전 (Gemini 분석만)"""
 
-from .analytics import AnalyticsService, get_analytics_service
-from .dashboard import (
-    DashboardService,
-    DashboardServiceConfig,
-    get_dashboard_service,
-)
-from .daily_report import (
-    DailyReportService,
-    DailyReportServiceConfig,
-    get_daily_report_service,
-)
-from .homecam import HomeCamService, HomeCamServiceConfig, get_homecam_service
-from .live_monitoring import (
-    LiveMonitoringService,
-    LiveMonitoringServiceConfig,
-    get_live_monitoring_service,
-)
-from .video_highlights import (
-    VideoHighlightsService,
-    VideoHighlightsServiceConfig,
-    get_video_highlights_service,
-)
+from .gemini_service import GeminiService, get_gemini_service
 
 __all__ = [
-    "AnalyticsService",
-    "get_analytics_service",
-    "DashboardService",
-    "DashboardServiceConfig",
-    "get_dashboard_service",
-    "DailyReportService",
-    "DailyReportServiceConfig",
-    "get_daily_report_service",
-    "HomeCamService",
-    "HomeCamServiceConfig",
-    "get_homecam_service",
-    "LiveMonitoringService",
-    "LiveMonitoringServiceConfig",
-    "get_live_monitoring_service",
-    "VideoHighlightsService",
-    "VideoHighlightsServiceConfig",
-    "get_video_highlights_service",
+    "GeminiService",
+    "get_gemini_service",
 ]
-
