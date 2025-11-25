@@ -8,6 +8,7 @@ import LiveMonitoring from './pages/LiveMonitoring'
 import DevelopmentReport from './pages/DevelopmentReport'
 import SafetyReport from './pages/SafetyReport'
 import Settings from './pages/Settings'
+import VideoAnalysisTest from './pages/VideoAnalysisTest'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route path="development-report" element={<DevelopmentReport />} />
         <Route path="safety-report" element={<SafetyReport />} />
         <Route path="clip-highlights" element={<ClipHighlights />} />
+        <Route path="video-analysis-test" element={<VideoAnalysisTest />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
