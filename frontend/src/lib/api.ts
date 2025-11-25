@@ -91,17 +91,17 @@ export function getStreamUrl(
   videoPath?: string
 ): string {
   let baseUrl = `${API_BASE_URL}/api/live-monitoring/stream/${cameraId}?loop=${loop}&speed=${speed}`
-  
+
   // timestamp가 제공된 경우에만 추가 (새 스트림 시작 시)
   if (timestamp !== undefined) {
     baseUrl += `&t=${timestamp}`
   }
-  
+
   // video_path가 제공되면 정확한 파일 경로를 쿼리 파라미터로 추가
   if (videoPath) {
     return `${baseUrl}&video_path=${encodeURIComponent(videoPath)}`
   }
-  
+
   return baseUrl
 }
 
@@ -154,7 +154,7 @@ export async function analyzeVideoWithBackend(file: File): Promise<VideoAnalysis
   }
 
   const data = await response.json()
-  
+
   // 백엔드 응답을 프론트엔드 형식으로 변환
   return {
     totalIncidents: data.total_incidents,
@@ -194,7 +194,7 @@ export interface AnalyticsSummary {
   total_incidents: number
   safe_zone_percentage: number
   incident_reduction_percentage: number
-  
+
   // 비교 데이터
   prev_avg_safety?: number
   prev_total_incidents?: number
@@ -314,7 +314,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
     }
 
     const data = await response.json()
-    
+
     // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
       summary: data.summary,
