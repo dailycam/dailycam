@@ -14,9 +14,9 @@ import {
   Camera,
   LayoutDashboard,
   X,
-  Video,
   MonitorPlay,
-  FileText,
+  Shield,
+  Film,
   Settings,
   User,
 } from 'lucide-react'
@@ -26,10 +26,10 @@ import IncidentPieChart from '../components/Charts/IncidentPieChart'
 import { generateWeeklySafetyData } from '../utils/mockData'
 import { SafetyBannerCarousel } from '../components/SafetyBannerCarousel'
 import DashboardPage from './Dashboard'
-import CameraSetupPage from './CameraSetup'
+import ClipHighlightsPage from './ClipHighlights'
 import LiveMonitoringPage from './LiveMonitoring'
-import DailyReportPage from './DailyReport'
-import AnalyticsPage from './Analytics'
+import DevelopmentReportPage from './DevelopmentReport'
+import SafetyReportPage from './SafetyReport'
 import SettingsPage from './Settings'
 
 const features = [
@@ -141,7 +141,7 @@ const stats = [
   { label: '활성 사용자', value: '2,500+' },
 ]
 
-type PreviewKey = 'dashboard' | 'camera' | 'live' | 'daily' | 'analytics' | 'settings'
+type PreviewKey = 'dashboard' | 'live' | 'development' | 'safety' | 'clips' | 'settings'
 
 const previewNavItems: {
   id: PreviewKey
@@ -150,26 +150,26 @@ const previewNavItems: {
   icon: LucideIcon
   href: string
 }[] = [
-  { id: 'dashboard', label: '대시보드', description: '주요 안전 지표', icon: LayoutDashboard, href: '/dashboard' },
-  { id: 'camera', label: '홈캠 연동', description: '기기 연결 관리', icon: Video, href: '/camera-setup' },
-  { id: 'live', label: '실시간 모니터링', description: '라이브 스트림', icon: MonitorPlay, href: '/live-monitoring' },
-  { id: 'daily', label: '일일 리포트', description: 'AI 분석 리포트', icon: FileText, href: '/daily-report' },
-  { id: 'analytics', label: '데이터 분석', description: '히트맵·트렌드', icon: BarChart3, href: '/analytics' },
-  { id: 'settings', label: '설정', description: '프로필·알림', icon: Settings, href: '/settings' },
-]
+    { id: 'dashboard', label: '대시보드', description: '주요 안전 지표', icon: LayoutDashboard, href: '/dashboard' },
+    { id: 'live', label: '실시간 모니터링', description: '라이브 스트림', icon: MonitorPlay, href: '/live-monitoring' },
+    { id: 'development', label: '발달 리포트', description: 'AI 발달 분석', icon: TrendingUp, href: '/development-report' },
+    { id: 'safety', label: '안전 리포트', description: '안전도·트렌드', icon: Shield, href: '/safety-report' },
+    { id: 'clips', label: '클립 하이라이트', description: '주요 순간 모음', icon: Film, href: '/clip-highlights' },
+    { id: 'settings', label: '설정', description: '프로필·알림', icon: Settings, href: '/settings' },
+  ]
 
 const previewComponents: Record<PreviewKey, ComponentType> = {
   dashboard: DashboardPage,
-  camera: CameraSetupPage,
   live: LiveMonitoringPage,
-  daily: DailyReportPage,
-  analytics: AnalyticsPage,
+  development: DevelopmentReportPage,
+  safety: SafetyReportPage,
+  clips: ClipHighlightsPage,
   settings: SettingsPage,
 }
 
 export default function Home() {
   const weeklyData = generateWeeklySafetyData()
-  
+
   const incidentData = [
     { name: '데드존 접근', value: 12, color: '#ef4444' },
     { name: '모서리 충돌', value: 8, color: '#f59e0b' },
@@ -340,9 +340,8 @@ export default function Home() {
             {pricingPlans.map((plan) => (
               <div
                 key={plan.name}
-                className={`flex flex-col justify-between rounded-3xl bg-white p-8 shadow-lg ring-1 ring-gray-900/10 ${
-                  plan.popular ? 'ring-2 ring-primary-600 relative' : ''
-                }`}
+                className={`flex flex-col justify-between rounded-3xl bg-white p-8 shadow-lg ring-1 ring-gray-900/10 ${plan.popular ? 'ring-2 ring-primary-600 relative' : ''
+                  }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-4 left-0 right-0 mx-auto w-fit">
@@ -381,11 +380,10 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={openDashboardOverlay}
-                  className={`mt-8 w-full rounded-lg px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all ${
-                    plan.popular
-                      ? 'bg-primary-600 text-white hover:bg-primary-500 focus-visible:outline-primary-600'
-                      : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
-                  }`}
+                  className={`mt-8 w-full rounded-lg px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all ${plan.popular
+                    ? 'bg-primary-600 text-white hover:bg-primary-500 focus-visible:outline-primary-600'
+                    : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
+                    }`}
                 >
                   시작하기
                 </button>
@@ -504,11 +502,10 @@ export default function Home() {
                       key={item.id}
                       type="button"
                       onClick={() => setActivePreview(item.id)}
-                      className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                        activePreview === item.id
-                          ? 'bg-primary-50 text-primary-700'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${activePreview === item.id
+                        ? 'bg-primary-50 text-primary-700'
+                        : 'text-gray-700 hover:bg-gray-50'
+                        }`}
                     >
                       <item.icon className="w-5 h-5" />
                       {item.label}
@@ -539,9 +536,8 @@ export default function Home() {
                       key={item.id}
                       type="button"
                       onClick={() => setActivePreview(item.id)}
-                      className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                        activePreview === item.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
-                      }`}
+                      className={`rounded-full px-3 py-2 text-xs font-semibold ${activePreview === item.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+                        }`}
                     >
                       {item.label}
                     </button>

@@ -1,14 +1,32 @@
 import { Routes, Route } from 'react-router-dom'
+import HomeLayout from './components/Layout/HomeLayout'
 import Layout from './components/Layout/Layout'
-import CameraSetup from './pages/CameraSetup'
+import Home from './pages/Home'
+import Dashboard from './pages/Dashboard'
+import ClipHighlights from './pages/ClipHighlights'
+import LiveMonitoring from './pages/LiveMonitoring'
+import DevelopmentReport from './pages/DevelopmentReport'
+import SafetyReport from './pages/SafetyReport'
+import Settings from './pages/Settings'
+import VideoAnalysisTest from './pages/VideoAnalysisTest'
 
 function App() {
   return (
     <Routes>
-      {/* 비디오 분석 페이지만 */}
+      {/* 홈 (랜딩 페이지) */}
+      <Route path="/" element={<HomeLayout />}>
+        <Route index element={<Home />} />
+      </Route>
+
+      {/* 앱 (대시보드 및 기능들) */}
       <Route element={<Layout />}>
-        <Route path="/" element={<CameraSetup />} />
-        <Route path="camera-setup" element={<CameraSetup />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="live-monitoring" element={<LiveMonitoring />} />
+        <Route path="development-report" element={<DevelopmentReport />} />
+        <Route path="safety-report" element={<SafetyReport />} />
+        <Route path="clip-highlights" element={<ClipHighlights />} />
+        <Route path="video-analysis-test" element={<VideoAnalysisTest />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )

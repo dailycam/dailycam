@@ -102,7 +102,12 @@ export default function CameraSetup() {
       // 백엔드 API 호출 (VLM 프롬프트 분석)
       console.log('[분석 시작] VLM 비디오 분석 API 호출 (자동 발달 단계 판단)...')
       console.log(`[AI 설정] Temp: ${temperature}, TopK: ${topK}, TopP: ${topP}`)
-      const result = await analyzeVideoWithBackend(videoFile, undefined, ageMonths, temperature, topK, topP)
+      const result = await analyzeVideoWithBackend(videoFile, {
+        ageMonths,
+        temperature,
+        topK,
+        topP,
+      })
 
       // 타임아웃 정리
       if (timeoutId) {
