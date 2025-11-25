@@ -1,19 +1,21 @@
 import { NavLink, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
-  Video,
   MonitorPlay,
-  FileText,
-  BarChart3,
+  TrendingUp,
+  Shield,
+  Film,
   Settings,
+  TestTube,
 } from 'lucide-react'
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
-  { name: '홈캠 연동', href: '/camera-setup', icon: Video },
   { name: '실시간 모니터링', href: '/live-monitoring', icon: MonitorPlay },
-  { name: '일일 리포트', href: '/daily-report', icon: FileText },
-  { name: '데이터 분석', href: '/analytics', icon: BarChart3 },
+  { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
+  { name: '안전 리포트', href: '/safety-report', icon: Shield },
+  { name: '클립 하이라이트', href: '/clip-highlights', icon: Film },
+  { name: 'AI 분석 테스트', href: '/video-analysis-test', icon: TestTube },
   { name: '설정', href: '/settings', icon: Settings },
 ]
 
@@ -23,9 +25,9 @@ export default function Sidebar() {
       {/* Logo */}
       <Link to="/" className="h-16 flex items-center px-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <img 
-            src="/daily-cam (4).png" 
-            alt="Daily-cam 로고" 
+          <img
+            src="/daily-cam (4).png"
+            alt="Daily-cam 로고"
             className="w-10 h-10"
             onError={(e) => {
               e.currentTarget.style.display = 'none'
@@ -49,10 +51,9 @@ export default function Sidebar() {
             key={item.name}
             to={item.href}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-700 hover:bg-gray-50'
+              `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive
+                ? 'bg-primary-50 text-primary-700'
+                : 'text-gray-700 hover:bg-gray-50'
               }`
             }
           >
