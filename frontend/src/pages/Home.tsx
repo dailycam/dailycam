@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useEffect, useState, type ComponentType } from 'react'
 import {
   Brain,
   Bell,
@@ -11,11 +12,25 @@ import {
   ArrowRight,
   AlertTriangle,
   Camera,
+  LayoutDashboard,
+  X,
+  Video,
+  MonitorPlay,
+  FileText,
+  Settings,
+  User,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
 import { generateWeeklySafetyData } from '../utils/mockData'
 import { SafetyBannerCarousel } from '../components/SafetyBannerCarousel'
+import DashboardPage from './Dashboard'
+import CameraSetupPage from './CameraSetup'
+import LiveMonitoringPage from './LiveMonitoring'
+import DailyReportPage from './DailyReport'
+import AnalyticsPage from './Analytics'
+import SettingsPage from './Settings'
 
 const features = [
   {
@@ -126,6 +141,32 @@ const stats = [
   { label: '활성 사용자', value: '2,500+' },
 ]
 
+type PreviewKey = 'dashboard' | 'camera' | 'live' | 'daily' | 'analytics' | 'settings'
+
+const previewNavItems: {
+  id: PreviewKey
+  label: string
+  description: string
+  icon: LucideIcon
+  href: string
+}[] = [
+  { id: 'dashboard', label: '대시보드', description: '주요 안전 지표', icon: LayoutDashboard, href: '/dashboard' },
+  { id: 'camera', label: '홈캠 연동', description: '기기 연결 관리', icon: Video, href: '/camera-setup' },
+  { id: 'live', label: '실시간 모니터링', description: '라이브 스트림', icon: MonitorPlay, href: '/live-monitoring' },
+  { id: 'daily', label: '일일 리포트', description: 'AI 분석 리포트', icon: FileText, href: '/daily-report' },
+  { id: 'analytics', label: '데이터 분석', description: '히트맵·트렌드', icon: BarChart3, href: '/analytics' },
+  { id: 'settings', label: '설정', description: '프로필·알림', icon: Settings, href: '/settings' },
+]
+
+const previewComponents: Record<PreviewKey, ComponentType> = {
+  dashboard: DashboardPage,
+  camera: CameraSetupPage,
+  live: LiveMonitoringPage,
+  daily: DailyReportPage,
+  analytics: AnalyticsPage,
+  settings: SettingsPage,
+}
+
 export default function Home() {
   const weeklyData = generateWeeklySafetyData()
   
@@ -135,6 +176,44 @@ export default function Home() {
     { name: '낙상 위험', value: 3, color: '#fb923c' },
     { name: '기타', value: 2, color: '#9ca3af' },
   ]
+
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false)
+  const [activePreview, setActivePreview] = useState<PreviewKey>('dashboard')
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsDashboardOpen(false)
+      }
+    }
+
+    if (isDashboardOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isDashboardOpen])
+
+  useEffect(() => {
+    if (isDashboardOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      setActivePreview('dashboard')
+    }
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isDashboardOpen])
+
+  const openDashboardOverlay = () => setIsDashboardOpen(true)
+  const closeDashboardOverlay = () => setIsDashboardOpen(false)
+  const currentPreview = previewNavItems.find((item) => item.id === activePreview)
+  const currentPreviewHref = currentPreview?.href ?? '/dashboard'
+  const ActivePreviewComponent = previewComponents[activePreview]
 
   return (
     <div className="bg-white">
@@ -234,13 +313,14 @@ export default function Home() {
           </div>
 
           <div className="text-center">
-            <Link
-              to="/dashboard"
+            <button
+              type="button"
+              onClick={openDashboardOverlay}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-primary-500 transition-all"
             >
               대시보드 시작하기
               <ArrowRight className="w-5 h-5" />
-            </Link>
+            </button>
           </div>
         </div>
       </section>
@@ -298,16 +378,17 @@ export default function Home() {
                     ))}
                   </ul>
                 </div>
-                <Link
-                  to="/dashboard"
-                  className={`mt-8 block rounded-lg px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all ${
+                <button
+                  type="button"
+                  onClick={openDashboardOverlay}
+                  className={`mt-8 w-full rounded-lg px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all ${
                     plan.popular
                       ? 'bg-primary-600 text-white hover:bg-primary-500 focus-visible:outline-primary-600'
                       : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
                   }`}
                 >
                   시작하기
-                </Link>
+                </button>
               </div>
             ))}
           </div>
@@ -364,16 +445,153 @@ export default function Home() {
               신용카드 등록 없이 바로 시작할 수 있습니다. 언제든지 취소 가능합니다.
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Link
-                to="/dashboard"
+              <button
+                type="button"
+                onClick={openDashboardOverlay}
                 className="rounded-lg bg-white px-6 py-3 text-base font-semibold text-primary-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all"
               >
                 무료 체험 시작하기
-              </Link>
+              </button>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Floating Dashboard Icon */}
+      <button
+        type="button"
+        onClick={openDashboardOverlay}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-full bg-primary-600 px-5 py-3 text-white shadow-xl hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+      >
+        <LayoutDashboard className="w-5 h-5" />
+        <span className="hidden sm:inline text-sm font-semibold">대시보드 미리보기</span>
+      </button>
+
+      {isDashboardOpen && ActivePreviewComponent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-2 py-8 sm:px-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeDashboardOverlay} />
+          <div className="relative z-10 flex w-full max-w-[1900px] max-h-[calc(100vh-4rem)] flex-col overflow-hidden rounded-[32px] bg-gray-100 shadow-2xl ring-1 ring-black/5">
+            <button
+              type="button"
+              onClick={closeDashboardOverlay}
+              className="absolute top-4 right-4 z-10 rounded-full bg-white/80 p-2 shadow hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+              aria-label="서비스 창 닫기"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+            <div className="flex h-full overflow-hidden">
+              {/* Sidebar */}
+              <aside className="hidden w-64 flex-col bg-white border-r border-gray-200 lg:flex">
+                <div className="h-16 flex items-center px-6 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src="/daily-cam (4).png"
+                      alt="Daily-cam 로고"
+                      className="w-10 h-10 rounded-xl border border-gray-100 object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <div>
+                      <h1 className="text-lg font-bold text-gray-900">Daily-cam</h1>
+                      <p className="text-xs text-gray-500">아이 곁에</p>
+                    </div>
+                  </div>
+                </div>
+                <nav className="flex-1 px-4 py-6 space-y-1">
+                  {previewNavItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActivePreview(item.id)}
+                      className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                        activePreview === item.id
+                          ? 'bg-primary-50 text-primary-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+                <div className="p-4 border-t border-gray-200">
+                  <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-primary-700">프리미엄 플랜</span>
+                      <span className="text-xs text-gray-600">30일 남음</span>
+                    </div>
+                    <div className="w-full bg-white rounded-full h-2 mb-2">
+                      <div className="bg-primary-500 h-2 rounded-full" style={{ width: '70%' }}></div>
+                    </div>
+                    <button className="w-full text-xs text-primary-700 font-medium hover:text-primary-800">
+                      플랜 관리 →
+                    </button>
+                  </div>
+                </div>
+              </aside>
+
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Mobile navigation */}
+                <div className="border-b border-gray-200 bg-white px-3 py-3 flex gap-2 overflow-x-auto lg:hidden">
+                  {previewNavItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActivePreview(item.id)}
+                      className={`rounded-full px-3 py-2 text-xs font-semibold ${
+                        activePreview === item.id ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Header */}
+                <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6">
+                  <div>
+                    <p className="text-xs text-gray-500">현재 서비스</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-900">{currentPreview?.label}</h3>
+                      <span className="text-xs font-medium text-gray-400">{currentPreview?.description}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Link
+                      to={currentPreviewHref}
+                      onClick={closeDashboardOverlay}
+                      className="hidden rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:border-primary-500 hover:text-primary-600 sm:inline-flex"
+                    >
+                      전체 화면 이동
+                    </Link>
+                    <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                      <Bell className="w-5 h-5" />
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-danger-500 rounded-full"></span>
+                    </button>
+                    <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-gray-900">김부모님</p>
+                        <p className="text-xs text-gray-500">프리미엄 회원</p>
+                      </div>
+                      <button className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white hover:shadow-lg transition-shadow">
+                        <User className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </header>
+
+                {/* Content */}
+                <div className="flex-1 overflow-hidden bg-gray-50">
+                  <div className="h-full w-full overflow-y-auto px-3 py-4 sm:px-8 sm:py-6">
+                    <ActivePreviewComponent />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

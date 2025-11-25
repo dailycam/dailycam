@@ -1,36 +1,17 @@
-"""Service layer for analytics features."""
+"""Service layer for analytics features - 기본 구조만 유지."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from app.schemas.analytics import AnalyticsRequest, AnalyticsResponse
-
-
-@dataclass(slots=True)
-class AnalyticsServiceConfig:
-    """Configuration for the analytics service."""
-
-    default_range_days: int = 7
+from sqlalchemy.orm import Session
 
 
 class AnalyticsService:
-    """Business logic for analytics."""
+    """Analytics 서비스 - 기본 구조만 유지 (실제 기능은 dashboard로 이동됨)"""
 
-    def __init__(self, config: AnalyticsServiceConfig) -> None:
-        self._config = config
-
-    async def summarize(self, payload: AnalyticsRequest) -> AnalyticsResponse:
-        """Return an analytics summary. Placeholder for future implementation."""
-        return AnalyticsResponse(
-            summary="Analytics service not yet implemented.",
-            range_days=payload.range_days or self._config.default_range_days,
-        )
+    def __init__(self, db: Session) -> None:
+        self.db = db
 
 
-def get_analytics_service() -> AnalyticsService:
+def get_analytics_service(db: Session) -> AnalyticsService:
     """FastAPI dependency injector for AnalyticsService."""
-    config = AnalyticsServiceConfig()
-    return AnalyticsService(config=config)
-
-
+    return AnalyticsService(db)

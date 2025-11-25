@@ -1,42 +1,80 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  BarChart3,
   TrendingUp,
-  Calendar,
-  MapPin,
-  Clock,
   AlertTriangle,
   Activity,
   Filter,
 } from 'lucide-react'
 import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
-import ActivityBarChart from '../components/Charts/ActivityBarChart'
-import HourlyHeatmap from '../components/Charts/HourlyHeatmap'
-import { generateWeeklySafetyData, generateHourlyActivityData } from '../utils/mockData'
+import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
+import { fetchAnalyticsData, type AnalyticsData } from '../lib/api'
 
 export default function Analytics() {
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('week')
-  
-  const weeklyData = generateWeeklySafetyData()
-  const hourlyData = generateHourlyActivityData()
-  
-  const incidentData = [
-    { name: '데드존 접근', value: 12, color: '#ef4444' },
-    { name: '모서리 충돌', value: 8, color: '#f59e0b' },
-    { name: '낙상 위험', value: 3, color: '#fb923c' },
-    { name: '기타', value: 2, color: '#9ca3af' },
-  ]
-  
-  const activityData = [
-    { day: '월', activity: 85 },
-    { day: '화', activity: 78 },
-    { day: '수', activity: 92 },
-    { day: '목', activity: 88 },
-    { day: '금', activity: 95 },
-    { day: '토', activity: 70 },
-    { day: '일', activity: 65 },
-  ]
+  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
+  const [data, setData] = useState<AnalyticsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // 데이터베이스에서 데이터 가져오기
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const analyticsData = await fetchAnalyticsData()
+        setData(analyticsData)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '데이터 로드 실패')
+        console.error('Analytics 데이터 로드 오류:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [timeRange])
+
+  // 로딩 상태
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">데이터를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-red-500 text-lg mb-4">❌ {error}</p>
+          <p className="text-gray-600 text-sm mb-4">
+            백엔드 서버가 실행 중인지 확인하세요 (http://localhost:8000)
+          </p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // 데이터 없음
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-600">데이터가 없습니다.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -44,50 +82,41 @@ export default function Analytics() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">데이터 분석</h1>
-          <p className="text-gray-600 mt-1">장기 트렌드와 패턴을 분석합니다</p>
+          <p className="text-gray-600 mt-1">장기 트렌드와 패턴을 분석합니다 (실시간 DB 연동)</p>
         </div>
         <div className="flex gap-3">
-          <button className="btn-secondary flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            필터
-          </button>
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value as any)}
             className="input-field py-2"
           >
             <option value="week">최근 7일</option>
-            <option value="month">최근 30일</option>
-            <option value="year">최근 1년</option>
+            <option value="month">최근 1달</option>
+            <option value="quarter">최근 3달</option>
           </select>
         </div>
       </div>
 
       {/* Key Trends */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <TrendCard
           title="평균 안전도"
-          value="89%"
-          change="+3%"
-          trend="up"
+          value={`${Math.round(data.summary.avg_safety_score)}%`}
+          change={`${(data.summary.safety_change_percent || 0) > 0 ? '+' : ''}${Math.round(data.summary.safety_change_percent || 0)}%`}
+          trend={(data.summary.safety_change_percent || 0) > 0 ? 'up' : (data.summary.safety_change_percent || 0) < 0 ? 'down' : 'neutral'}
         />
         <TrendCard
-          title="주간 위험 감소"
-          value="42%"
-          change="-12건"
-          trend="down"
+          title="총 위험 감지"
+          value={`${data.summary.total_incidents}건`}
+          change={`${(data.summary.incident_change || 0) > 0 ? '+' : ''}${Math.round(data.summary.incident_change || 0)}건`}
+          trend={(data.summary.incident_change || 0) > 0 ? 'up' : (data.summary.incident_change || 0) < 0 ? 'down' : 'neutral'}
+          inverse={true}
         />
         <TrendCard
           title="세이프존 체류"
-          value="91%"
+          value={`${Math.round(data.summary.safe_zone_percentage)}%`}
           change="+2%"
           trend="up"
-        />
-        <TrendCard
-          title="활동 패턴"
-          value="안정적"
-          change="변화 없음"
-          trend="neutral"
         />
       </div>
 
@@ -100,20 +129,24 @@ export default function Analytics() {
             <TrendingUp className="w-5 h-5 text-safe" />
           </div>
           <div className="h-64">
-            <SafetyTrendChart data={weeklyData} />
+            <SafetyTrendChart data={data.weekly_trend.map(item => ({
+              day: item.date,
+              score: item.safety,
+              incidents: item.incidents
+            }))} />
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-xs text-gray-500 mb-1">평균</p>
-              <p className="text-base font-bold text-gray-900">89%</p>
+              <p className="text-base font-bold text-gray-900">{Math.round(data.summary.avg_safety_score)}%</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">최고</p>
-              <p className="text-base font-bold text-safe">95%</p>
+              <p className="text-base font-bold text-safe">{Math.max(...data.weekly_trend.map(d => d.safety))}%</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">최저</p>
-              <p className="text-base font-bold text-warning">78%</p>
+              <p className="text-base font-bold text-warning">{Math.min(...data.weekly_trend.map(d => d.safety))}%</p>
             </div>
           </div>
         </div>
@@ -125,106 +158,67 @@ export default function Analytics() {
             <AlertTriangle className="w-5 h-5 text-warning" />
           </div>
           <div className="h-64">
-            <IncidentPieChart data={incidentData} />
+            <IncidentPieChart data={data.incident_distribution} />
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="grid grid-cols-2 gap-3">
-              <IncidentTypeItem type="데드존 접근" count={12} color="bg-danger" />
-              <IncidentTypeItem type="모서리 충돌" count={8} color="bg-warning" />
-              <IncidentTypeItem type="낙상 위험" count={3} color="bg-orange-500" />
-              <IncidentTypeItem type="기타" count={2} color="bg-gray-400" />
+              {data.incident_distribution.map((item) => (
+                <IncidentTypeItem 
+                  key={item.name}
+                  type={item.name} 
+                  count={item.value} 
+                  color={`bg-[${item.color}]`} 
+                />
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Heatmaps */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Spatial Heatmap */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">공간 히트맵</h2>
-            <MapPin className="w-5 h-5 text-primary-600" />
-          </div>
-          <div className="bg-gray-100 rounded-lg p-6 mb-4">
-            <div className="relative aspect-video bg-gray-200 rounded-lg overflow-hidden">
-              {/* Simulated Room Layout */}
-              <div className="absolute inset-0 p-4">
-                {/* High Activity Zone */}
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-danger/30 rounded-full blur-xl"></div>
-                {/* Medium Activity Zone */}
-                <div className="absolute top-1/2 right-1/4 w-40 h-40 bg-warning/30 rounded-full blur-xl"></div>
-                {/* Low Activity Zone */}
-                <div className="absolute bottom-1/4 left-1/3 w-24 h-24 bg-safe/30 rounded-full blur-xl"></div>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center text-gray-600">
-                  <MapPin className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">거실 평면도</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-danger rounded"></div>
-              <span className="text-gray-600">높은 위험</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-warning rounded"></div>
-              <span className="text-gray-600">중간 위험</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-safe rounded"></div>
-              <span className="text-gray-600">안전</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Temporal Heatmap */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">시간대별 활동 히트맵</h2>
-            <Clock className="w-5 h-5 text-primary-600" />
-          </div>
-          <div className="h-80">
-            <HourlyHeatmap data={hourlyData.slice(6, 22)} />
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-sm text-gray-600 flex items-center gap-2">
-              <span className="text-lg">💡</span>
-              <span>오후 12시-3시 사이 활동량과 위험도가 가장 높습니다</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Activity Patterns */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">주간 활동 패턴</h2>
-          <Activity className="w-5 h-5 text-primary-600" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">주간 종합 트렌드</h2>
+            <p className="text-sm text-gray-500 mt-1">안전도, 위험 감지, 활동량 비교</p>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-0.5 bg-safe"></div>
+              <span className="text-gray-600">안전도</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-0.5 bg-primary-500"></div>
+              <span className="text-gray-600">활동량</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-0.5 bg-danger"></div>
+              <span className="text-gray-600">위험</span>
+            </div>
+          </div>
         </div>
-        <div className="h-64">
-          <ActivityBarChart data={activityData} />
+        <div className="h-80">
+          <ComposedTrendChart data={data.weekly_trend} />
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-safe rounded"></div>
-              <span className="text-xs text-gray-600">매우 활발 (90%+)</span>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">주간 평균 안전도</p>
+              <p className="text-lg font-bold text-gray-900">{Math.round(data.summary.avg_safety_score)}%</p>
+              <p className={`text-xs mt-1 ${(data.summary.safety_change_percent || 0) >= 0 ? 'text-safe' : 'text-danger'}`}>
+                {(data.summary.safety_change_percent || 0) > 0 ? '+' : ''}{Math.round(data.summary.safety_change_percent || 0)}% {(data.summary.safety_change_percent || 0) >= 0 ? '↑' : '↓'}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-primary-500 rounded"></div>
-              <span className="text-xs text-gray-600">활발 (70-89%)</span>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">총 위험 감지</p>
+              <p className="text-lg font-bold text-gray-900">{data.summary.total_incidents}건</p>
+              <p className={`text-xs mt-1 ${(data.summary.incident_change || 0) <= 0 ? 'text-safe' : 'text-danger'}`}>
+                {(data.summary.incident_change || 0) > 0 ? '+' : ''}{Math.round(data.summary.incident_change || 0)}건 {(data.summary.incident_change || 0) >= 0 ? '↑' : '↓'}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-warning rounded"></div>
-              <span className="text-xs text-gray-600">보통 (50-69%)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-danger rounded"></div>
-              <span className="text-xs text-gray-600">낮음 (50% 미만)</span>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">평균 활동량</p>
+              <p className="text-lg font-bold text-gray-900">{Math.round(data.weekly_trend.reduce((sum, d) => sum + d.activity, 0) / data.weekly_trend.length)}%</p>
+              <p className="text-xs text-primary-600 mt-1">정상 범위</p>
             </div>
           </div>
         </div>
@@ -263,22 +257,22 @@ export default function Analytics() {
           <div className="space-y-4">
             <ComparisonItem
               label="이번 주 평균 안전도"
-              current={89}
-              previous={85}
+              current={Math.round(data.summary.avg_safety_score)}
+              previous={Math.round(data.summary.prev_avg_safety || 0)}
               unit="%"
             />
             <ComparisonItem
               label="감지된 위험"
-              current={18}
-              previous={25}
+              current={data.summary.total_incidents}
+              previous={data.summary.prev_total_incidents || 0}
               unit="건"
               inverse
             />
             <ComparisonItem
-              label="세이프존 체류 시간"
-              current={8.2}
-              previous={7.8}
-              unit="시간"
+              label="세이프존 체류율"
+              current={Math.round(data.summary.safe_zone_percentage * 10) / 10}
+              previous={Math.round((data.summary.safe_zone_percentage - (data.summary.incident_reduction_percentage || 0) / 10) * 10) / 10}
+              unit="%"
             />
           </div>
         </div>
@@ -309,27 +303,33 @@ function TrendCard({
   value,
   change,
   trend,
+  inverse = false,
 }: {
   title: string
   value: string
   change: string
   trend: 'up' | 'down' | 'neutral'
+  inverse?: boolean  // true면 up이 나쁨, down이 좋음
 }) {
-  const trendColors = {
-    up: 'text-safe',
-    down: 'text-danger',
-    neutral: 'text-gray-500',
+  // inverse: 증가가 나쁜 경우 (위험 감지 등)
+  const getColor = () => {
+    if (trend === 'neutral') return 'text-gray-500'
+    if (inverse) {
+      return trend === 'up' ? 'text-danger' : 'text-safe'
+    }
+    return trend === 'up' ? 'text-safe' : 'text-danger'
   }
 
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingUp : Activity
+  const color = getColor()
 
   return (
     <div className="card">
       <p className="text-sm text-gray-600 mb-1">{title}</p>
       <p className="text-2xl font-bold text-gray-900 mb-2">{value}</p>
       <div className="flex items-center gap-2">
-        <TrendIcon className={`w-4 h-4 ${trendColors[trend]} ${trend === 'down' ? 'rotate-180' : ''}`} />
-        <span className={`text-xs ${trendColors[trend]}`}>{change}</span>
+        <TrendIcon className={`w-4 h-4 ${color} ${trend === 'down' ? 'rotate-180' : ''}`} />
+        <span className={`text-xs ${color}`}>{change}</span>
       </div>
     </div>
   )
