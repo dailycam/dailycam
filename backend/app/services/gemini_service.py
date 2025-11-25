@@ -112,13 +112,15 @@ class GeminiService:
     def _load_vlm_prompt(self, stage: str, age_months: Optional[int] = None, video_duration_seconds: Optional[float] = None) -> str:
         """
         VLM 발달 단계별 프롬프트를 로드합니다.
+        공통 파일(입력 전제, 분석 단계, 필드 정의)과 단계별 프롬프트를 조합합니다.
         
         Args:
             stage: 발달 단계 ("1", "2", "3", "4", "5", "6")
             age_months: 아이의 개월 수 (선택)
+            video_duration_seconds: 비디오 길이(초) (선택)
             
         Returns:
-            공통 헤더 + 단계별 프롬프트가 결합된 프롬프트 문자열
+            조합된 프롬프트 문자열
         """
         # backend/app/prompts/baby_dev_safety 디렉토리 찾기
         prompts_dir = Path(__file__).parent.parent / 'prompts'
@@ -129,7 +131,22 @@ class GeminiService:
                 f"VLM 프롬프트 디렉토리를 찾을 수 없습니다: {baby_dev_safety_dir}"
             )
         
-        # config.yaml 읽기
+        # 1. 공통 입력 전제 로드
+        input_premise_path = baby_dev_safety_dir / 'common' / 'input_premise.ko.txt'
+        with open(input_premise_path, 'r', encoding='utf-8') as f:
+            input_premise = f.read()
+        
+        # 2. 공통 분석 단계 템플릿 로드
+        analysis_steps_path = baby_dev_safety_dir / 'common' / 'analysis_steps_template.ko.txt'
+        with open(analysis_steps_path, 'r', encoding='utf-8') as f:
+            analysis_steps = f.read()
+        
+        # 3. 공통 필드 정의 로드
+        field_definitions_path = baby_dev_safety_dir / 'common' / 'field_definitions.ko.txt'
+        with open(field_definitions_path, 'r', encoding='utf-8') as f:
+            field_definitions = f.read()
+        
+        # 4. config.yaml 읽기
         config_path = baby_dev_safety_dir / 'config.yaml'
         if not config_path.exists():
             raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {config_path}")
@@ -143,7 +160,7 @@ class GeminiService:
         stage_config = config['stages'][stage]
         prompt_file = stage_config['prompt_file']
         
-        # 단계별 프롬프트 로드 (stages 폴더 내)
+        # 5. 단계별 프롬프트 로드 (stages 폴더 내)
         stage_prompt_path = baby_dev_safety_dir / 'stages' / prompt_file
         if not stage_prompt_path.exists():
             raise FileNotFoundError(f"단계별 프롬프트 파일을 찾을 수 없습니다: {stage_prompt_path}")
@@ -151,7 +168,7 @@ class GeminiService:
         with open(stage_prompt_path, 'r', encoding='utf-8') as f:
             stage_prompt = f.read()
 
-        # 공통 안전 규칙 로드 (common 폴더 내)
+        # 6. 공통 안전 규칙 로드 (common 폴더 내)
         common_rules_path = baby_dev_safety_dir / 'common' / 'safety_rules.ko.txt'
         if not common_rules_path.exists():
             raise FileNotFoundError(f"공통 안전 규칙 파일을 찾을 수 없습니다: {common_rules_path}")
@@ -159,13 +176,12 @@ class GeminiService:
         with open(common_rules_path, 'r', encoding='utf-8') as f:
             common_safety_rules = f.read()
         
-        # 메타데이터 추가
+        # 7. 메타데이터 추가
         metadata_items = []
         if age_months is not None:
             metadata_items.append(f"- age_months: {age_months}")
         metadata_items.append(f"- assumed_stage: {stage}")
         if video_duration_seconds is not None:
-            # 비디오 길이 정보 추가 (초 단위)
             video_duration_minutes = round(video_duration_seconds / 60, 2)
             metadata_items.append(f"- video_duration_seconds: {video_duration_seconds}")
             metadata_items.append(f"- video_duration_minutes: {video_duration_minutes}")
@@ -175,10 +191,19 @@ class GeminiService:
         if metadata_items:
             metadata_section = f"\n\n[메타데이터]\n" + "\n".join(metadata_items) + "\n"
         
-        # 프롬프트 결합: 단계별 프롬프트 + 공통 안전 규칙 + 메타데이터
-        combined_prompt = f"{stage_prompt}\n\n{common_safety_rules}{metadata_section}"
+        # 8. 프롬프트 조합
+        # 순서: 단계별 프롬프트 + 입력 전제 + 분석 단계 + 필드 정의 + 안전 규칙 + 메타데이터
+        combined_prompt = f"""{stage_prompt}
+
+{input_premise}
+
+{analysis_steps}
+
+{field_definitions}
+
+{common_safety_rules}{metadata_section}"""
         
-        print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자 (공통 규칙 포함)")
+        print(f"[VLM 프롬프트 로드 완료] 단계: {stage}, 길이: {len(combined_prompt)}자")
         
         return combined_prompt
 

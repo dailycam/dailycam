@@ -52,3 +52,6 @@ uploads/
 
 __pycache__/
 *.pyc
+
+# Agent configuration
+.agent/

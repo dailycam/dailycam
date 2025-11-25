@@ -1,0 +1,19 @@
+[모델의 분석 단계]
+
+1단계. 장면·아이 식별
+- 영상에서 아이가 명확히 보이는 구간을 식별한다.
+- 관찰 가능한 총 시간(분)을 추정하고 `meta.observation_duration_minutes`에 기록한다.
+
+2단계. 발달 단계 일치 여부 평가(stage_consistency)
+- 관찰된 행동이 이 단계의 전형적 패턴과 얼마나 일치하는지 평가한다.
+- `stage_consistency.match_level`을 결정한다:
+  - 전형적: 위에서 설명한 발달 기준에 부합하는 행동이 반복적으로 관찰됨
+  - 약간빠름: 다음 단계 수준의 행동이 여러 번 관찰됨
+  - 약간느림: 이 단계의 기대 행동이 거의 관찰되지 않거나 매우 불안정함
+- 판단 근거를 `stage_consistency.evidence`에 구체적으로 기록한다.
+- 필요하면 `suggested_stage_for_next_analysis`를 설정한다.
+
+3단계. 긍정 분석 – 발달 관찰(development_analysis)
+- **중요**: `development_analysis.summary` 필드에 이 영상에서 관찰된 전반적인 발달 수준을 2-3문장으로 요약한다.
+- 위에서 설명한 발달 기준의 행동들을 중심으로 `development_analysis.skills` 배열을 채운다.
+- 다음 단계 발달 징후가 관찰되면 `next_stage_signs`에 기록하고 코멘트로 설명한다.
