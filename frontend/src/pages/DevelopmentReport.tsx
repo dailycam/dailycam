@@ -18,19 +18,19 @@ import HighlightCard from '../components/VideoHighlights/HighlightCard'
 import VideoPlayer from '../components/VideoHighlights/VideoPlayer'
 import { mockVideoHighlights } from '../utils/mockData'
 
-export default function DailyReport() {
+export default function DevelopmentReport() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
-  
-  
+
+
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">일일 리포트</h1>
-          <p className="text-gray-600 mt-1">AI가 분석한 오늘의 안전 리포트</p>
+          <h1 className="text-2xl font-bold text-gray-900">발달 리포트</h1>
+          <p className="text-gray-600 mt-1">AI가 분석한 아이의 발달 단계 리포트</p>
         </div>
         <div className="flex gap-3">
           <button className="btn-secondary flex items-center gap-2">
@@ -71,7 +71,7 @@ export default function DailyReport() {
           <div className="flex-1">
             <h2 className="text-lg font-bold text-gray-900 mb-2">AI 한줄평</h2>
             <p className="text-gray-800 leading-relaxed mb-4">
-              "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 
+              "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며,
               주방 데드존에 3회 접근했습니다. 오후 2시경 활동량이 가장 높았고, 모서리 보호대 추가 설치를 권장드립니다."
             </p>
             <div className="flex items-center gap-4">
@@ -224,7 +224,7 @@ export default function DailyReport() {
             <p className="text-sm text-gray-500 mt-1">위험 상황이 발생한 순간을 자동으로 편집했습니다</p>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {mockVideoHighlights.map((highlight) => (
             <HighlightCard
@@ -379,9 +379,8 @@ function TimeSlot({
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
-              className={`h-2 rounded-full ${
-                safetyScore >= 90 ? 'bg-safe' : safetyScore >= 70 ? 'bg-warning' : 'bg-danger'
-              }`}
+              className={`h-2 rounded-full ${safetyScore >= 90 ? 'bg-safe' : safetyScore >= 70 ? 'bg-warning' : 'bg-danger'
+                }`}
               style={{ width: `${safetyScore}%` }}
             ></div>
           </div>

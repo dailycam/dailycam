@@ -19,6 +19,11 @@ export default function IncidentPieChart({ data }: IncidentPieChartProps) {
     outerRadius,
     percent,
   }: any) => {
+    // 0%는 표시하지 않음
+    if (percent === 0 || percent < 0.01) {
+      return null
+    }
+
     const radius = innerRadius + (outerRadius - innerRadius) * 0.5
     const x = cx + radius * Math.cos(-midAngle * RADIAN)
     const y = cy + radius * Math.sin(-midAngle * RADIAN)
@@ -47,7 +52,7 @@ export default function IncidentPieChart({ data }: IncidentPieChartProps) {
           cy="50%"
           labelLine={false}
           label={renderCustomizedLabel}
-          outerRadius={100}
+          outerRadius={120}
           fill="#8884d8"
           dataKey="value"
           strokeWidth={2}
@@ -64,12 +69,6 @@ export default function IncidentPieChart({ data }: IncidentPieChartProps) {
             borderRadius: '8px',
             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
           }}
-        />
-        <Legend
-          verticalAlign="bottom"
-          height={36}
-          iconType="circle"
-          formatter={(value) => <span style={{ color: '#6b7280', fontSize: '13px' }}>{value}</span>}
         />
       </PieChart>
     </ResponsiveContainer>

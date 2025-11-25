@@ -1,19 +1,19 @@
 import { NavLink, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
-  Video,
   MonitorPlay,
-  FileText,
-  BarChart3,
+  TrendingUp,
+  Shield,
+  Film,
   Settings,
 } from 'lucide-react'
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
-  { name: '홈캠 연동', href: '/camera-setup', icon: Video },
   { name: '실시간 모니터링', href: '/live-monitoring', icon: MonitorPlay },
-  { name: '일일 리포트', href: '/daily-report', icon: FileText },
-  { name: '데이터 분석', href: '/analytics', icon: BarChart3 },
+  { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
+  { name: '안전 리포트', href: '/safety-report', icon: Shield },
+  { name: '클립 하이라이트', href: '/clip-highlights', icon: Film },
   { name: '설정', href: '/settings', icon: Settings },
 ]
 

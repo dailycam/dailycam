@@ -18,10 +18,10 @@ import {
 } from 'lucide-react'
 import { analyzeVideoWithBackend, VideoAnalysisResult } from '../lib/api'
 
-export default function CameraSetup() {
+export default function ClipHighlights() {
   const [selectedCamera, setSelectedCamera] = useState<string | null>('camera-1')
   const [zoneMode, setZoneMode] = useState<'safe' | 'dead'>('safe')
-  
+
   // 비디오 분석 상태
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null)
@@ -73,7 +73,7 @@ export default function CameraSetup() {
 
       // 백엔드 API 호출
       const result = await analyzeVideoWithBackend(videoFile)
-      
+
       clearInterval(progressInterval)
       setAnalysisProgress(100)
       setAnalysisResult(result)
@@ -107,8 +107,8 @@ export default function CameraSetup() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">홈캠 연동</h1>
-          <p className="text-gray-600 mt-1">카메라를 연결하고 안전 구역을 설정하세요</p>
+          <h1 className="text-2xl font-bold text-gray-900">클립 하이라이트</h1>
+          <p className="text-gray-600 mt-1">주요 순간을 자동으로 편집하여 모아봅니다</p>
         </div>
         <button className="btn-primary flex items-center gap-2">
           <Plus className="w-5 h-5" />
@@ -162,22 +162,20 @@ export default function CameraSetup() {
             <div className="flex gap-2">
               <button
                 onClick={() => setZoneMode('safe')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  zoneMode === 'safe'
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${zoneMode === 'safe'
                     ? 'bg-safe text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 <Shield className="w-4 h-4 inline mr-2" />
                 세이프존
               </button>
               <button
                 onClick={() => setZoneMode('dead')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  zoneMode === 'dead'
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${zoneMode === 'dead'
                     ? 'bg-danger text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 <Skull className="w-4 h-4 inline mr-2" />
                 데드존
@@ -463,11 +461,10 @@ function CameraCard({
   return (
     <div
       onClick={onSelect}
-      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-        isSelected
+      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${isSelected
           ? 'border-primary-500 bg-primary-50'
           : 'border-gray-200 bg-white hover:border-gray-300'
-      }`}
+        }`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">

@@ -3,10 +3,10 @@ import HomeLayout from './components/Layout/HomeLayout'
 import Layout from './components/Layout/Layout'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
-import CameraSetup from './pages/CameraSetup'
+import ClipHighlights from './pages/ClipHighlights'
 import LiveMonitoring from './pages/LiveMonitoring'
-import DailyReport from './pages/DailyReport'
-import Analytics from './pages/Analytics'
+import DevelopmentReport from './pages/DevelopmentReport'
+import SafetyReport from './pages/SafetyReport'
 import Settings from './pages/Settings'
 
 function App() {
@@ -20,10 +20,10 @@ function App() {
       {/* 앱 (대시보드 및 기능들) */}
       <Route element={<Layout />}>
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="camera-setup" element={<CameraSetup />} />
         <Route path="live-monitoring" element={<LiveMonitoring />} />
-        <Route path="daily-report" element={<DailyReport />} />
-        <Route path="analytics" element={<Analytics />} />
+        <Route path="development-report" element={<DevelopmentReport />} />
+        <Route path="safety-report" element={<SafetyReport />} />
+        <Route path="clip-highlights" element={<ClipHighlights />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
