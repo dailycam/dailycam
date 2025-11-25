@@ -432,7 +432,6 @@ function ActionRecommendation({
     </div>
   )
 }
-
 // Summary Stat Card Component
 function SummaryStatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -442,3 +441,4 @@ function SummaryStatCard({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+

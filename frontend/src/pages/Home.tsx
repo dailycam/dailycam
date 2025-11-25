@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState, type ComponentType } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import {
   Brain,
   Bell,
@@ -20,6 +21,7 @@ import {
   Settings,
   User,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
@@ -215,6 +217,44 @@ export default function Home() {
   const currentPreviewHref = currentPreview?.href ?? '/dashboard'
   const ActivePreviewComponent = previewComponents[activePreview]
 
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false)
+  const [activePreview, setActivePreview] = useState<PreviewKey>('dashboard')
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsDashboardOpen(false)
+      }
+    }
+
+    if (isDashboardOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isDashboardOpen])
+
+  useEffect(() => {
+    if (isDashboardOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      setActivePreview('dashboard')
+    }
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isDashboardOpen])
+
+  const openDashboardOverlay = () => setIsDashboardOpen(true)
+  const closeDashboardOverlay = () => setIsDashboardOpen(false)
+  const currentPreview = previewNavItems.find((item) => item.id === activePreview)
+  const currentPreviewHref = currentPreview?.href ?? '/dashboard'
+  const ActivePreviewComponent = previewComponents[activePreview]
+
   return (
     <div className="bg-white">
       {/* Hero Section with Carousel */}
@@ -316,10 +356,14 @@ export default function Home() {
             <button
               type="button"
               onClick={openDashboardOverlay}
+            <button
+              type="button"
+              onClick={openDashboardOverlay}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-primary-500 transition-all"
             >
               대시보드 시작하기
               <ArrowRight className="w-5 h-5" />
+            </button>
             </button>
           </div>
         </div>
@@ -387,6 +431,7 @@ export default function Home() {
                 >
                   시작하기
                 </button>
+                </button>
               </div>
             ))}
           </div>
@@ -446,9 +491,13 @@ export default function Home() {
               <button
                 type="button"
                 onClick={openDashboardOverlay}
+              <button
+                type="button"
+                onClick={openDashboardOverlay}
                 className="rounded-lg bg-white px-6 py-3 text-base font-semibold text-primary-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all"
               >
                 무료 체험 시작하기
+              </button>
               </button>
             </div>
           </div>
