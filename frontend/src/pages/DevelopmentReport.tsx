@@ -1,444 +1,402 @@
 import { useState } from 'react'
+import { motion } from 'motion/react'
 import {
-  Calendar,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  MapPin,
+  Baby,
   Lightbulb,
-  Download,
-  Share2,
-  ChevronLeft,
-  ChevronRight,
   Video,
+  Sparkles,
+  TrendingUp,
+  Download,
+  Calendar as CalendarIcon,
+  Eye,
+  Activity,
+  Music,
+  Hand,
+  Target,
+  Star,
+  MessageCircle,
 } from 'lucide-react'
-import HighlightCard from '../components/VideoHighlights/HighlightCard'
-import VideoPlayer from '../components/VideoHighlights/VideoPlayer'
-import { mockVideoHighlights } from '../utils/mockData'
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Cell,
+} from 'recharts'
 
 export default function DevelopmentReport() {
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
+  const [date, setDate] = useState<Date>(new Date())
 
+  // 개인 발달 5각형 데이터
+  const radarData = [
+    { category: '언어', score: 88, fullMark: 100 },
+    { category: '운동', score: 92, fullMark: 100 },
+    { category: '인지', score: 85, fullMark: 100 },
+    { category: '사회성', score: 90, fullMark: 100 },
+    { category: '정서', score: 87, fullMark: 100 },
+  ]
 
+  // 최고점수를 가진 영역 찾기
+  const maxScore = Math.max(...radarData.map(item => item.score))
+  const strongestArea = radarData.find(item => item.score === maxScore)
+
+  const dailyDevelopmentFrequency = [
+    { category: '언어', count: 18, color: '#0284c7' },
+    { category: '운동', count: 25, color: '#22c55e' },
+    { category: '인지', count: 12, color: '#f59e0b' },
+    { category: '사회성', count: 15, color: '#0ea5e9' },
+    { category: '정서', count: 9, color: '#06b6d4' },
+  ]
+
+  const recommendedActivities = [
+    {
+      title: '까꿍 놀이',
+      category: '인지 발달',
+      icon: 'Eye',
+      description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
+      duration: '10-15분',
+      benefit: '인지 능력 향상',
+      gradient: 'from-warning-50 to-orange-50',
+    },
+    {
+      title: '배밀이 연습',
+      category: '운동 발달',
+      icon: 'Activity',
+      description: '좋아하는 장난감을 앞에 두고 손을 뻗게 유도하세요.',
+      duration: '15-20분',
+      benefit: '대근육 발달',
+      gradient: 'from-safe-50 to-green-50',
+    },
+    {
+      title: '노래 부르기',
+      category: '언어 발달',
+      icon: 'Music',
+      description: '다양한 동요와 자장가를 들려주세요.',
+      duration: '5-10분',
+      benefit: '언어 자극',
+      gradient: 'from-primary-50 to-blue-50',
+    },
+    {
+      title: '촉각 놀이',
+      category: '감각 발달',
+      icon: 'Hand',
+      description: '다양한 질감의 천이나 장난감을 만지게 해주세요.',
+      duration: '10분',
+      benefit: '감각 발달',
+      gradient: 'from-primary-50 to-cyan-50',
+    },
+  ]
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
+    <div className="p-8">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="mb-8 flex items-center justify-between"
+      >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">발달 리포트</h1>
-          <p className="text-gray-600 mt-1">AI가 분석한 아이의 발달 단계 리포트</p>
+          <div className="flex items-center gap-3 mb-2">
+            <Baby className="w-8 h-8 text-primary-600" />
+            <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
+              발달 리포트
+            </h1>
+          </div>
+          <p className="text-gray-600">AI 분석 기반 영유아 발달 현황을 확인하세요</p>
         </div>
-        <div className="flex gap-3">
-          <button className="btn-secondary flex items-center gap-2">
-            <Share2 className="w-4 h-4" />
-            공유
+        <div className="flex items-center gap-3">
+          <button className="btn-secondary flex items-center gap-2 border-primary-200 hover:border-primary-300 hover:bg-primary-50">
+            <CalendarIcon className="w-4 h-4" />
+            {date.toLocaleDateString('ko-KR')}
           </button>
-          <button className="btn-primary flex items-center gap-2">
+          <button className="btn-primary flex items-center gap-2 shadow-md">
             <Download className="w-4 h-4" />
-            다운로드
+            리포트 다운로드
           </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Date Selector */}
-      <div className="card">
-        <div className="flex items-center justify-between">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-primary-600" />
-            <span className="text-lg font-semibold text-gray-900">
-              2024년 11월 11일 (월)
-            </span>
-          </div>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-      </div>
+      {/* AI Daily Summary & Development Stage */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="lg:col-span-2"
+        >
+          <div className="card p-8 bg-gradient-to-br from-primary-50 via-blue-50 to-cyan-50 border-0 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary-200/30 to-blue-200/30 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-cyan-200/30 to-primary-200/30 rounded-full blur-3xl" />
 
-      {/* AI Summary */}
-      <div className="card bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-100">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Lightbulb className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-bold text-gray-900 mb-2">AI 한줄평</h2>
-            <p className="text-gray-800 leading-relaxed mb-4">
-              "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며,
-              주방 데드존에 3회 접근했습니다. 오후 2시경 활동량이 가장 높았고, 모서리 보호대 추가 설치를 권장드립니다."
-            </p>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-safe rounded-full"></div>
-                <span className="text-sm text-gray-700">안전도: <strong>92%</strong></span>
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-6 h-6 text-primary-600" />
+                <h2 className="text-primary-900 text-xl font-semibold">오늘의 발달 요약</h2>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-warning rounded-full"></div>
-                <span className="text-sm text-gray-700">주의 필요: <strong>3건</strong></span>
+              <div className="space-y-3 text-sm text-gray-700 leading-relaxed mb-6">
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <Target className="w-5 h-5 text-primary-600" />
+                  </div>
+                  <span>
+                    오늘 아이는 총 <span className="text-primary-600 font-semibold">79건</span>의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.
+                  </span>
+                </p>
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Star className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <span>
+                    오전 9시경 시각 추적 능력이 눈에 띄게 향상되었고, 오후 3시에는 배밀이 자세로 약{' '}
+                    <span className="text-primary-600 font-semibold">2미터 이동</span>하는 모습이 포착되었습니다. 이는 대근육 발달의 중요한 이정표입니다.
+                  </span>
+                </p>
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="w-5 h-5 text-cyan-600" />
+                  </div>
+                  <span>
+                    언어 발달에서도 다양한 음절의 옹알이가 18회 관찰되어 지난주 대비{' '}
+                    <span className="text-primary-600 font-semibold">20% 증가</span>했습니다. 전반적으로 또래 평균보다 우수한 발달을 보이고 있습니다.
+                  </span>
+                </p>
+              </div>
+
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-primary-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 text-primary-600" />
+                  <p className="text-xs text-primary-600 font-semibold">AI 발달 인사이트</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>이번 주 언어 발달 영역에서 눈에 띄는 향상이 관찰되었습니다.</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>운동 발달이 또래 평균보다 앞서 있습니다. 안전한 환경에서 더 많은 활동 기회를 제공해보세요.</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>규칙적인 수면 패턴이 정서 발달에 긍정적인 영향을 주고 있습니다.</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>추천: 다양한 소리와 음악을 들려주면 언어 발달에 도움이 됩니다.</span>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
+          <div className="card p-6 bg-gradient-to-br from-primary-50 to-cyan-50 border-0 shadow-xl h-full">
+            <div className="text-center h-full flex flex-col justify-center">
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.8, delay: 0.4 }}
+              >
+                <div className="bg-gradient-to-br from-primary-500 to-primary-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <Baby className="w-10 h-10 text-white" />
+                </div>
+              </motion.div>
+              <p className="text-sm text-gray-600 mb-2">현재 발달 단계</p>
+              <p className="text-primary-600 mb-4 text-2xl font-bold">7개월</p>
+
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <TrendingUp className="w-5 h-5 text-safe" />
+                  <p className="text-sm text-gray-700 font-medium">발달 강점</p>
+                </div>
+                <p className="text-base text-gray-800 leading-relaxed">
+                  지수는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요! 🌟
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <MetricCard
-          title="총 모니터링 시간"
-          value="8시간 45분"
-          change="+1.2시간"
-          trend="up"
-          icon={Clock}
-        />
-        <MetricCard
-          title="감지된 위험"
-          value="3건"
-          change="-2건"
-          trend="down"
-          icon={AlertTriangle}
-        />
-        <MetricCard
-          title="세이프존 체류율"
-          value="92%"
-          change="+5%"
-          trend="up"
-          icon={CheckCircle2}
-        />
-        <MetricCard
-          title="활동 지수"
-          value="높음"
-          change="정상"
-          trend="neutral"
-          icon={TrendingUp}
-        />
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+        >
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+            <div className="mb-6 h-8">
+              <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold">
+                <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
+                영역별 발달 분석
+              </h3>
+              <p className="text-sm text-gray-600">우리 아이의 5가지 발달 영역 현황입니다</p>
+            </div>
+
+            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+              <ResponsiveContainer width="100%" height={320}>
+                <RadarChart data={radarData}>
+                  <defs>
+                    <linearGradient id="radarGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0284c7" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
+                  <PolarGrid stroke="#e5e7eb" strokeWidth={1.5} />
+                  <PolarAngleAxis dataKey="category" tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} tickCount={6} />
+                  <Radar
+                    dataKey="score"
+                    stroke="#0284c7"
+                    fill="url(#radarGradient)"
+                    fillOpacity={0.7}
+                    strokeWidth={2.5}
+                    dot={{ fill: '#0284c7', strokeWidth: 2, r: 4, stroke: '#fff' }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-4 grid grid-cols-5 gap-2">
+              {radarData.map((item, index) => (
+                <div key={index} className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-2.5 text-center">
+                  <p className="text-xs text-gray-600 mb-1">{item.category}</p>
+                  <p className="text-lg text-primary-600 font-semibold">{item.score}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+        >
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+            <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
+              <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-cyan-400 rounded-full" />
+              금일 발달 행동 빈도
+            </h3>
+            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={dailyDevelopmentFrequency}>
+                  <defs>
+                    {dailyDevelopmentFrequency.map((item, index) => (
+                      <linearGradient key={index} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={item.color} stopOpacity={0.9} />
+                        <stop offset="95%" stopColor={item.color} stopOpacity={0.5} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="category" stroke="#9ca3af" style={{ fontSize: '12px' }} />
+                  <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}
+                  />
+                  <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
+                    {dailyDevelopmentFrequency.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 grid grid-cols-5 gap-2">
+              {dailyDevelopmentFrequency.map((item, index) => (
+                <div key={index} className="text-center">
+                  <div className="w-full h-2 rounded-full mb-1" style={{ backgroundColor: item.color }} />
+                  <p className="text-xs text-gray-600">{item.category}</p>
+                  <p className="text-sm font-semibold" style={{ color: item.color }}>
+                    {item.count}회
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Weekly Trend Chart */}
+      {/* AI Recommended Activities */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.5 }}
+      >
+        <div className="card p-6 mb-8 border-0 shadow-lg">
+          <div className="flex items-center gap-2 mb-6">
+            <Lightbulb className="w-6 h-6 text-warning" />
+            <h3 className="text-lg font-semibold">AI 추천 발달 촉진 놀이</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {recommendedActivities.map((activity, index) => {
+              // 아이콘 이름에 따라 컴포넌트 선택
+              const IconComponent =
+                activity.icon === 'Eye' ? Eye :
+                  activity.icon === 'Activity' ? Activity :
+                    activity.icon === 'Music' ? Music :
+                      activity.icon === 'Hand' ? Hand : Eye
 
-      {/* Risk Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Risk Priority */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">위험도 우선순위</h2>
-          <div className="space-y-3">
-            <RiskDetailItem
-              level="high"
-              title="주방 근처 반복 접근"
-              description="오후 2:15 - 2:45 사이 3회 접근"
-              location="주방 입구 (데드존)"
-              time="14:15 - 14:45"
-            />
-            <RiskDetailItem
-              level="medium"
-              title="계단 입구 접근"
-              description="1회 접근, 약 2분간 체류"
-              location="계단 입구"
-              time="11:30"
-            />
-            <RiskDetailItem
-              level="low"
-              title="가구 모서리 접촉"
-              description="거실 테이블 모서리 근접"
-              location="거실"
-              time="13:20"
-            />
+              // 배경에 맞는 아이콘 색상 선택
+              const iconColor =
+                activity.icon === 'Eye' ? 'text-orange-600' :
+                  activity.icon === 'Activity' ? 'text-green-600' :
+                    activity.icon === 'Music' ? 'text-blue-600' :
+                      activity.icon === 'Hand' ? 'text-cyan-600' : 'text-gray-700'
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 + index * 0.1 }}
+                  className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                      <IconComponent className={`w-6 h-6 ${iconColor}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-gray-800 font-semibold">{activity.title}</h4>
+                        <span className="text-xs px-3 py-1 bg-white/80 text-gray-700 rounded-full shadow-sm">
+                          {activity.category}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">⏱ {activity.duration}</span>
+                        <span className="flex items-center gap-1">✨ {activity.benefit}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         </div>
-
-        {/* Time-based Analysis */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">시간대별 활동</h2>
-          <div className="space-y-4">
-            <TimeSlot
-              time="09:00 - 12:00"
-              activity="낮은 활동량"
-              safetyScore={95}
-              incidents={0}
-            />
-            <TimeSlot
-              time="12:00 - 15:00"
-              activity="높은 활동량"
-              safetyScore={85}
-              incidents={3}
-            />
-            <TimeSlot
-              time="15:00 - 18:00"
-              activity="중간 활동량"
-              safetyScore={92}
-              incidents={0}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Action Recommendations */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">즉시 실행 리스트</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ActionRecommendation
-            priority="high"
-            title="주방 안전 게이트 설치"
-            description="아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다."
-            estimatedCost="3-5만원"
-            difficulty="쉬움"
-          />
-          <ActionRecommendation
-            priority="high"
-            title="거실 테이블 모서리 보호대 추가"
-            description="충돌 위험이 감지되었습니다. 모서리 보호대를 추가로 설치하세요."
-            estimatedCost="1-2만원"
-            difficulty="매우 쉬움"
-          />
-          <ActionRecommendation
-            priority="medium"
-            title="계단 입구 차단 강화"
-            description="계단 접근이 감지되었습니다. 기존 게이트의 잠금을 확인하세요."
-            estimatedCost="무료"
-            difficulty="쉬움"
-          />
-          <ActionRecommendation
-            priority="low"
-            title="세이프존 범위 재검토"
-            description="활동 패턴이 변화했습니다. 세이프존 범위 조정을 고려하세요."
-            estimatedCost="무료"
-            difficulty="쉬움"
-          />
-        </div>
-      </div>
-
-      {/* Video Highlights */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Video className="w-5 h-5 text-primary-600" />
-              하이라이트 영상
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">위험 상황이 발생한 순간을 자동으로 편집했습니다</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockVideoHighlights.map((highlight) => (
-            <HighlightCard
-              key={highlight.id}
-              {...highlight}
-              onPlay={() => setSelectedVideo(highlight.id)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Location Heatmap Preview */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">공간별 활동 히트맵</h2>
-          <a href="/analytics" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-            상세 분석 보기 →
-          </a>
-        </div>
-        <div className="bg-gray-100 rounded-lg p-8 text-center">
-          <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600">히트맵 시각화 영역</p>
-          <p className="text-sm text-gray-500 mt-1">
-            실제 구현 시 Canvas 또는 SVG로 공간별 활동 빈도를 표시
-          </p>
-        </div>
-      </div>
-
-      {/* Daily Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <SummaryStatCard label="총 이동 거리" value="약 2.3km" />
-        <SummaryStatCard label="평균 활동 강도" value="중간" />
-        <SummaryStatCard label="낮잠 시간" value="2시간 15분" />
-        <SummaryStatCard label="안전 점수" value="A+" />
-      </div>
-
-      {/* Video Player Modal */}
-      {selectedVideo && (
-        <VideoPlayer
-          title={mockVideoHighlights.find(h => h.id === selectedVideo)?.title || ''}
-          videoUrl={mockVideoHighlights.find(h => h.id === selectedVideo)?.videoUrl}
-          onClose={() => setSelectedVideo(null)}
-        />
-      )}
+      </motion.div>
     </div>
   )
 }
-
-// Metric Card Component
-function MetricCard({
-  title,
-  value,
-  change,
-  trend,
-  icon: Icon,
-}: {
-  title: string
-  value: string
-  change: string
-  trend: 'up' | 'down' | 'neutral'
-  icon: any
-}) {
-  const trendColors = {
-    up: 'text-safe',
-    down: 'text-danger',
-    neutral: 'text-gray-500',
-  }
-
-  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Clock
-
-  return (
-    <div className="card">
-      <div className="flex items-start justify-between mb-3">
-        <Icon className="w-5 h-5 text-gray-600" />
-        <TrendIcon className={`w-4 h-4 ${trendColors[trend]}`} />
-      </div>
-      <p className="text-sm text-gray-600 mb-1">{title}</p>
-      <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-      <p className={`text-xs ${trendColors[trend]}`}>{change}</p>
-    </div>
-  )
-}
-
-// Risk Detail Item Component
-function RiskDetailItem({
-  level,
-  title,
-  description,
-  location,
-  time,
-}: {
-  level: 'high' | 'medium' | 'low'
-  title: string
-  description: string
-  location: string
-  time: string
-}) {
-  const levelConfig = {
-    high: { color: 'border-danger-500 bg-danger-50', badge: 'bg-danger text-white' },
-    medium: { color: 'border-warning-500 bg-warning-50', badge: 'bg-warning text-white' },
-    low: { color: 'border-gray-300 bg-gray-50', badge: 'bg-gray-400 text-white' },
-  }
-
-  const config = levelConfig[level]
-
-  return (
-    <div className={`p-4 border-l-4 rounded-lg ${config.color}`}>
-      <div className="flex items-start justify-between mb-2">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        <span className={`text-xs px-2 py-1 rounded ${config.badge}`}>
-          {level === 'high' ? '높음' : level === 'medium' ? '중간' : '낮음'}
-        </span>
-      </div>
-      <p className="text-sm text-gray-700 mb-3">{description}</p>
-      <div className="flex items-center gap-4 text-xs text-gray-600">
-        <div className="flex items-center gap-1">
-          <MapPin className="w-3 h-3" />
-          {location}
-        </div>
-        <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {time}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Time Slot Component
-function TimeSlot({
-  time,
-  activity,
-  safetyScore,
-  incidents,
-}: {
-  time: string
-  activity: string
-  safetyScore: number
-  incidents: number
-}) {
-  return (
-    <div className="p-4 bg-gray-50 rounded-lg">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-gray-900">{time}</span>
-        <span className="text-xs text-gray-600">{activity}</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-            <span>안전도</span>
-            <span className="font-semibold">{safetyScore}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full ${safetyScore >= 90 ? 'bg-safe' : safetyScore >= 70 ? 'bg-warning' : 'bg-danger'
-                }`}
-              style={{ width: `${safetyScore}%` }}
-            ></div>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">위험</p>
-          <p className="text-sm font-semibold text-gray-900">{incidents}건</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Action Recommendation Component
-function ActionRecommendation({
-  priority,
-  title,
-  description,
-  estimatedCost,
-  difficulty,
-}: {
-  priority: 'high' | 'medium' | 'low'
-  title: string
-  description: string
-  estimatedCost: string
-  difficulty: string
-}) {
-  const priorityConfig = {
-    high: { color: 'border-danger-500', badge: 'bg-danger' },
-    medium: { color: 'border-warning-500', badge: 'bg-warning' },
-    low: { color: 'border-gray-300', badge: 'bg-gray-400' },
-  }
-
-  const config = priorityConfig[priority]
-
-  return (
-    <div className={`p-4 border-l-4 rounded-lg bg-white shadow-sm ${config.color}`}>
-      <div className="flex items-start justify-between mb-2">
-        <h3 className="text-sm font-semibold text-gray-900 flex-1">{title}</h3>
-        <span className={`text-xs px-2 py-1 rounded text-white ${config.badge}`}>
-          {priority === 'high' ? '긴급' : priority === 'medium' ? '권장' : '선택'}
-        </span>
-      </div>
-      <p className="text-sm text-gray-700 mb-3">{description}</p>
-      <div className="flex items-center gap-4 text-xs text-gray-600">
-        <span>💰 {estimatedCost}</span>
-        <span>🔧 {difficulty}</span>
-      </div>
-    </div>
-  )
-}
-// Summary Stat Card Component
-function SummaryStatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card text-center">
-      <p className="text-xs text-gray-600 mb-1">{label}</p>
-      <p className="text-lg font-bold text-gray-900">{value}</p>
-    </div>
-  )
-}
-
