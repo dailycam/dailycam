@@ -133,6 +133,7 @@ async def get_current_user(
         "email": user.email,
         "name": user.name,
         "picture": user.picture,
+        "is_subscribed": user.is_subscribed == 1,
         "created_at": user.created_at
     }
 

@@ -14,6 +14,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(255), nullable=True)
     picture = Column(String(512), nullable=True)
+    is_subscribed = Column(Integer, default=0)  # 0: 미구독, 1: 구독
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

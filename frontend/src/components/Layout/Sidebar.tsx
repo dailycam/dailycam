@@ -8,6 +8,7 @@ import {
   Settings,
   TestTube,
 } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
@@ -19,7 +20,33 @@ const navigation = [
   { name: '설정', href: '/settings', icon: Settings },
 ]
 
+
+
 export default function Sidebar() {
+  const [isSubscribed, setIsSubscribed] = useState(false)
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setIsSubscribed(data.is_subscribed)
+        }
+      } catch (error) {
+        console.error('Failed to fetch user info:', error)
+      }
+    }
+    fetchUserInfo()
+  }, [])
+
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
@@ -65,18 +92,27 @@ export default function Sidebar() {
 
       {/* Subscription Info */}
       <div className="p-4 border-t border-gray-200">
-        <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-primary-700">프리미엄 플랜</span>
-            <span className="text-xs text-gray-600">30일 남음</span>
+        {isSubscribed ? (
+          <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-primary-700">프리미엄 플랜</span>
+              <span className="text-xs text-gray-600">30일 남음</span>
+            </div>
+            <div className="w-full bg-white rounded-full h-2 mb-2">
+              <div className="bg-primary-500 h-2 rounded-full" style={{ width: '70%' }}></div>
+            </div>
+            <button className="w-full text-xs text-primary-700 font-medium hover:text-primary-800">
+              플랜 관리 →
+            </button>
           </div>
-          <div className="w-full bg-white rounded-full h-2 mb-2">
-            <div className="bg-primary-500 h-2 rounded-full" style={{ width: '70%' }}></div>
+        ) : (
+          <div className="bg-gray-50 rounded-lg p-4 text-center">
+            <p className="text-sm font-semibold text-gray-900 mb-1">구독중인 플랜이 없습니다</p>
+            <button className="w-full py-2 bg-primary-600 text-white text-xs font-bold rounded-lg hover:bg-primary-700 transition-colors">
+              구독하러 가기
+            </button>
           </div>
-          <button className="w-full text-xs text-primary-700 font-medium hover:text-primary-800">
-            플랜 관리 →
-          </button>
-        </div>
+        )}
       </div>
     </div>
   )
