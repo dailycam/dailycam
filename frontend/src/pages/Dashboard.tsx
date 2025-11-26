@@ -1,20 +1,16 @@
 import { useState, useEffect } from 'react'
 import {
-  AlertTriangle,
   Shield,
   Clock,
   TrendingUp,
-  Camera,
   Activity,
   CheckCircle2,
-  XCircle,
   Baby,
   Eye,
   Video,
   ChevronRight,
   Sparkles,
   ChevronLeft,
-  MoreVertical,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -26,7 +22,7 @@ type TimeRangeType = 'day' | 'week' | 'month' | 'year'
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [timeRange, setTimeRange] = useState<TimeRangeType>('day')
 
@@ -285,23 +281,22 @@ export default function Dashboard() {
 
   const timelineEvents = groupSleepEvents(rawTimelineEvents)
 
+  const dayTimeRanges = [
+    { start: 4, end: 7, label: '04시~07시' },
+    { start: 8, end: 11, label: '08시~11시' },
+    { start: 12, end: 15, label: '12시~15시' },
+    { start: 16, end: 19, label: '16시~19시' },
+    { start: 20, end: 23, label: '20시~23시' },
+    { start: 0, end: 3, label: '00시~03시' },
+  ]
+
   // 기간별 데이터 생성 함수
   const generateChartData = () => {
     if (timeRange === 'day') {
-      // 하루: 3시간 구간별
-      const timeRanges = [
-        { start: 0, end: 3, label: '00시~03시' },
-        { start: 4, end: 7, label: '04시~07시' },
-        { start: 8, end: 11, label: '08시~11시' },
-        { start: 12, end: 15, label: '12시~15시' },
-        { start: 16, end: 19, label: '16시~19시' },
-        { start: 20, end: 23, label: '20시~23시' },
-      ]
-
       const baseSafetyScore = dashboardData.safetyScore
       const baseDevelopmentScore = 92
 
-      return timeRanges.map(range => {
+      return dayTimeRanges.map(range => {
         const eventsInRange = timelineEvents.filter(e => {
           const eventHour = e.hour
           return eventHour >= range.start && eventHour <= range.end
@@ -411,15 +406,10 @@ export default function Dashboard() {
 
   const chartData = generateChartData()
 
+  const sectionTitleClass = 'text-xl font-semibold'
+
   // 시간 구간 생성 (테이블용 - 하루일 때만 사용)
-  const timeRanges = timeRange === 'day' ? [
-    { start: 4, end: 7, label: '04시~07시' },
-    { start: 8, end: 11, label: '08시~11시' },
-    { start: 12, end: 15, label: '12시~15시' },
-    { start: 16, end: 19, label: '16시~19시' },
-    { start: 20, end: 23, label: '20시~23시' },
-    { start: 0, end: 3, label: '00시~03시' },
-  ] : []
+  const timeRanges = timeRange === 'day' ? dayTimeRanges : []
 
   const stats = [
     {
@@ -528,15 +518,15 @@ export default function Dashboard() {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="mb-8"
       >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className={`${sectionTitleClass} font-bold`}>오늘의 하이라이트</h2>
+              <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold">오늘의 하이라이트</h2>
-            <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
-          </div>
-        </div>
 
         <div className="grid lg:grid-cols-3 gap-4 mb-4">
           <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
@@ -593,7 +583,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               <Clock className="w-6 h-6 text-primary-500" />
               <div>
-                <h2 className="text-xl">오늘의 활동 타임라인</h2>
+                <h2 className={sectionTitleClass}>오늘의 활동 타임라인</h2>
                 <p className="text-sm text-gray-500">
                   {timeRange === 'day' ? '시간별 발달 및 안전 점수 추이' :
                     timeRange === 'week' ? '7일간 발달 및 안전 점수 추이' :
@@ -761,7 +751,10 @@ export default function Dashboard() {
           {/* 활동 타임라인 테이블 (하루일 때만 표시) */}
           {timeRange === 'day' && (
             <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">활동 상세 내역</h3>
+              <h3 className={`${sectionTitleClass} flex items-center gap-2 text-gray-900 mb-4`}>
+                <Activity className="w-5 h-5 text-primary-500" />
+                활동 상세 내역
+              </h3>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
@@ -826,7 +819,7 @@ export default function Dashboard() {
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-gray-600">{event.description}</div>
+                                        <div className="text-xs text-primary-600">{event.description}</div>
                                       )}
                                       {event.hasClip && (
                                         <button className="mt-1 text-primary-600 hover:text-primary-700">
@@ -892,7 +885,7 @@ export default function Dashboard() {
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-gray-600">{event.description}</div>
+                                        <div className="text-xs text-warning">{event.description}</div>
                                       )}
                                       <div className="flex items-center justify-center gap-1 mt-1">
                                         {event.resolved && (
@@ -958,7 +951,7 @@ export default function Dashboard() {
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-gray-600">{event.description}</div>
+                                        <div className="text-xs text-danger">{event.description}</div>
                                       )}
                                     </div>
                                   )
@@ -1015,7 +1008,7 @@ export default function Dashboard() {
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-gray-600">{event.description}</div>
+                                        <div className="text-xs text-blue-500">{event.description}</div>
                                       )}
                                     </div>
                                   )
@@ -1075,7 +1068,7 @@ export default function Dashboard() {
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-gray-600">{event.description}</div>
+                                        <div className="text-xs text-safe">{event.description}</div>
                                       )}
                                       {event.resolved && (
                                         <CheckCircle2 className="w-3 h-3 text-safe mx-auto mt-1" />

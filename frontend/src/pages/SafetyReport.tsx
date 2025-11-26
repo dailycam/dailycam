@@ -426,7 +426,7 @@ export default function SafetyReport() {
               </ResponsiveContainer>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 mt-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
               {incidentTypeData.map((item, index) => (
                 <motion.div
                   key={item.name}
