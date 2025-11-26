@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   User,
   Bell,
@@ -15,7 +16,17 @@ import {
   LogOut,
 } from 'lucide-react'
 
+interface UserInfo {
+  id: number
+  email: string
+  name: string
+  picture: string
+  created_at: string
+}
+
 export default function Settings() {
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState({
     danger: true,
     warning: true,
@@ -23,6 +34,38 @@ export default function Settings() {
     email: true,
     push: true,
   })
+
+  // 사용자 정보 가져오기
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const token = localStorage.getItem('access_token')
+
+      if (!token) {
+        navigate('/login')
+        return
+      }
+
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setUserInfo(data)
+        } else {
+          localStorage.removeItem('access_token')
+          navigate('/login')
+        }
+      } catch (error) {
+        console.error('사용자 정보 가져오기 오류:', error)
+      }
+    }
+
+    fetchUserInfo()
+  }, [navigate])
 
   return (
     <div className="space-y-6">
@@ -53,9 +96,17 @@ export default function Settings() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">프로필 정보</h2>
             <div className="space-y-4">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                  김
-                </div>
+                {userInfo?.picture ? (
+                  <img
+                    src={userInfo.picture}
+                    alt={userInfo.name}
+                    className="w-20 h-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                    {userInfo?.name?.charAt(0) || '김'}
+                  </div>
+                )}
                 <div>
                   <button className="btn-secondary text-sm">사진 변경</button>
                   <p className="text-xs text-gray-500 mt-1">JPG, PNG (최대 5MB)</p>
@@ -66,8 +117,9 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">이름</label>
                 <input
                   type="text"
-                  defaultValue="김부모님"
+                  value={userInfo?.name || '로딩 중...'}
                   className="input-field"
+                  readOnly
                 />
               </div>
 
@@ -75,8 +127,9 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">이메일</label>
                 <input
                   type="email"
-                  defaultValue="parent@example.com"
+                  value={userInfo?.email || '로딩 중...'}
                   className="input-field"
+                  readOnly
                 />
               </div>
 
@@ -243,11 +296,10 @@ function SettingsNavItem({
 }) {
   return (
     <button
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-        active
-          ? 'bg-primary-50 text-primary-700'
-          : 'text-gray-700 hover:bg-gray-50'
-      }`}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${active
+        ? 'bg-primary-50 text-primary-700'
+        : 'text-gray-700 hover:bg-gray-50'
+        }`}
     >
       <Icon className="w-5 h-5" />
       {label}
@@ -280,14 +332,12 @@ function NotificationToggle({
       </div>
       <button
         onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors ${
-          checked ? 'bg-primary-600' : 'bg-gray-300'
-        }`}
+        className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-primary-600' : 'bg-gray-300'
+          }`}
       >
         <div
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
+          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'
+            }`}
         ></div>
       </button>
     </div>
