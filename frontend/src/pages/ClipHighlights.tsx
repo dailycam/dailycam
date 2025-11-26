@@ -1,621 +1,310 @@
-import { useState, useRef } from 'react'
-import {
-  Camera,
-  Plus,
-  Wifi,
-  MapPin,
-  Shield,
-  Skull,
-  Settings,
-  Trash2,
-  CheckCircle2,
-  Upload,
-  Play,
-  AlertCircle,
-  TrendingDown,
-  Activity,
-  Clock,
-} from 'lucide-react'
-import { analyzeVideoWithBackend, VideoAnalysisResult } from '../lib/api'
+import { useState } from 'react'
+import { motion } from 'motion/react'
+import { Play, Download, Share2, TrendingUp, Shield, Calendar, Clock, Film } from 'lucide-react'
 
 export default function ClipHighlights() {
-  const [selectedCamera, setSelectedCamera] = useState<string | null>('camera-1')
-  const [zoneMode, setZoneMode] = useState<'safe' | 'dead'>('safe')
+  const [selectedClip, setSelectedClip] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'development' | 'safety'>('development')
 
-  // 비디오 분석 상태
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null)
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const developmentClips = [
+    {
+      id: 'dev-1',
+      title: '배밀이 자세로 2미터 이동',
+      category: '운동 발달',
+      timestamp: '2024-11-19 15:23',
+      duration: '0:45',
+      thumbnail: '🤸',
+      description: '아기가 배밀이 자세로 약 2미터를 이동하는 모습이 포착되었습니다. 대근육 발달의 중요한 이정표입니다.',
+      importance: 'high',
+      color: 'safe',
+    },
+    {
+      id: 'dev-2',
+      title: '혼자 앉기 시도',
+      category: '운동 발달',
+      timestamp: '2024-11-19 14:23',
+      duration: '0:38',
+      thumbnail: '🪑',
+      description: '아기가 처음으로 혼자 앉으려는 시도를 했습니다. 균형 감각이 발달하고 있습니다.',
+      importance: 'high',
+      color: 'safe',
+    },
+    {
+      id: 'dev-3',
+      title: '다양한 옹알이 소리',
+      category: '언어 발달',
+      timestamp: '2024-11-19 12:10',
+      duration: '1:15',
+      thumbnail: '🗣️',
+      description: '여러 음절의 옹알이가 관찰되었습니다. "바바", "마마" 등의 소리를 반복했습니다.',
+      importance: 'medium',
+      color: 'primary',
+    },
+    {
+      id: 'dev-4',
+      title: '눈 맞춤 및 웃음 반응',
+      category: '사회성 발달',
+      timestamp: '2024-11-19 09:45',
+      duration: '0:52',
+      thumbnail: '😊',
+      description: '부모와의 상호작용 중 활발한 눈 맞춤과 웃음 반응을 보였습니다.',
+      importance: 'medium',
+      color: 'primary',
+    },
+    {
+      id: 'dev-5',
+      title: '장난감 손 뻗기 및 잡기',
+      category: '인지 발달',
+      timestamp: '2024-11-19 09:15',
+      duration: '1:05',
+      thumbnail: '🧸',
+      description: '목표물을 향해 손을 뻗고 성공적으로 잡는 행동이 관찰되었습니다.',
+      importance: 'medium',
+      color: 'warning',
+    },
+  ]
 
-  // 비디오 파일 선택 핸들러
-  const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      // 비디오 파일인지 확인
-      if (!file.type.startsWith('video/')) {
-        setAnalysisError('비디오 파일만 업로드 가능합니다.')
-        return
-      }
+  const safetyClips = [
+    {
+      id: 'safe-1',
+      title: '침대 가장자리 접근',
+      category: '주의',
+      timestamp: '2024-11-19 13:45',
+      duration: '0:28',
+      thumbnail: '⚠️',
+      description: '아기가 침대 가장자리에 접근했습니다. 이후 안전한 영역으로 복귀했습니다.',
+      importance: 'warning',
+      color: 'warning',
+    },
+    {
+      id: 'safe-2',
+      title: '활발한 움직임 감지',
+      category: '주의',
+      timestamp: '2024-11-19 11:20',
+      duration: '0:35',
+      thumbnail: '🏃',
+      description: '평소보다 활발한 움직임이 감지되었습니다. 안전 상태 모니터링 강화됨.',
+      importance: 'warning',
+      color: 'warning',
+    },
+    {
+      id: 'safe-3',
+      title: '안전한 수면 자세 확인',
+      category: '권장',
+      timestamp: '2024-11-19 08:30',
+      duration: '0:15',
+      thumbnail: '😴',
+      description: '바른 자세로 안전하게 수면 중인 모습입니다.',
+      importance: 'info',
+      color: 'safe',
+    },
+    {
+      id: 'safe-4',
+      title: '정상 기상',
+      category: '권장',
+      timestamp: '2024-11-19 06:00',
+      duration: '0:42',
+      thumbnail: '🌅',
+      description: '정상적으로 기상하는 모습이 관찰되었습니다.',
+      importance: 'info',
+      color: 'safe',
+    },
+  ]
 
-      setVideoFile(file)
-      setAnalysisError(null)
-      setAnalysisResult(null)
+  const renderClipCard = (clip: typeof developmentClips[0], type: 'development' | 'safety') => {
+    const bgColor =
+      clip.importance === 'high'
+        ? 'bg-safe-50 border-safe-200'
+        : clip.importance === 'warning'
+          ? 'bg-warning-50 border-warning-200'
+          : 'bg-primary-50 border-primary-200'
 
-      // 비디오 미리보기 URL 생성
-      const url = URL.createObjectURL(file)
-      setVideoPreviewUrl(url)
-    }
-  }
+    const badgeColor =
+      clip.importance === 'high'
+        ? 'bg-safe-200 text-safe-dark'
+        : clip.importance === 'warning'
+          ? 'bg-warning-200 text-warning-dark'
+          : 'bg-primary-200 text-primary-700'
 
-  // 비디오 분석 시작
-  const handleAnalyzeVideo = async () => {
-    if (!videoFile) return
-
-    setIsAnalyzing(true)
-    setAnalysisError(null)
-    setAnalysisProgress(0)
-
-    try {
-      // 진행 상태 시뮬레이션
-      const progressInterval = setInterval(() => {
-        setAnalysisProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return 90
-          }
-          return prev + 10
-        })
-      }, 500)
-
-      // 백엔드 API 호출
-      const result = await analyzeVideoWithBackend(videoFile)
-
-      clearInterval(progressInterval)
-      setAnalysisProgress(100)
-      setAnalysisResult(result)
-    } catch (error: any) {
-      console.error('분석 오류:', error)
-      setAnalysisError(error.message || '비디오 분석 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.')
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
-
-  // 파일 선택 버튼 클릭
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  // 분석 초기화
-  const handleReset = () => {
-    setVideoFile(null)
-    setVideoPreviewUrl(null)
-    setAnalysisResult(null)
-    setAnalysisError(null)
-    setAnalysisProgress(0)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">클립 하이라이트</h1>
-          <p className="text-gray-600 mt-1">주요 순간을 자동으로 편집하여 모아봅니다</p>
-        </div>
-        <button className="btn-primary flex items-center gap-2">
-          <Plus className="w-5 h-5" />
-          새 카메라 추가
-        </button>
-      </div>
-
-      {/* Camera List & Setup Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Camera List */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">연동된 카메라</h2>
-          <div className="space-y-3">
-            <CameraCard
-              id="camera-1"
-              name="거실 카메라"
-              status="online"
-              location="거실"
-              isSelected={selectedCamera === 'camera-1'}
-              onSelect={() => setSelectedCamera('camera-1')}
-            />
-            <CameraCard
-              id="camera-2"
-              name="아이방 카메라"
-              status="online"
-              location="아이방"
-              isSelected={selectedCamera === 'camera-2'}
-              onSelect={() => setSelectedCamera('camera-2')}
-            />
-            <CameraCard
-              id="camera-3"
-              name="주방 카메라"
-              status="offline"
-              location="주방"
-              isSelected={selectedCamera === 'camera-3'}
-              onSelect={() => setSelectedCamera('camera-3')}
-            />
+    return (
+      <div
+        key={clip.id}
+        className={`card p-4 ${bgColor} border-2 hover:shadow-md transition-shadow cursor-pointer`}
+        onClick={() => setSelectedClip(clip.id)}
+      >
+        <div className="flex gap-4">
+          <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl">
+            {clip.thumbnail}
           </div>
-
-          {/* Add Camera Button */}
-          <button className="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors flex items-center justify-center gap-2">
-            <Plus className="w-5 h-5" />
-            카메라 추가
-          </button>
-        </div>
-
-        {/* Zone Setup */}
-        <div className="lg:col-span-2 card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">구역 설정</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setZoneMode('safe')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${zoneMode === 'safe'
-                    ? 'bg-safe text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                <Shield className="w-4 h-4 inline mr-2" />
-                세이프존
-              </button>
-              <button
-                onClick={() => setZoneMode('dead')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${zoneMode === 'dead'
-                    ? 'bg-danger text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                <Skull className="w-4 h-4 inline mr-2" />
-                데드존
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1">
+                <h4 className="mb-1 font-semibold text-gray-900">{clip.title}</h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-1 rounded ${badgeColor}`}>{clip.category}</span>
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {clip.duration}
+                  </span>
+                </div>
+              </div>
+              <button className="flex-shrink-0 p-2 hover:bg-white/80 rounded">
+                <Play className="w-4 h-4 text-primary-600" />
               </button>
             </div>
-          </div>
-
-          {/* Camera Preview with Zone Drawing */}
-          <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video mb-4">
-            {/* Simulated Camera Feed */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-gray-400">
-                <Camera className="w-16 h-16 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">카메라 피드 (시뮬레이션)</p>
-                <p className="text-xs mt-1">실제 구현 시 WebRTC 또는 HLS 스트림</p>
-              </div>
-            </div>
-
-            {/* Safe Zone Overlay (Example) */}
-            <div className="absolute top-20 left-20 w-64 h-48 border-4 border-safe rounded-lg bg-safe/10">
-              <div className="absolute -top-8 left-0 bg-safe text-white text-xs px-2 py-1 rounded">
-                세이프존 1
-              </div>
-            </div>
-
-            {/* Dead Zone Overlay (Example) */}
-            <div className="absolute bottom-20 right-20 w-48 h-32 border-4 border-danger rounded-lg bg-danger/10">
-              <div className="absolute -top-8 left-0 bg-danger text-white text-xs px-2 py-1 rounded">
-                데드존 1 (주방)
-              </div>
-            </div>
-
-            {/* Drawing Instructions */}
-            <div className="absolute bottom-4 left-4 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
-              💡 화면을 드래그하여 {zoneMode === 'safe' ? '세이프존' : '데드존'}을 그리세요
+            <p className="text-sm text-gray-600 mb-2">{clip.description}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Calendar className="w-3 h-3" />
+              {clip.timestamp}
             </div>
           </div>
-
-          {/* Zone List */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">설정된 구역</h3>
-            <ZoneItem
-              type="safe"
-              name="세이프존 1"
-              description="거실 중앙 영역"
-            />
-            <ZoneItem
-              type="safe"
-              name="세이프존 2"
-              description="놀이 공간"
-            />
-            <ZoneItem
-              type="dead"
-              name="데드존 1"
-              description="주방 입구"
-            />
-          </div>
         </div>
-      </div>
-
-      {/* Video Analysis Section */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">AI 비디오 분석 (테스트)</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Gemini 2.0 Flash (2.5 Flash)로 비디오를 분석하여 넘어짐, 위험 행동 등을 감지합니다
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 비디오 업로드 & 미리보기 */}
-          <div className="space-y-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleVideoSelect}
-              className="hidden"
-            />
-
-            {!videoPreviewUrl ? (
-              <div
-                onClick={handleUploadClick}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-all"
-              >
-                <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-700 font-medium mb-2">비디오 파일 업로드</p>
-                <p className="text-sm text-gray-500">클릭하여 비디오 파일을 선택하세요</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <video
-                  src={videoPreviewUrl}
-                  controls
-                  className="w-full rounded-lg bg-gray-900"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleAnalyzeVideo}
-                    disabled={isAnalyzing}
-                    className="btn-primary flex-1 flex items-center justify-center gap-2"
-                  >
-                    <Play className="w-4 h-4" />
-                    {isAnalyzing ? '분석 중...' : 'AI 분석 시작'}
-                  </button>
-                  <button
-                    onClick={handleReset}
-                    disabled={isAnalyzing}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    초기화
-                  </button>
-                </div>
-
-                {/* 분석 진행 바 */}
-                {isAnalyzing && (
-                  <div className="space-y-2">
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-primary-600 h-full transition-all duration-300"
-                        style={{ width: `${analysisProgress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-600 text-center">
-                      분석 진행 중... {analysisProgress}%
-                    </p>
-                  </div>
-                )}
-
-                {/* 에러 메시지 */}
-                {analysisError && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-red-900">분석 오류</p>
-                      <p className="text-sm text-red-700 mt-1">{analysisError}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 분석 결과 */}
-          <div className="space-y-4">
-            {analysisResult ? (
-              <>
-                {/* 통계 카드들 */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingDown className="w-5 h-5 text-red-600" />
-                      <p className="text-sm font-medium text-red-900">넘어짐</p>
-                    </div>
-                    <p className="text-3xl font-bold text-red-600">{analysisResult.falls}회</p>
-                  </div>
-
-                  <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="w-5 h-5 text-orange-600" />
-                      <p className="text-sm font-medium text-orange-900">위험 행동</p>
-                    </div>
-                    <p className="text-3xl font-bold text-orange-600">
-                      {analysisResult.dangerousActions}회
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Activity className="w-5 h-5 text-blue-600" />
-                      <p className="text-sm font-medium text-blue-900">전체 사건</p>
-                    </div>
-                    <p className="text-3xl font-bold text-blue-600">
-                      {analysisResult.totalIncidents}건
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-5 h-5 text-green-600" />
-                      <p className="text-sm font-medium text-green-900">안전도</p>
-                    </div>
-                    <p className="text-3xl font-bold text-green-600">
-                      {analysisResult.safetyScore}점
-                    </p>
-                  </div>
-                </div>
-
-                {/* 요약 */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-medium text-blue-900 mb-2">📋 분석 요약</p>
-                  <p className="text-sm text-blue-800">{analysisResult.summary}</p>
-                </div>
-
-                {/* 타임라인 이벤트 */}
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    타임라인 이벤트
-                  </p>
-                  <div className="max-h-64 overflow-y-auto space-y-2">
-                    {analysisResult.timelineEvents.map((event, index) => (
-                      <TimelineEventCard key={index} event={event} />
-                    ))}
-                  </div>
-                </div>
-
-                {/* 추천 사항 */}
-                {analysisResult.recommendations.length > 0 && (
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm font-medium text-yellow-900 mb-2">💡 안전 개선 추천</p>
-                    <ul className="space-y-1">
-                      {analysisResult.recommendations.map((rec, index) => (
-                        <li key={index} className="text-sm text-yellow-800">
-                          • {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="h-full flex items-center justify-center p-12 text-center">
-                <div>
-                  <Activity className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-500 font-medium">분석 결과가 여기에 표시됩니다</p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    비디오를 업로드하고 분석을 시작하세요
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Camera Connection Guide */}
-      <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">카메라 연동 가이드</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <GuideStep
-            step={1}
-            title="카메라 연결"
-            description="기존 홈캠의 RTSP 주소를 입력하거나 Wi-Fi로 연결하세요"
-            icon={Wifi}
-          />
-          <GuideStep
-            step={2}
-            title="위치 설정"
-            description="카메라가 설치된 공간을 지정하세요"
-            icon={MapPin}
-          />
-          <GuideStep
-            step={3}
-            title="구역 설정"
-            description="세이프존과 데드존을 그려서 안전 범위를 정의하세요"
-            icon={Shield}
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Camera Card Component
-function CameraCard({
-  id,
-  name,
-  status,
-  location,
-  isSelected,
-  onSelect,
-}: {
-  id: string
-  name: string
-  status: 'online' | 'offline'
-  location: string
-  isSelected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <div
-      onClick={onSelect}
-      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${isSelected
-          ? 'border-primary-500 bg-primary-50'
-          : 'border-gray-200 bg-white hover:border-gray-300'
-        }`}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <Camera className="w-5 h-5 text-gray-600" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-900">{name}</p>
-            <p className="text-xs text-gray-500">{location}</p>
-          </div>
-        </div>
-        {status === 'online' && (
-          <CheckCircle2 className="w-5 h-5 text-safe" />
-        )}
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-safe' : 'bg-gray-400'}`}></div>
-          <span className="text-xs text-gray-600">
-            {status === 'online' ? '온라인' : '오프라인'}
-          </span>
-        </div>
-        <div className="flex gap-1">
-          <button className="p-1 hover:bg-gray-200 rounded">
-            <Settings className="w-4 h-4 text-gray-600" />
+        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
+          <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2">
+            <Download className="w-3 h-3" />
+            다운로드
           </button>
-          <button className="p-1 hover:bg-danger-50 rounded">
-            <Trash2 className="w-4 h-4 text-gray-600 hover:text-danger" />
+          <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2">
+            <Share2 className="w-3 h-3" />
+            공유
           </button>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
-// Zone Item Component
-function ZoneItem({
-  type,
-  name,
-  description,
-}: {
-  type: 'safe' | 'dead'
-  name: string
-  description: string
-}) {
   return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-      <div className="flex items-center gap-3">
-        {type === 'safe' ? (
-          <Shield className="w-5 h-5 text-safe" />
-        ) : (
-          <Skull className="w-5 h-5 text-danger" />
+    <div className="p-8">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <Film className="w-8 h-8 text-primary-600" />
+          <h1 className="text-3xl font-bold text-gray-900">클립 하이라이트</h1>
+        </div>
+        <p className="text-gray-600">AI가 자동으로 생성한 중요한 순간들을 확인하세요</p>
+      </motion.div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <div className="card p-6 bg-gradient-to-br from-safe-50 to-white">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-8 h-8 text-safe" />
+              <div>
+                <p className="text-sm text-gray-600">발달 클립</p>
+                <p className="text-safe text-xl font-bold">{developmentClips.length}개</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <div className="card p-6 bg-gradient-to-br from-warning-50 to-white">
+            <div className="flex items-center gap-3">
+              <Shield className="w-8 h-8 text-warning" />
+              <div>
+                <p className="text-sm text-gray-600">안전 클립</p>
+                <p className="text-warning text-xl font-bold">{safetyClips.length}개</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <div className="card p-6 bg-gradient-to-br from-primary-50 to-white">
+            <div className="flex items-center gap-3">
+              <Calendar className="w-8 h-8 text-primary-600" />
+              <div>
+                <p className="text-sm text-gray-600">오늘 생성</p>
+                <p className="text-primary-600 text-xl font-bold">{developmentClips.length + safetyClips.length}개</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <div className="card p-6 bg-gradient-to-br from-primary-50 to-cyan-50">
+            <div className="flex items-center gap-3">
+              <Clock className="w-8 h-8 text-primary-600" />
+              <div>
+                <p className="text-sm text-gray-600">총 재생시간</p>
+                <p className="text-primary-600 text-xl font-bold">7분 23초</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Clips Tabs */}
+      <div className="space-y-6">
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('development')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              activeTab === 'development'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 inline mr-2" />
+            발달 클립 ({developmentClips.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('safety')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              activeTab === 'safety' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Shield className="w-4 h-4 inline mr-2" />
+            안전 클립 ({safetyClips.length})
+          </button>
+        </div>
+
+        {activeTab === 'development' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+            <div className="card p-6 bg-gradient-to-br from-safe-50 to-white mb-4">
+              <h3 className="mb-2 text-safe-dark font-semibold">발달 클립 하이라이트</h3>
+              <p className="text-sm text-gray-700">
+                AI가 분석한 중요한 발달 이정표와 행동 패턴을 자동으로 클립으로 저장했습니다. 각 클립은 언어, 운동, 인지, 사회성 등의 발달 영역별로 분류되어 있습니다.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {developmentClips.map((clip) => renderClipCard(clip, 'development'))}
+            </div>
+          </motion.div>
         )}
-        <div>
-          <p className="text-sm font-medium text-gray-900">{name}</p>
-          <p className="text-xs text-gray-500">{description}</p>
-        </div>
+
+        {activeTab === 'safety' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+            <div className="card p-6 bg-gradient-to-br from-warning-50 to-white mb-4">
+              <h3 className="mb-2 text-warning-dark font-semibold">안전 클립 하이라이트</h3>
+              <p className="text-sm text-gray-700">
+                안전 관련 이벤트가 발생한 순간을 자동으로 기록했습니다. 위험도에 따라 권장, 주의, 위험, 사고발생으로 분류되며, 각 상황에 대한 AI 분석이 포함됩니다.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {safetyClips.map((clip) => renderClipCard(clip, 'safety'))}
+            </div>
+          </motion.div>
+        )}
       </div>
-      <button className="p-1 hover:bg-gray-200 rounded">
-        <Trash2 className="w-4 h-4 text-gray-600" />
-      </button>
+
+      {/* Video Player Modal Placeholder */}
+      {selectedClip && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedClip(null)}
+        >
+          <div className="bg-white rounded-lg max-w-4xl w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="aspect-video bg-gray-900 rounded-lg mb-4 flex items-center justify-center">
+              <div className="text-white text-center">
+                <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>영상 플레이어</p>
+                <p className="text-sm opacity-50 mt-2">데모 환경에서는 실제 영상이 재생되지 않습니다</p>
+              </div>
+            </div>
+            <button onClick={() => setSelectedClip(null)} className="btn-primary w-full">
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-// Guide Step Component
-function GuideStep({
-  step,
-  title,
-  description,
-  icon: Icon,
-}: {
-  step: number
-  title: string
-  description: string
-  icon: any
-}) {
-  return (
-    <div className="flex gap-4">
-      <div className="flex-shrink-0">
-        <div className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center font-bold">
-          {step}
-        </div>
-      </div>
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Icon className="w-5 h-5 text-primary-600" />
-          <h3 className="font-semibold text-gray-900">{title}</h3>
-        </div>
-        <p className="text-sm text-gray-600">{description}</p>
-      </div>
-    </div>
-  )
-}
-
-// Timeline Event Card Component
-function TimelineEventCard({ event }: { event: any }) {
-  const getEventColor = (type: string) => {
-    switch (type) {
-      case 'fall':
-        return 'border-red-200 bg-red-50'
-      case 'danger':
-        return 'border-orange-200 bg-orange-50'
-      case 'warning':
-        return 'border-yellow-200 bg-yellow-50'
-      case 'safe':
-        return 'border-green-200 bg-green-50'
-      default:
-        return 'border-gray-200 bg-gray-50'
-    }
-  }
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'fall':
-        return <TrendingDown className="w-4 h-4 text-red-600" />
-      case 'danger':
-        return <AlertCircle className="w-4 h-4 text-orange-600" />
-      case 'warning':
-        return <AlertCircle className="w-4 h-4 text-yellow-600" />
-      case 'safe':
-        return <CheckCircle2 className="w-4 h-4 text-green-600" />
-      default:
-        return <Activity className="w-4 h-4 text-gray-600" />
-    }
-  }
-
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'high':
-        return <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">높음</span>
-      case 'medium':
-        return <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">보통</span>
-      case 'low':
-        return <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">낮음</span>
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div className={`p-3 rounded-lg border ${getEventColor(event.type)}`}>
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="flex items-center gap-2">
-          {getEventIcon(event.type)}
-          <span className="text-xs font-mono text-gray-600">{event.timestamp}</span>
-        </div>
-        {getSeverityBadge(event.severity)}
-      </div>
-      <p className="text-sm text-gray-800">{event.description}</p>
-    </div>
-  )
-}
-
