@@ -278,11 +278,10 @@ export default function SafetyReport() {
           {importantMessages.map((message, index) => (
             <div
               key={index}
-              className={`p-4 rounded-lg border-l-4 ${
-                message.color === 'red'
+              className={`p-4 rounded-lg border-l-4 ${message.color === 'red'
                   ? 'bg-danger-50 border-danger-500'
                   : 'bg-warning-50 border-warning-500'
-              }`}
+                }`}
             >
               <h3 className="text-sm font-semibold text-gray-900 mb-1">{message.title}</h3>
               <p className="text-sm text-gray-700">{message.description}</p>
@@ -334,13 +333,12 @@ export default function SafetyReport() {
             <div key={index} className="flex items-start gap-4">
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    event.type === 'success'
+                  className={`w-3 h-3 rounded-full ${event.type === 'success'
                       ? 'bg-safe'
                       : event.type === 'warning'
-                      ? 'bg-warning'
-                      : 'bg-danger'
-                  }`}
+                        ? 'bg-warning'
+                        : 'bg-danger'
+                    }`}
                 ></div>
                 {index < recentEvents.length - 1 && (
                   <div className="w-0.5 h-full bg-gray-200 mt-2"></div>
@@ -364,17 +362,15 @@ export default function SafetyReport() {
           {safetyActions.map((action, index) => (
             <div
               key={index}
-              className={`p-4 rounded-lg border-l-4 ${
-                action.priority === 'high'
+              className={`p-4 rounded-lg border-l-4 ${action.priority === 'high'
                   ? 'bg-danger-50 border-danger-500'
                   : 'bg-warning-50 border-warning-500'
-              }`}
+                }`}
             >
               <div className="flex items-center gap-3">
                 <AlertTriangle
-                  className={`w-5 h-5 ${
-                    action.priority === 'high' ? 'text-danger' : 'text-warning'
-                  }`}
+                  className={`w-5 h-5 ${action.priority === 'high' ? 'text-danger' : 'text-warning'
+                    }`}
                 />
                 <span className="text-sm font-semibold text-gray-900">{action.title}</span>
               </div>
@@ -615,23 +611,20 @@ function ChecklistItem({
 
   return (
     <div
-      className={`p-4 rounded-lg border-l-4 ${
-        checked ? 'bg-gray-50' : 'bg-white'
-      } ${priorityColors[priority]} border`}
+      className={`p-4 rounded-lg border-l-4 ${checked ? 'bg-gray-50' : 'bg-white'
+        } ${priorityColors[priority]} border`}
     >
       <div className="flex items-center gap-3">
         <div
-          className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
-            checked ? 'bg-safe' : 'bg-gray-200'
-          }`}
+          className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${checked ? 'bg-safe' : 'bg-gray-200'
+            }`}
         >
           {checked && <CheckCircle2 className="w-4 h-4 text-white" />}
         </div>
         <div className="flex-1">
           <p
-            className={`text-sm font-semibold ${
-              checked ? 'text-gray-600 line-through' : 'text-gray-900'
-            }`}
+            className={`text-sm font-semibold ${checked ? 'text-gray-600 line-through' : 'text-gray-900'
+              }`}
           >
             {title}
           </p>

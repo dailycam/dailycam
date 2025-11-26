@@ -11,7 +11,7 @@ import {
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
-  { name: '실시간 모니터링', href: '/live-monitoring', icon: MonitorPlay },
+  { name: '모니터링', href: '/live-monitoring', icon: MonitorPlay },
   { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
   { name: '안전 리포트', href: '/safety-report', icon: Shield },
   { name: '클립 하이라이트', href: '/clip-highlights', icon: Film },
@@ -26,7 +26,7 @@ export default function Sidebar() {
       <Link to="/" className="h-16 flex items-center px-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <img
-            src="/daily-cam (4).png"
+            src="/logo.png"
             alt="Daily-cam 로고"
             className="w-10 h-10"
             onError={(e) => {
