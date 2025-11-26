@@ -1,657 +1,568 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { motion } from 'motion/react'
 import {
   Shield,
-  AlertTriangle,
+  CheckCircle,
   Clock,
-  Download,
-  Share2,
-  TrendingUp,
-  CheckCircle2,
+  Eye,
+  CheckSquare,
+  Zap,
+  Bed,
+  Blocks,
+  Sparkles,
+  Lightbulb,
 } from 'lucide-react'
-import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
-import IncidentPieChart from '../components/Charts/IncidentPieChart'
-import { fetchAnalyticsData, type AnalyticsData } from '../lib/api'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts'
 
 export default function SafetyReport() {
-  const [data, setData] = useState<AnalyticsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [selectedHour, setSelectedHour] = useState<number | null>(null)
+  const [periodType, setPeriodType] = useState<'week' | 'month'>('week')
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const analyticsData = await fetchAnalyticsData()
-        setData(analyticsData)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '데이터 로드 실패')
-        console.error('Analytics 데이터 로드 오류:', err)
-      } finally {
-        setLoading(false)
-      }
+  // 주간 안전도 추이 데이터
+  const weeklySafetyData = [
+    { date: '월', 안전도: 90 },
+    { date: '화', 안전도: 92 },
+    { date: '수', 안전도: 88 },
+    { date: '목', 안전도: 91 },
+    { date: '금', 안전도: 93 },
+    { date: '토', 안전도: 89 },
+    { date: '일', 안전도: 92 },
+  ]
+
+  // 월간 안전도 추이 데이터
+  const monthlySafetyData = [
+    { date: '1주', 안전도: 88 },
+    { date: '2주', 안전도: 90 },
+    { date: '3주', 안전도: 91 },
+    { date: '4주', 안전도: 92 },
+  ]
+
+  const currentData = periodType === 'week' ? weeklySafetyData : monthlySafetyData
+
+  // 24시간 시계 데이터
+  const clockData = Array.from({ length: 24 }, (_, hour) => {
+    let safetyLevel: 'safe' | 'warning' | 'danger' | null = null
+    let safetyScore = 95
+
+    if (hour === 11) {
+      safetyLevel = 'warning'
+      safetyScore = 75
+    } else if (hour === 13) {
+      safetyLevel = 'warning'
+      safetyScore = 70
+    } else if (hour >= 0 && hour < 6 || hour >= 20 && hour < 24) {
+      safetyLevel = 'safe'
+      safetyScore = 98
+    } else if (hour >= 6 && hour < 20) {
+      safetyLevel = 'safe'
+      safetyScore = 90
     }
 
-    loadData()
-  }, [])
+    return {
+      hour,
+      safetyLevel,
+      safetyScore,
+    }
+  })
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-primary-50 via-blue-50 to-purple-50">
-        <div className="text-gray-600">로딩 중...</div>
-      </div>
-    )
+  // 안전사고 유형 데이터
+  const incidentTypeData = [
+    { name: '낙상', value: 35, color: '#fca5a5', count: 2 }, // 조금 더 진한 파스텔 핑크
+    { name: '충돌/부딛힘', value: 25, color: '#fdba74', count: 1 }, // 조금 더 진한 파스텔 오렌지
+    { name: '끼임', value: 15, color: '#fde047', count: 0 }, // 조금 더 진한 파스텔 옐로우
+    { name: '전도(가구 넘어짐)', value: 10, color: '#86efac', count: 0 }, // 조금 더 진한 파스텔 그린
+    { name: '감전', value: 10, color: '#7dd3fc', count: 0 }, // 조금 더 진한 파스텔 스카이블루
+    { name: '질식', value: 5, color: '#c4b5fd', count: 0 }, // 조금 더 진한 파스텔 퍼플
+  ]
+
+  // 안전 체크리스트
+  const safetyChecklist = [
+    {
+      title: '모서리 가드 설치',
+      icon: 'Shield',
+      description: '아이가 가구를 잡고 서기 시작했습니다. 뾰족한 모서리에 가드를 설치해주세요.',
+      priority: 'high',
+      gradient: 'from-pink-50 to-rose-50',
+      checked: false,
+    },
+    {
+      title: '전기 콘센트 안전 장치',
+      icon: 'Zap',
+      description: '전기 콘센트에 안전 장치가 설치돼있는지 확인해주세요.',
+      priority: 'high',
+      gradient: 'from-amber-50 to-orange-50',
+      checked: true,
+    },
+    {
+      title: '침대 낙상 방지',
+      icon: 'Bed',
+      description: '침대 가장자리 안전 패드가 제대로 고정되어 있는지 확인하세요.',
+      priority: 'medium',
+      gradient: 'from-yellow-50 to-amber-50',
+      checked: false,
+    },
+    {
+      title: '작은 물건 정리',
+      icon: 'Blocks',
+      description: '아이가 삼킬 수 있는 작은 물건들을 손이 닿지 않는 곳에 보관하세요.',
+      priority: 'medium',
+      gradient: 'from-emerald-50 to-teal-50',
+      checked: true,
+    },
+  ]
+
+  const currentSafetyScore = 92
+
+  // 시계 바늘 각도 계산
+  const getClockAngle = (hour: number) => {
+    return hour * 30 - 90
   }
 
-  if (error || !data) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-primary-50 via-blue-50 to-purple-50">
-        <div className="text-red-600">에러: {error || '데이터를 불러올 수 없습니다'}</div>
-      </div>
-    )
+  // 12시간 형식으로 변환
+  const formatClockHour = (hour: number) => {
+    if (hour === 0) return 12
+    if (hour > 12) return hour - 12
+    return hour
   }
 
-  const safetyScore = Math.round(data.summary.avg_safety_score)
-  const safetyLevel = safetyScore >= 90 ? '우수' : safetyScore >= 70 ? '양호' : safetyScore >= 50 ? '주의' : '위험'
-
-  // 목 데이터: 안전 이벤트 타임라인
-  const recentEvents = [
-    { time: '15:30', title: '주방 안전 게이트 접근 시도 - 차단됨', type: 'success' as const },
-    { time: '13:15', title: '거실 테이블 모서리 접촉 - 보호대 작동 확인', type: 'success' as const },
-    { time: '11:30', title: '예상치 못한 넘어짐 감지 - 즉시 회복', type: 'warning' as const },
-    { time: '10:45', title: '계단 입구 접근 - 안전문 잠금 확인', type: 'success' as const },
-    { time: '09:20', title: '작은 물건 접촉 시도 - 안전하게 제거됨', type: 'success' as const },
-    { time: '08:00', title: '일일 안전 점검 완료 - 모든 안전 장치 정상 작동', type: 'success' as const },
-  ]
-
-  // 목 데이터: 주요 알림 메시지
-  const importantMessages = [
-    {
-      priority: 'high' as const,
-      title: '주방 근처 반복 접근',
-      description: '아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다.',
-      color: 'red' as const,
-    },
-    {
-      priority: 'medium' as const,
-      title: '아동 물품 정리',
-      description: '아이가 가지고 놀 수 있는 작은 물건들이 남아있어요.',
-      color: 'yellow' as const,
-    },
-  ]
-
-  // 목 데이터: 안전 조치 사항
-  const safetyActions = [
-    {
-      priority: 'high' as const,
-      title: '주방 안전 게이트 설치',
-      icon: 'warning' as const,
-    },
-    {
-      priority: 'medium' as const,
-      title: '거실 테이블 모서리 보호대 추가',
-      icon: 'warning' as const,
-    },
-  ]
+  const getSeverityColor = (severity: string | null) => {
+    switch (severity) {
+      case 'safe':
+        return '#86efac' // 조금 더 진한 파스텔 그린
+      case 'warning':
+        return '#fcd34d' // 조금 더 진한 파스텔 옐로우
+      case 'danger':
+        return '#fca5a5' // 조금 더 진한 파스텔 핑크
+      case 'critical':
+        return '#f87171' // 조금 더 진한 핑크
+      default:
+        return '#e5e7eb'
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">안전 리포트</h1>
-          <p className="text-gray-600 mt-1">AI가 분석한 아이의 안전 상태 리포트</p>
+    <div className="p-8">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <Shield className="w-8 h-8 text-primary-600" />
+          <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
+            안전 리포트
+          </h1>
         </div>
-        <div className="flex gap-3">
-          <button className="btn-secondary flex items-center gap-2">
-            <Share2 className="w-4 h-4" />
-            공유
-          </button>
-          <button className="btn-primary flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            다운로드
-          </button>
-        </div>
-      </div>
+        <p className="text-gray-600">AI 분석 기반 영유아 안전 현황을 확인하세요</p>
+      </motion.div>
 
-      {/* Safety Status Header */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Safety Gauge */}
-        <div className="card bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-100">
-          <div className="flex flex-col items-center justify-center py-8">
-            <div className="relative w-48 h-48 mb-4">
-              <svg className="transform -rotate-90 w-48 h-48">
-                <circle
-                  cx="96"
-                  cy="96"
-                  r="80"
-                  stroke="currentColor"
-                  strokeWidth="16"
-                  fill="none"
-                  className="text-gray-200"
-                />
-                <circle
-                  cx="96"
-                  cy="96"
-                  r="80"
-                  stroke="currentColor"
-                  strokeWidth="16"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 80}`}
-                  strokeDashoffset={`${2 * Math.PI * 80 * (1 - safetyScore / 100)}`}
-                  className="text-primary-600"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold text-gray-900">{safetyScore}</span>
-                <span className="text-sm text-gray-600 mt-1">안전 상태</span>
-                <span className="text-xs px-2 py-1 rounded text-white font-medium bg-safe mt-2">
-                  {safetyLevel}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Hero Section - 안전도 스코어 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }} className="mb-8">
+        <div className="card p-8 bg-gradient-to-br from-sky-300 via-blue-400 via-cyan-400 to-blue-500 text-white overflow-hidden relative border-0 shadow-2xl">
+          {/* 그라데이션 오버레이 효과 */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-blue-400/40 via-transparent to-cyan-300/30" />
+          <div className="absolute top-0 right-0 w-80 h-80 bg-white/20 rounded-full blur-3xl -mr-32 -mt-32" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-sky-300/25 rounded-full blur-3xl -ml-48 -mb-48" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-300/15 rounded-full blur-3xl" />
 
-        {/* Right: Summary Info */}
-        <div className="card bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-100">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-gray-900 mb-2">오늘 하루 안전 요약</h2>
-              <p className="text-gray-800 leading-relaxed mb-4">
-                오늘 하루 아이의 안전은 전반적으로 양호합니다. 오늘 1시 4분경 거실에서 넘어짐이 감지되었으나,
-                이후 안정적으로 회복되었습니다.
-              </p>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <Clock className="w-4 h-4 text-primary-600" />
-                  <span>발생 시간: <strong>09:00-23:00</strong></span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <AlertTriangle className="w-4 h-4 text-warning" />
-                  <span>사고 발생: <strong>{data.summary.total_incidents}건</strong></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+            {/* 왼쪽: 안전도 스코어 */}
+            <div className="text-center">
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.8, delay: 0.3 }} className="inline-block">
+                <div className="relative inline-flex items-center justify-center">
+                  <svg className="w-56 h-56 -rotate-90">
+                    <circle cx="112" cy="112" r="100" stroke="rgba(255,255,255,0.2)" strokeWidth="12" fill="none" />
+                    <motion.circle
+                      cx="112"
+                      cy="112"
+                      r="100"
+                      stroke="white"
+                      strokeWidth="12"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 100}`}
+                      initial={{ strokeDashoffset: 2 * Math.PI * 100 }}
+                      animate={{ strokeDashoffset: 2 * Math.PI * 100 * (1 - currentSafetyScore / 100) }}
+                      transition={{ duration: 2, ease: 'easeOut' }}
+                    />
+                  </svg>
 
-      {/* Safety Checklist */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">안전 체크리스트</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ChecklistItem
-            title="안전 게이트 설치"
-            checked={false}
-            priority="high"
-          />
-          <ChecklistItem
-            title="모서리 보호대 설치"
-            checked={true}
-            priority="high"
-          />
-          <ChecklistItem
-            title="전기 콘센트 보호"
-            checked={true}
-            priority="high"
-          />
-          <ChecklistItem
-            title="계단 안전문 확인"
-            checked={true}
-            priority="high"
-          />
-          <ChecklistItem
-            title="작은 물건 정리"
-            checked={true}
-            priority="medium"
-          />
-          <ChecklistItem
-            title="가구 고정 확인"
-            checked={false}
-            priority="medium"
-          />
-          <ChecklistItem
-            title="세이프존 범위 재검토"
-            checked={true}
-            priority="low"
-          />
-        </div>
-      </div>
-
-      {/* Activity Pattern & Incident Types */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 24시간 활동 패턴 */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">24시간 활동 패턴</h2>
-          <div className="flex flex-col items-center justify-center py-8">
-            <ClockChart />
-            <div className="flex gap-6 text-sm mt-6">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-safe rounded-full"></div>
-                <span className="text-gray-700">안전 (90-100)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-warning rounded-full"></div>
-                <span className="text-gray-700">주의 (70-89)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-danger rounded-full"></div>
-                <span className="text-gray-700">위험 (0-69)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 사고 유형 */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">사고 유형</h2>
-            <AlertTriangle className="w-5 h-5 text-primary-600" />
-          </div>
-          <div className="flex flex-col items-center justify-center py-8">
-            <div className="h-80 w-80 mb-6">
-              <IncidentPieChart data={data.incident_distribution} />
-            </div>
-            <div className="flex gap-6 text-sm">
-              {data.incident_distribution
-                .filter((item) => item.value > 0)
-                .map((item) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                    <span className="text-gray-700">{item.name}</span>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <Shield className="w-12 h-12 mb-3 opacity-90" />
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.8, delay: 0.6 }} className="text-center">
+                      <span className="block text-5xl font-bold">92</span>
+                      <span className="text-lg opacity-90">점</span>
+                    </motion.div>
                   </div>
-                ))}
+                </div>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-6">
+                <h2 className="text-white mb-2 text-xl font-semibold">오늘의 안전도</h2>
+                <p className="text-white/90 text-sm">안전 상태 우수 · 위험 감지 0건</p>
+              </motion.div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Important Messages */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">주요 알림 메시지</h2>
-        <div className="space-y-3">
-          {importantMessages.map((message, index) => (
-            <div
-              key={index}
-              className={`p-4 rounded-lg border-l-4 ${
-                message.color === 'red'
-                  ? 'bg-danger-50 border-danger-500'
-                  : 'bg-warning-50 border-warning-500'
-              }`}
-            >
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">{message.title}</h3>
-              <p className="text-sm text-gray-700">{message.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Safety Trend */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">안전도 추이</h2>
-          <TrendingUp className="w-5 h-5 text-primary-600" />
-        </div>
-        <div className="h-64">
-          <SafetyTrendChart
-            data={data.weekly_trend.map((item) => ({
-              day: item.date,
-              score: item.safety,
-              incidents: item.incidents,
-            }))}
-          />
-        </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">평균</p>
-            <p className="text-base font-bold text-gray-900">{safetyScore}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">최고</p>
-            <p className="text-base font-bold text-safe">
-              {Math.max(...data.weekly_trend.map((d) => d.safety))}%
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">최저</p>
-            <p className="text-base font-bold text-warning">
-              {Math.min(...data.weekly_trend.map((d) => d.safety))}%
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Safety Events Timeline */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">안전 이벤트 타임라인</h2>
-        <div className="space-y-4">
-          {recentEvents.map((event, index) => (
-            <div key={index} className="flex items-start gap-4">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-3 h-3 rounded-full ${
-                    event.type === 'success'
-                      ? 'bg-safe'
-                      : event.type === 'warning'
-                      ? 'bg-warning'
-                      : 'bg-danger'
-                  }`}
-                ></div>
-                {index < recentEvents.length - 1 && (
-                  <div className="w-0.5 h-full bg-gray-200 mt-2"></div>
-                )}
+            {/* 오른쪽: AI 요약 */}
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="bg-white/25 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <Eye className="w-6 h-6 text-white" />
+                <h3 className="text-white font-semibold">AI 안전 분석</h3>
               </div>
-              <div className="flex-1 pb-4">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="text-sm font-semibold text-gray-900">{event.time}</span>
-                  <span className="text-sm text-gray-700">{event.title}</span>
+              <div className="space-y-3 text-sm text-white leading-relaxed mb-4">
+                <p className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <span>오늘 하루 아이의 안전 상태는 전반적으로 양호합니다. 총 2건의 주의 알림이 발생했으나 모두 정상 범위로 회복되었습니다.</span>
+                </p>
+                <p className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-4 h-4 text-white" />
+                  </div>
+                  <span>오후 1시 45분경 침대 가장자리 접근이 감지되었으며, 이후 안전한 영역으로 복귀했습니다.</span>
+                </p>
+              </div>
+
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 border border-white/30 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 text-white" />
+                  <p className="text-xs text-white font-semibold">AI 안전 권장사항</p>
+                </div>
+                <div className="space-y-1.5 text-xs text-white">
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>전반적으로 안전한 환경이 유지되고 있습니다.</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>오후 시간대에 활동량이 증가하므로 주변 환경을 더 자주 확인해주세요.</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span>•</span>
+                    <span>침대 가장자리 안전 패드 보강을 권장합니다.</span>
+                  </p>
                 </div>
               </div>
-            </div>
-          ))}
+
+              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/30">
+                <div className="text-center">
+                  <p className="text-xs text-white/80 mb-1">관찰 시간</p>
+                  <p className="text-white text-lg font-semibold">06:00~22:00</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-white/80 mb-1">주의 알림</p>
+                  <p className="text-white text-lg font-semibold">2건</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-white/80 mb-1">위험 감지</p>
+                  <p className="text-white text-lg font-semibold">0건</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-white/80 mb-1">사고 발생</p>
+                  <p className="text-white text-lg font-semibold">0건</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
+      </motion.div>
+
+      {/* 시계 형태 안전사고 분포 + 통계 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* 24시간 시계 */}
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.3 }}>
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+            <div className="flex items-center justify-between mb-6 h-8">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
+                24시간 안전 현황
+              </h3>
+              <Clock className="w-5 h-5 text-primary-500" />
+            </div>
+
+            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+              <svg width="320" height="320" className="relative max-w-full" viewBox="0 0 320 320">
+                <circle cx="160" cy="160" r="140" fill="none" stroke="#f0f9ff" strokeWidth="28" />
+
+                {clockData.map((data, index) => {
+                  const angle = getClockAngle(data.hour)
+                  const radian = (angle * Math.PI) / 180
+                  const innerRadius = 126
+                  const outerRadius = 154
+
+                  const innerX = 160 + innerRadius * Math.cos(radian)
+                  const innerY = 160 + innerRadius * Math.sin(radian)
+                  const outerX = 160 + outerRadius * Math.cos(radian)
+                  const outerY = 160 + outerRadius * Math.sin(radian)
+
+                  const hasEvent = data.safetyLevel !== null
+                  const isSelected = selectedHour === data.hour
+                  const showLabel = data.hour % 3 === 0
+
+                  return (
+                    <g key={data.hour}>
+                      <line
+                        x1={innerX}
+                        y1={innerY}
+                        x2={outerX}
+                        y2={outerY}
+                        stroke={hasEvent ? getSeverityColor(data.safetyLevel) : '#e5e7eb'}
+                        strokeWidth={hasEvent ? '7' : '2'}
+                        strokeLinecap="round"
+                      />
+
+                      {showLabel && (
+                        <text
+                          x={160 + 110 * Math.cos(radian)}
+                          y={160 + 110 * Math.sin(radian)}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className="text-xs"
+                          fill={hasEvent ? getSeverityColor(data.safetyLevel) : '#9ca3af'}
+                          fontWeight={hasEvent ? 'bold' : 'normal'}
+                        >
+                          {formatClockHour(data.hour)}
+                        </text>
+                      )}
+
+                      {hasEvent && (
+                        <motion.circle
+                          cx={160 + 140 * Math.cos(radian)}
+                          cy={160 + 140 * Math.sin(radian)}
+                          r={isSelected ? '9' : '7'}
+                          fill={getSeverityColor(data.safetyLevel)}
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: index * 0.02 }}
+                          className="cursor-pointer"
+                          onMouseEnter={() => setSelectedHour(data.hour)}
+                          onMouseLeave={() => setSelectedHour(null)}
+                        />
+                      )}
+                    </g>
+                  )
+                })}
+
+                <g>
+                  <circle cx="160" cy="160" r="36" fill="url(#centerGradient)" />
+                  <defs>
+                    <linearGradient id="centerGradient" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#38bdf8" />
+                      <stop offset="100%" stopColor="#7dd3fc" />
+                    </linearGradient>
+                  </defs>
+                  <text x="160" y="152" textAnchor="middle" className="text-xs" fill="white" fontWeight="bold">
+                    NOW
+                  </text>
+                  <text x="160" y="170" textAnchor="middle" className="text-sm" fill="white" fontWeight="bold">
+                    {new Date().getHours()}:00
+                  </text>
+                </g>
+              </svg>
+            </div>
+
+            <div className="flex items-center justify-center gap-4 mt-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-sm" />
+                <span className="text-gray-600">안전 (90+)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm" />
+                <span className="text-gray-600">주의 (70-89)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-pink-400 shadow-sm" />
+                <span className="text-gray-600">위험 (70미만)</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* 안전사고 유형 원그래프 */}
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.4 }}>
+          <div className="card p-8 h-full border-0 shadow-lg bg-gradient-to-br from-sky-100 to-cyan-100 flex flex-col min-h-[600px]">
+            <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
+              <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
+              안전사고 유형
+            </h3>
+
+            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={incidentTypeData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={130}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  >
+                    {incidentTypeData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}
+                    formatter={(value: number) => `${value}%`}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+              {incidentTypeData.map((item, index) => (
+                <motion.div
+                  key={item.name}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + index * 0.05 }}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <div className="w-3 h-3 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-gray-700">{item.name} ({item.count}건)</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Safety Actions */}
-      <div className="card bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">안전 조치 사항</h2>
-        <div className="space-y-3">
-          {safetyActions.map((action, index) => (
-            <div
-              key={index}
-              className={`p-4 rounded-lg border-l-4 ${
-                action.priority === 'high'
-                  ? 'bg-danger-50 border-danger-500'
-                  : 'bg-warning-50 border-warning-500'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <AlertTriangle
-                  className={`w-5 h-5 ${
-                    action.priority === 'high' ? 'text-danger' : 'text-warning'
+      {/* 안전 체크리스트 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="mb-8">
+        <div className="card p-6 border-0 shadow-lg">
+          <div className="flex items-center gap-2 mb-6">
+            <CheckSquare className="w-6 h-6 text-primary-500" />
+            <h3 className="text-lg font-semibold">오늘의 안전 체크리스트</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {safetyChecklist.map((item, index) => {
+              // 아이콘 이름에 따라 컴포넌트 선택
+              const IconComponent =
+                item.icon === 'Shield' ? Shield :
+                  item.icon === 'Zap' ? Zap :
+                    item.icon === 'Bed' ? Bed :
+                      item.icon === 'Blocks' ? Blocks : Shield
+
+              // 배경에 맞는 아이콘 색상 선택
+              const iconColor =
+                item.icon === 'Shield' ? 'text-rose-600' :
+                  item.icon === 'Zap' ? 'text-orange-600' :
+                    item.icon === 'Bed' ? 'text-amber-600' :
+                      item.icon === 'Blocks' ? 'text-teal-600' : 'text-gray-700'
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 + index * 0.1 }}
+                  className={`p-5 bg-gradient-to-br ${item.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                      <IconComponent className={`w-6 h-6 ${iconColor}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-gray-800 font-semibold">{item.title}</h4>
+                        <div
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${item.checked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 bg-white'
+                            }`}
+                        >
+                          {item.checked && <CheckCircle className="w-3 h-3 text-white" />}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{item.description}</p>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full shadow-sm ${item.priority === 'high' ? 'bg-pink-200 text-pink-800' : 'bg-amber-200 text-amber-800'
+                          }`}
+                      >
+                        {item.priority === 'high' ? '높은 우선순위' : '중간 우선순위'}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 안전도 추이 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.6 }} className="mb-8">
+        <div className="card p-6 border-0 shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="flex items-center gap-2 text-lg font-semibold">
+              <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
+              안전도 추이
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPeriodType('week')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${periodType === 'week' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
-                />
-                <span className="text-sm font-semibold text-gray-900">{action.title}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Clock Chart Component - 24시간 활동 패턴
-function ClockChart() {
-  // 목 데이터: 12시간 안전도 (1시간 단위, 손목시계 형식)
-  const hourlySafety = [
-    { hour: 0, safety: 95, incidents: 0 }, // 12시
-    { hour: 1, safety: 98, incidents: 0 }, // 1시
-    { hour: 2, safety: 99, incidents: 0 }, // 2시
-    { hour: 3, safety: 98, incidents: 0 }, // 3시
-    { hour: 4, safety: 97, incidents: 0 }, // 4시
-    { hour: 5, safety: 96, incidents: 0 }, // 5시
-    { hour: 6, safety: 94, incidents: 0 }, // 6시
-    { hour: 7, safety: 92, incidents: 0 }, // 7시
-    { hour: 8, safety: 90, incidents: 0 }, // 8시
-    { hour: 9, safety: 88, incidents: 1 }, // 9시
-    { hour: 10, safety: 85, incidents: 0 }, // 10시
-    { hour: 11, safety: 82, incidents: 1 }, // 11시
-  ]
-
-  const [hoveredHour, setHoveredHour] = useState<number | null>(null)
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
-
-  const clockSize = 320
-  const centerX = clockSize / 2
-  const centerY = clockSize / 2
-  const radius = 120
-
-  const getSafetyColor = (safety: number) => {
-    if (safety >= 90) return '#22c55e' // safe (green)
-    if (safety >= 70) return '#f59e0b' // warning (yellow)
-    return '#ef4444' // danger (red)
-  }
-
-  const getAngle = (hour: number) => {
-    // 손목시계 형식: 12시가 위쪽, 시계 방향으로 회전
-    // SVG 좌표계: 0도 = 오른쪽(3시), 90도 = 아래쪽(6시), 180도 = 왼쪽(9시), 270도 = 위쪽(12시)
-    // 시계 좌표계: 12시 = 위쪽 = 270도
-    // 12시간 = 360도, 1시간 = 30도
-    // 0시(12시)가 위로 오려면 270도 = -90도
-    // 각도 계산: (hour * 30 - 90)도
-    // hour=0: -90도=270도(위), hour=3: 0도(오른쪽), hour=6: 90도(아래), hour=9: 180도(왼쪽)
-    return ((hour * 30 - 90) * Math.PI) / 180
-  }
-
-  const handleMouseEnter = (hour: number, event: React.MouseEvent) => {
-    setHoveredHour(hour)
-    setTooltipPosition({ x: event.clientX, y: event.clientY })
-  }
-
-  const handleMouseMove = (event: React.MouseEvent) => {
-    if (hoveredHour !== null) {
-      setTooltipPosition({ x: event.clientX, y: event.clientY })
-    }
-  }
-
-  const handleMouseLeave = () => {
-    setHoveredHour(null)
-  }
-
-  const hoveredData = hoveredHour !== null ? hourlySafety[hoveredHour] : null
-
-  return (
-    <div className="relative">
-      <svg
-        width={clockSize}
-        height={clockSize}
-        className="transform rotate-0"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        {/* 시계 외곽 원 */}
-        <circle
-          cx={centerX}
-          cy={centerY}
-          r={radius + 10}
-          fill="none"
-          stroke="#e5e7eb"
-          strokeWidth="2"
-        />
-
-        {/* 시간 표시 (12, 3, 6, 9시) - 큰 인덱스 */}
-        {[0, 3, 6, 9].map((hour) => {
-          const angle = getAngle(hour)
-          const x1 = centerX + (radius + 8) * Math.cos(angle)
-          const y1 = centerY + (radius + 8) * Math.sin(angle)
-          const x2 = centerX + radius * Math.cos(angle)
-          const y2 = centerY + radius * Math.sin(angle)
-
-          return (
-            <line
-              key={hour}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke="#6b7280"
-              strokeWidth="3"
-            />
-          )
-        })}
-
-        {/* 시간 표시 (나머지 시간) - 작은 인덱스 */}
-        {[1, 2, 4, 5, 7, 8, 10, 11].map((hour) => {
-          const angle = getAngle(hour)
-          const x1 = centerX + (radius + 5) * Math.cos(angle)
-          const y1 = centerY + (radius + 5) * Math.sin(angle)
-          const x2 = centerX + (radius - 5) * Math.cos(angle)
-          const y2 = centerY + (radius - 5) * Math.sin(angle)
-
-          return (
-            <line
-              key={hour}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke="#9ca3af"
-              strokeWidth="2"
-            />
-          )
-        })}
-
-        {/* 각 시간대의 안전도 표시 (시계 인덱스처럼 표시, 크게) */}
-        {hourlySafety.map((data) => {
-          const angle = getAngle(data.hour)
-          // 원쪽에 가깝게 배치 (radius의 80% 정도 위치에서 시작)
-          const indexStartRadius = radius * 0.80
-          const indexEndRadius = radius * 0.98
-          const x1 = centerX + indexStartRadius * Math.cos(angle)
-          const y1 = centerY + indexStartRadius * Math.sin(angle)
-          const x2 = centerX + indexEndRadius * Math.cos(angle)
-          const y2 = centerY + indexEndRadius * Math.sin(angle)
-          const color = getSafetyColor(data.safety)
-
-          return (
-            <line
-              key={data.hour}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={color}
-              strokeWidth="6"
-              strokeLinecap="round"
-              opacity={hoveredHour === null || hoveredHour === data.hour ? 1 : 0.5}
-              onMouseEnter={(e) => handleMouseEnter(data.hour, e)}
-              style={{ cursor: 'pointer' }}
-              className="transition-opacity"
-            />
-          )
-        })}
-
-        {/* 중심 원 */}
-        <circle cx={centerX} cy={centerY} r="8" fill="#6b7280" />
-      </svg>
-
-      {/* 툴팁 */}
-      {hoveredData && hoveredHour !== null && (
-        <div
-          className="fixed z-50 bg-gray-900 text-white text-sm rounded-lg px-3 py-2 shadow-lg pointer-events-none"
-          style={{
-            left: `${tooltipPosition.x + 10}px`,
-            top: `${tooltipPosition.y - 10}px`,
-            transform: 'translateY(-100%)',
-          }}
-        >
-          <div className="font-semibold mb-1">
-            {hoveredHour === 0 ? '12' : hoveredHour}시
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: getSafetyColor(hoveredData.safety) }}
-            ></div>
-            <span>안전도: {hoveredData.safety}점</span>
-          </div>
-          {hoveredData.incidents > 0 && (
-            <div className="text-xs text-warning mt-1">
-              사고: {hoveredData.incidents}건
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 시간 레이블 (12, 3, 6, 9시) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-full h-full">
-          {[0, 3, 6, 9].map((hour) => {
-            const angle = getAngle(hour)
-            const labelRadius = radius + 30
-            const x = centerX + labelRadius * Math.cos(angle)
-            const y = centerY + labelRadius * Math.sin(angle)
-
-            return (
-              <div
-                key={hour}
-                className="absolute text-sm font-bold text-gray-700 transform -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  left: `${x}px`,
-                  top: `${y}px`,
-                }}
               >
-                {hour === 0 ? '12' : hour}
-              </div>
-            )
-          })}
+                주간
+              </button>
+              <button
+                onClick={() => setPeriodType('month')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${periodType === 'month' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                월간
+              </button>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={currentData}>
+              <defs>
+                <linearGradient id="safetyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="date" stroke="#9ca3af" style={{ fontSize: '12px' }} />
+              <YAxis domain={[0, 100]} stroke="#9ca3af" style={{ fontSize: '12px' }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                }}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="안전도"
+                stroke="#38bdf8"
+                strokeWidth={3}
+                dot={{ fill: '#38bdf8', strokeWidth: 2, r: 5, stroke: '#fff' }}
+                activeDot={{ r: 7 }}
+                fill="url(#safetyGradient)"
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// Checklist Item Component
-function ChecklistItem({
-  title,
-  checked,
-  priority,
-}: {
-  title: string
-  checked: boolean
-  priority: 'high' | 'medium' | 'low'
-}) {
-  const priorityColors = {
-    high: 'border-danger-500',
-    medium: 'border-warning-500',
-    low: 'border-gray-300',
-  }
-
-  return (
-    <div
-      className={`p-4 rounded-lg border-l-4 ${
-        checked ? 'bg-gray-50' : 'bg-white'
-      } ${priorityColors[priority]} border`}
-    >
-      <div className="flex items-center gap-3">
-        <div
-          className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
-            checked ? 'bg-safe' : 'bg-gray-200'
-          }`}
-        >
-          {checked && <CheckCircle2 className="w-4 h-4 text-white" />}
-        </div>
-        <div className="flex-1">
-          <p
-            className={`text-sm font-semibold ${
-              checked ? 'text-gray-600 line-through' : 'text-gray-900'
-            }`}
-          >
-            {title}
-          </p>
-        </div>
-        {priority === 'high' && (
-          <span className="text-xs px-2 py-1 rounded text-white font-medium bg-danger">
-            긴급
-          </span>
-        )}
-        {priority === 'medium' && (
-          <span className="text-xs px-2 py-1 rounded text-white font-medium bg-warning">
-            권장
-          </span>
-        )}
-        {priority === 'low' && (
-          <span className="text-xs px-2 py-1 rounded text-white font-medium bg-gray-400">
-            선택
-          </span>
-        )}
-      </div>
+      </motion.div>
     </div>
   )
 }

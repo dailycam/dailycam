@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.homecam import router as homecam_router
+from .api.live_monitoring import router as live_monitoring_router
 
 
 def create_app() -> FastAPI:
@@ -38,6 +39,9 @@ def create_app() -> FastAPI:
     
     # 비디오 분석 라우터만 등록
     app.include_router(homecam_router, prefix="/api/homecam", tags=["homecam"])
+    
+    # 라이브 모니터링 라우터 등록
+    app.include_router(live_monitoring_router, prefix="/api/live-monitoring", tags=["live-monitoring"])
     
     return app
 
