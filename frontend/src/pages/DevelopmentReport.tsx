@@ -8,6 +8,13 @@ import {
   TrendingUp,
   Download,
   Calendar as CalendarIcon,
+  Eye,
+  Activity,
+  Music,
+  Hand,
+  Target,
+  Star,
+  MessageCircle,
 } from 'lucide-react'
 import {
   RadarChart,
@@ -53,7 +60,7 @@ export default function DevelopmentReport() {
     {
       title: '까꿍 놀이',
       category: '인지 발달',
-      icon: '👀',
+      icon: 'Eye',
       description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
       duration: '10-15분',
       benefit: '인지 능력 향상',
@@ -62,7 +69,7 @@ export default function DevelopmentReport() {
     {
       title: '배밀이 연습',
       category: '운동 발달',
-      icon: '🤸',
+      icon: 'Activity',
       description: '좋아하는 장난감을 앞에 두고 손을 뻗게 유도하세요.',
       duration: '15-20분',
       benefit: '대근육 발달',
@@ -71,7 +78,7 @@ export default function DevelopmentReport() {
     {
       title: '노래 부르기',
       category: '언어 발달',
-      icon: '🎵',
+      icon: 'Music',
       description: '다양한 동요와 자장가를 들려주세요.',
       duration: '5-10분',
       benefit: '언어 자극',
@@ -80,7 +87,7 @@ export default function DevelopmentReport() {
     {
       title: '촉각 놀이',
       category: '감각 발달',
-      icon: '✋',
+      icon: 'Hand',
       description: '다양한 질감의 천이나 장난감을 만지게 해주세요.',
       duration: '10분',
       benefit: '감각 발달',
@@ -136,21 +143,27 @@ export default function DevelopmentReport() {
                 <h2 className="text-primary-900 text-xl font-semibold">오늘의 발달 요약</h2>
               </div>
               <div className="space-y-3 text-sm text-gray-700 leading-relaxed mb-6">
-                <p className="flex items-start gap-2">
-                  <span className="text-xl">🎯</span>
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <Target className="w-5 h-5 text-primary-600" />
+                  </div>
                   <span>
                     오늘 아이는 총 <span className="text-primary-600 font-semibold">79건</span>의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.
                   </span>
                 </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-xl">🌟</span>
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Star className="w-5 h-5 text-amber-600" />
+                  </div>
                   <span>
                     오전 9시경 시각 추적 능력이 눈에 띄게 향상되었고, 오후 3시에는 배밀이 자세로 약{' '}
                     <span className="text-primary-600 font-semibold">2미터 이동</span>하는 모습이 포착되었습니다. 이는 대근육 발달의 중요한 이정표입니다.
                   </span>
                 </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-xl">💬</span>
+                <p className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="w-5 h-5 text-cyan-600" />
+                  </div>
                   <span>
                     언어 발달에서도 다양한 음절의 옹알이가 18회 관찰되어 지난주 대비{' '}
                     <span className="text-primary-600 font-semibold">20% 증가</span>했습니다. 전반적으로 또래 평균보다 우수한 발달을 보이고 있습니다.
@@ -159,7 +172,10 @@ export default function DevelopmentReport() {
               </div>
 
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-primary-100">
-                <p className="text-xs text-primary-600 mb-2 font-semibold">💡 AI 발달 인사이트</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 text-primary-600" />
+                  <p className="text-xs text-primary-600 font-semibold">AI 발달 인사이트</p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
                   <p className="flex items-start gap-1">
                     <span>•</span>
@@ -334,32 +350,50 @@ export default function DevelopmentReport() {
             <h3 className="text-lg font-semibold">AI 추천 발달 촉진 놀이</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {recommendedActivities.map((activity, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 + index * 0.1 }}
-                className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-4xl">{activity.icon}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-gray-800 font-semibold">{activity.title}</h4>
-                      <span className="text-xs px-3 py-1 bg-white/80 text-gray-700 rounded-full shadow-sm">
-                        {activity.category}
-                      </span>
+            {recommendedActivities.map((activity, index) => {
+              // 아이콘 이름에 따라 컴포넌트 선택
+              const IconComponent =
+                activity.icon === 'Eye' ? Eye :
+                  activity.icon === 'Activity' ? Activity :
+                    activity.icon === 'Music' ? Music :
+                      activity.icon === 'Hand' ? Hand : Eye
+
+              // 배경에 맞는 아이콘 색상 선택
+              const iconColor =
+                activity.icon === 'Eye' ? 'text-orange-600' :
+                  activity.icon === 'Activity' ? 'text-green-600' :
+                    activity.icon === 'Music' ? 'text-blue-600' :
+                      activity.icon === 'Hand' ? 'text-cyan-600' : 'text-gray-700'
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 + index * 0.1 }}
+                  className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                      <IconComponent className={`w-6 h-6 ${iconColor}`} />
                     </div>
-                    <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">⏱ {activity.duration}</span>
-                      <span className="flex items-center gap-1">✨ {activity.benefit}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-gray-800 font-semibold">{activity.title}</h4>
+                        <span className="text-xs px-3 py-1 bg-white/80 text-gray-700 rounded-full shadow-sm">
+                          {activity.category}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">⏱ {activity.duration}</span>
+                        <span className="flex items-center gap-1">✨ {activity.benefit}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              )
+            })}
           </div>
         </div>
       </motion.div>
