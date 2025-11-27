@@ -4,8 +4,12 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
 import time  # 시간 측정을 위한 import 추가
 
 from app.services.gemini_service import GeminiService, get_gemini_service
+from app.utils.json_to_txt_formatter import GeminiAnalysisFormatter
 
 router = APIRouter()
+
+# TXT 파일 저장을 위한 formatter 인스턴스 생성
+formatter = GeminiAnalysisFormatter(output_dir="analysis_results")
 
 
 @router.post("/analyze-video")
@@ -72,6 +76,27 @@ async def analyze_video(
         end_time = time.time()  # 분석 종료 시간 기록
         analysis_time = end_time - start_time
         print(f"[VLM 비디오 분석 완료] 총 소요 시간: {analysis_time:.2f}초")
+        
+        # ✅ TXT 파일로 저장 (사람이 읽기 쉽게 포맷팅)
+        try:
+            txt_path = formatter.format_and_save(
+                analysis_data=result,
+                filename_prefix=f"analysis_stage{result.get('meta', {}).get('assumed_stage', 'unknown')}"
+            )
+            print(f"📄 TXT 파일 저장 완료: {txt_path}")
+        except Exception as txt_error:
+            print(f"⚠️ TXT 파일 저장 실패: {txt_error}")
+        
+        # ✅ 원본 JSON도 저장 (디버깅용)
+        try:
+            json_path = formatter.save_raw_json(
+                data=result,
+                stage="final",
+                filename_prefix=f"raw_stage{result.get('meta', {}).get('assumed_stage', 'unknown')}"
+            )
+            print(f"📄 원본 JSON 저장 완료: {json_path}")
+        except Exception as json_error:
+            print(f"⚠️ JSON 파일 저장 실패: {json_error}")
         
         return result
     except ValueError as e:
