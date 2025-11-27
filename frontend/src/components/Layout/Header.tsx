@@ -1,6 +1,6 @@
-import { Bell, User, LogOut, ChevronDown } from 'lucide-react'
+import { Bell, User, LogOut, ChevronDown, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
 interface UserInfo {
   id: number
@@ -10,7 +10,12 @@ interface UserInfo {
   created_at: string
 }
 
-export default function Header() {
+interface HeaderProps {
+  isSidebarOpen: boolean
+  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const navigate = useNavigate()
@@ -73,9 +78,33 @@ export default function Header() {
   }
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-6">
-      {/* Right Section */}
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6">
+      {/* Left section: Conditional "Daily-cam" title/logo */}
       <div className="flex items-center gap-4">
+        {!isSidebarOpen && (
+          <Link to="/" className="flex items-center gap-3">
+            <img
+              src="/logo.png"
+              alt="Daily-cam 로고"
+              className="w-10 h-10"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                e.currentTarget.nextElementSibling?.classList.remove('hidden')
+              }}
+            />
+            <div className="hidden w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center">
+              <span className="text-white text-xl">👶</span>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">Daily-cam</h1>
+              <p className="text-xs text-gray-500">아이 곁에</p>
+            </div>
+          </Link>
+        )}
+      </div>
+
+      {/* Right Section (Notifications and User Profile) */}
+      <div className="flex items-center gap-4 ml-auto">
         {/* Notifications */}
         <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
           <Bell className="w-5 h-5" />

@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 
@@ -16,8 +16,17 @@ export default function Layout() {
     localStorage.setItem('sidebarOpen', JSON.stringify(isSidebarOpen))
   }, [isSidebarOpen])
 
+  const sidebarTransformClasses = isSidebarOpen
+    ? 'translate-x-0 lg:translate-x-0'
+    : '-translate-x-full lg:-translate-x-full'
+  const mainLayoutMargin = isSidebarOpen ? 'lg:ml-64' : 'lg:ml-0'
+  const SIDEBAR_WIDTH = 256
+  const toggleButtonLeft = isSidebarOpen ? SIDEBAR_WIDTH : 12
+  const toggleButtonTranslateClass = isSidebarOpen ? 'translate-x-0' : '-translate-x-1/2'
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="relative flex h-screen bg-gray-50">
+
       {/* 모바일용 오버레이 */}
       {isSidebarOpen && (
         <div
@@ -26,40 +35,35 @@ export default function Layout() {
         />
       )}
 
-      {/* Sidebar - 모바일: fixed, 데스크톱: 조건부 렌더링 */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        aria-label="사이드바 토글"
+        className={`flex fixed top-1/2 z-[60] h-28 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-sm transition hover:bg-gray-100 ${toggleButtonTranslateClass}`}
+        style={{ left: `${toggleButtonLeft}px` }}
+      >
+        {isSidebarOpen ? (
+          <ChevronLeft className="h-5 w-5 text-gray-500" />
+        ) : (
+          <ChevronRight className="h-5 w-5 text-gray-500" />
+        )}
+      </button>
+
+      {/* Sidebar */}
       <div
         className={`
-          fixed lg:relative inset-y-0 left-0 z-50
+          fixed lg:absolute inset-y-0 left-0 z-50
           lg:h-full
           transform transition-transform duration-300 ease-in-out
-          lg:transform-none
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          ${!isSidebarOpen ? 'lg:hidden' : 'lg:block'}
+          ${sidebarTransformClasses}
         `}
       >
         <Sidebar />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 토글 버튼 바 */}
-        <div className="h-16 border-b border-gray-200 bg-white flex items-center px-4 gap-4">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            aria-label="사이드바 토글"
-          >
-            {isSidebarOpen ? (
-              <X className="w-5 h-5 text-gray-700" />
-            ) : (
-              <Menu className="w-5 h-5 text-gray-700" />
-            )}
-          </button>
-          <h2 className="text-lg font-semibold text-gray-900">Daily-cam</h2>
-        </div>
-
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${mainLayoutMargin}`}>
+        <Header isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
+        <main className={`flex-1 overflow-y-auto p-6 transition-all duration-300`}>
           <Outlet />
         </main>
       </div>
