@@ -14,7 +14,19 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(255), nullable=True)
     picture = Column(String(512), nullable=True)
-    is_subscribed = Column(Integer, default=0)  # 0: 미구독, 1: 구독
+
+    # 구독 여부 (0: 미구독, 1: 구독)
+    is_subscribed = Column(Integer, default=0)
+
+    # 🔥 어떤 플랜인지 (예: BASIC, PREMIUM 등)
+    subscription_plan = Column(String(50), nullable=True)
+
+    # 정기 결제에 필요한 customer_uid
+    subscription_customer_uid = Column(String(255), nullable=True)
+
+    # 다음 결제 예정일
+    next_billing_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
