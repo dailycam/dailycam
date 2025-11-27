@@ -8,6 +8,9 @@ import os
 from .api.homecam import router as homecam_router
 from .api.live_monitoring import router as live_monitoring_router
 from .api.auth.router import router as auth_router
+from .api.children.router import router as children_router
+from .api.analysis.router import router as analysis_router
+from .api.dashboard.router import router as dashboard_router
 from .database import Base, engine
 from .database.session import test_db_connection
 
@@ -37,13 +40,20 @@ def create_app() -> FastAPI:
             # 테이블 생성
             print("\n📋 데이터베이스 테이블 확인 중...")
             try:
+                # 모든 모델 import (테이블 생성을 위해 필수!)
+                from .models import (
+                    User, Child, VideoAnalysis, DevelopmentSkill, SkillExample,
+                    SafetyIncident, EnvironmentRisk, IncidentSummary,
+                    StageEvidence, AnalysisRawJson, TokenBlacklist
+                )
+                
                 Base.metadata.create_all(bind=engine)
                 print("✅ 데이터베이스 테이블 준비 완료!")
                 
                 # 생성된 테이블 목록 출력
                 if Base.metadata.tables:
                     print("\n📌 사용 가능한 테이블:")
-                    for table_name in Base.metadata.tables.keys():
+                    for table_name in sorted(Base.metadata.tables.keys()):
                         print(f"   - {table_name}")
                 else:
                     print("   (모델이 정의되지 않아 테이블이 없습니다)")
@@ -55,7 +65,7 @@ def create_app() -> FastAPI:
         print("\n" + "=" * 60)
         print("✨ 서버가 준비되었습니다!")
         print("   API 문서: http://localhost:8000/docs")
-        print("=" * 60 + "\n")
+        print("==" * 60 + "\n")
     
     @app.on_event("shutdown")
     async def shutdown_event():
@@ -70,7 +80,9 @@ def create_app() -> FastAPI:
             "version": "0.1.0",
             "docs": "/docs",
             "endpoints": {
-                "analyze_video": "/api/homecam/analyze-video"
+                "analyze_video": "/api/homecam/analyze-video",
+                "get_analyses": "/api/analysis/analyses",
+                "get_children": "/api/children/children"
             }
         }
     
@@ -89,14 +101,13 @@ def create_app() -> FastAPI:
         secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key")
     )
     
-    # 인증 라우터 등록
+    # 라우터 등록
     app.include_router(auth_router)
-    
-    # 비디오 분석 라우터 등록
     app.include_router(homecam_router, prefix="/api/homecam", tags=["homecam"])
-    
-    # 라이브 모니터링 라우터 등록
     app.include_router(live_monitoring_router, prefix="/api/live-monitoring", tags=["live-monitoring"])
+    app.include_router(children_router, prefix="/api/children", tags=["children"])
+    app.include_router(analysis_router, prefix="/api/analysis", tags=["analysis"])
+    app.include_router(dashboard_router, prefix="/api", tags=["dashboard"])
     
     return app
 
