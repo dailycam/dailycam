@@ -134,7 +134,10 @@ async def get_current_user(
         "name": user.name,
         "picture": user.picture,
         "is_subscribed": user.is_subscribed == 1,
-        "created_at": user.created_at
+        "created_at": user.created_at,
+        "next_billing_at": user.next_billing_at,
+        "has_billing_key": user.subscription_customer_uid is not None,
+        "subscription_plan": user.subscription_plan
     }
 
 

@@ -8,17 +8,32 @@ interface UserInfo {
   name: string
   picture: string
   created_at: string
+  is_subscribed?: boolean | number
+  subscription_plan?: string | null
 }
 
-interface HeaderProps {
-  isSidebarOpen: boolean
-  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps) {
+export default function Header() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const navigate = useNavigate()
+
+  // 플랜 코드 → 표시용 문구
+  const getPlanLabel = (info: UserInfo | null) => {
+    if (!info) return '로딩 중...'
+
+    const subscribed = Boolean(info.is_subscribed)
+
+    if (!subscribed) return '무료 회원'
+
+    switch (info.subscription_plan) {
+      case 'BASIC':
+        return '베이직 플랜 회원'
+      case 'PREMIUM':
+        return '프리미엄 플랜 회원'
+      default:
+        return '구독 회원'
+    }
+  }
 
   // 사용자 정보 가져오기
   useEffect(() => {
@@ -33,15 +48,17 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps)
       try {
         const response = await fetch('http://localhost:8000/api/auth/me', {
           headers: {
-            'Authorization': `Bearer ${token}`
-          }
+            Authorization: `Bearer ${token}`,
+          },
         })
 
         if (response.ok) {
           const data = await response.json()
-          setUserInfo(data)
+          setUserInfo({
+            ...data,
+            is_subscribed: Boolean(data.is_subscribed),
+          })
         } else {
-          // 토큰이 유효하지 않으면 로그인 페이지로
           localStorage.removeItem('access_token')
           navigate('/login')
         }
@@ -58,28 +75,23 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps)
 
     if (token) {
       try {
-        // 백엔드에 로그아웃 요청 (토큰 블랙리스트 추가)
         await fetch('http://localhost:8000/api/auth/logout-with-token', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`
-          }
+            Authorization: `Bearer ${token}`,
+          },
         })
       } catch (error) {
         console.error('로그아웃 오류:', error)
       }
     }
 
-    // 토큰 삭제
     localStorage.removeItem('access_token')
-
-    // 메인 페이지로 이동
     navigate('/')
   }
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6">
-      {/* Left section: Conditional "Daily-cam" title/logo */}
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-6">
       <div className="flex items-center gap-4">
         {!isSidebarOpen && (
           <Link to="/" className="flex items-center gap-3">
@@ -121,7 +133,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps)
               <p className="text-sm font-medium text-gray-900">
                 {userInfo?.name || '로딩 중...'}
               </p>
-              <p className="text-xs text-gray-500">프리미엄 회원</p>
+              <p className="text-xs text-gray-500">{getPlanLabel(userInfo)}</p>
             </div>
             {userInfo?.picture ? (
               <img
@@ -134,10 +146,12 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen }: HeaderProps)
                 <User className="w-5 h-5" />
               </div>
             )}
-            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''
+                }`}
+            />
           </button>
 
-          {/* Dropdown Menu */}
           {showDropdown && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
               <button

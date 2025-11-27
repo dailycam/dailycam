@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import VideoAnalysisTest from './pages/VideoAnalysisTest'
 import Login from './pages/Login'
 import AuthCallback from './pages/AuthCallback'
+import SubscriptionPage from './pages/SubscriptionPage'
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <Route path="clip-highlights" element={<ClipHighlights />} />
         <Route path="video-analysis-test" element={<VideoAnalysisTest />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="/subscription" element={<SubscriptionPage />} />
       </Route>
     </Routes>
   )
