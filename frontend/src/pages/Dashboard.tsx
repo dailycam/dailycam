@@ -518,15 +518,15 @@ export default function Dashboard() {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="mb-8"
       >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className={`${sectionTitleClass} font-bold`}>오늘의 하이라이트</h2>
-              <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
+          <div>
+            <h2 className={`${sectionTitleClass} font-bold`}>오늘의 하이라이트</h2>
+            <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-4 mb-4">
           <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
@@ -599,8 +599,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('day')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'day'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   하루
@@ -608,8 +608,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('week')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'week'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   7일
@@ -617,8 +617,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('month')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'month'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   한달
@@ -626,8 +626,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('year')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'year'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   1년
