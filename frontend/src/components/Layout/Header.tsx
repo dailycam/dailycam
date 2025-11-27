@@ -12,7 +12,11 @@ interface UserInfo {
   subscription_plan?: string | null
 }
 
-export default function Header() {
+interface HeaderProps {
+  isSidebarOpen: boolean
+}
+
+export default function Header({ isSidebarOpen }: HeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const navigate = useNavigate()
