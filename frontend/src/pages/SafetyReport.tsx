@@ -6,6 +6,11 @@ import {
   Clock,
   Eye,
   CheckSquare,
+  Zap,
+  Bed,
+  Blocks,
+  Sparkles,
+  Lightbulb,
 } from 'lucide-react'
 import {
   LineChart,
@@ -86,7 +91,7 @@ export default function SafetyReport() {
   const safetyChecklist = [
     {
       title: '모서리 가드 설치',
-      icon: '🛡️',
+      icon: 'Shield',
       description: '아이가 가구를 잡고 서기 시작했습니다. 뾰족한 모서리에 가드를 설치해주세요.',
       priority: 'high',
       gradient: 'from-pink-50 to-rose-50',
@@ -94,7 +99,7 @@ export default function SafetyReport() {
     },
     {
       title: '전기 콘센트 안전 장치',
-      icon: '⚡',
+      icon: 'Zap',
       description: '전기 콘센트에 안전 장치가 설치돼있는지 확인해주세요.',
       priority: 'high',
       gradient: 'from-amber-50 to-orange-50',
@@ -102,7 +107,7 @@ export default function SafetyReport() {
     },
     {
       title: '침대 낙상 방지',
-      icon: '🛏️',
+      icon: 'Bed',
       description: '침대 가장자리 안전 패드가 제대로 고정되어 있는지 확인하세요.',
       priority: 'medium',
       gradient: 'from-yellow-50 to-amber-50',
@@ -110,7 +115,7 @@ export default function SafetyReport() {
     },
     {
       title: '작은 물건 정리',
-      icon: '🧸',
+      icon: 'Blocks',
       description: '아이가 삼킬 수 있는 작은 물건들을 손이 닿지 않는 곳에 보관하세요.',
       priority: 'medium',
       gradient: 'from-emerald-50 to-teal-50',
@@ -171,7 +176,7 @@ export default function SafetyReport() {
 
           <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
             {/* 왼쪽: 안전도 스코어 */}
-            <div className="text-center lg:text-left">
+            <div className="text-center">
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.8, delay: 0.3 }} className="inline-block">
                 <div className="relative inline-flex items-center justify-center">
                   <svg className="w-56 h-56 -rotate-90">
@@ -203,30 +208,37 @@ export default function SafetyReport() {
 
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-6">
                 <h2 className="text-white mb-2 text-xl font-semibold">오늘의 안전도</h2>
-                <p className="text-primary-100 text-sm">안전 상태 우수 · 위험 감지 0건 🛡️</p>
+                <p className="text-white/90 text-sm">안전 상태 우수 · 위험 감지 0건</p>
               </motion.div>
             </div>
 
             {/* 오른쪽: AI 요약 */}
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-xl">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="bg-white/25 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-xl">
               <div className="flex items-center gap-2 mb-4">
-                <Eye className="w-6 h-6" />
+                <Eye className="w-6 h-6 text-white" />
                 <h3 className="text-white font-semibold">AI 안전 분석</h3>
               </div>
-              <div className="space-y-3 text-sm text-primary-50 leading-relaxed mb-4">
-                <p className="flex items-start gap-2">
-                  <span className="text-lg">✨</span>
+              <div className="space-y-3 text-sm text-white leading-relaxed mb-4">
+                <p className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
                   <span>오늘 하루 아이의 안전 상태는 전반적으로 양호합니다. 총 2건의 주의 알림이 발생했으나 모두 정상 범위로 회복되었습니다.</span>
                 </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-lg">🕐</span>
+                <p className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-4 h-4 text-white" />
+                  </div>
                   <span>오후 1시 45분경 침대 가장자리 접근이 감지되었으며, 이후 안전한 영역으로 복귀했습니다.</span>
                 </p>
               </div>
 
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20 mb-4">
-                <p className="text-xs text-primary-100 mb-2 font-semibold">💡 AI 안전 권장사항</p>
-                <div className="space-y-1.5 text-xs text-primary-50">
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 border border-white/30 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 text-white" />
+                  <p className="text-xs text-white font-semibold">AI 안전 권장사항</p>
+                </div>
+                <div className="space-y-1.5 text-xs text-white">
                   <p className="flex items-start gap-1">
                     <span>•</span>
                     <span>전반적으로 안전한 환경이 유지되고 있습니다.</span>
@@ -242,21 +254,21 @@ export default function SafetyReport() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/20">
+              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/30">
                 <div className="text-center">
-                  <p className="text-xs text-primary-100 mb-1">관찰 시간</p>
+                  <p className="text-xs text-white/80 mb-1">관찰 시간</p>
                   <p className="text-white text-lg font-semibold">06:00~22:00</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-primary-100 mb-1">주의 알림</p>
+                  <p className="text-xs text-white/80 mb-1">주의 알림</p>
                   <p className="text-white text-lg font-semibold">2건</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-primary-100 mb-1">위험 감지</p>
+                  <p className="text-xs text-white/80 mb-1">위험 감지</p>
                   <p className="text-white text-lg font-semibold">0건</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-primary-100 mb-1">사고 발생</p>
+                  <p className="text-xs text-white/80 mb-1">사고 발생</p>
                   <p className="text-white text-lg font-semibold">0건</p>
                 </div>
               </div>
@@ -387,13 +399,13 @@ export default function SafetyReport() {
             <div className="flex items-center justify-center flex-1 min-h-0 py-4">
               <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
-                  <Pie 
-                    data={incidentTypeData} 
-                    cx="50%" 
-                    cy="50%" 
-                    labelLine={false} 
-                    outerRadius={130} 
-                    fill="#8884d8" 
+                  <Pie
+                    data={incidentTypeData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={130}
+                    fill="#8884d8"
                     dataKey="value"
                     label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                   >
@@ -414,24 +426,19 @@ export default function SafetyReport() {
               </ResponsiveContainer>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              {incidentTypeData.map((item, index) => {
-                const total = incidentTypeData.reduce((sum, d) => sum + d.value, 0)
-                const percentage = ((item.value / total) * 100).toFixed(0)
-                return (
-                  <motion.div
-                    key={item.name}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.5 + index * 0.05 }}
-                    className="flex items-center gap-2 text-xs"
-                  >
-                    <div className="w-3 h-3 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-gray-700 flex-1 truncate">{item.name}</span>
-                    <span className="text-gray-900 px-2 py-0.5 bg-white rounded-lg shadow-sm font-semibold whitespace-nowrap">{item.count}건 ({percentage}%)</span>
-                  </motion.div>
-                )
-              })}
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+              {incidentTypeData.map((item, index) => (
+                <motion.div
+                  key={item.name}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + index * 0.05 }}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <div className="w-3 h-3 rounded-full shadow-sm flex-shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-gray-700">{item.name} ({item.count}건)</span>
+                </motion.div>
+              ))}
             </div>
           </div>
         </motion.div>
@@ -445,39 +452,55 @@ export default function SafetyReport() {
             <h3 className="text-lg font-semibold">오늘의 안전 체크리스트</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {safetyChecklist.map((item, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 + index * 0.1 }}
-                className={`p-5 bg-gradient-to-br ${item.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-4xl">{item.icon}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-gray-800 font-semibold">{item.title}</h4>
-                      <div
-                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${
-                          item.checked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 bg-white'
-                        }`}
-                      >
-                        {item.checked && <CheckCircle className="w-3 h-3 text-white" />}
-                      </div>
+            {safetyChecklist.map((item, index) => {
+              // 아이콘 이름에 따라 컴포넌트 선택
+              const IconComponent =
+                item.icon === 'Shield' ? Shield :
+                  item.icon === 'Zap' ? Zap :
+                    item.icon === 'Bed' ? Bed :
+                      item.icon === 'Blocks' ? Blocks : Shield
+
+              // 배경에 맞는 아이콘 색상 선택
+              const iconColor =
+                item.icon === 'Shield' ? 'text-rose-600' :
+                  item.icon === 'Zap' ? 'text-orange-600' :
+                    item.icon === 'Bed' ? 'text-amber-600' :
+                      item.icon === 'Blocks' ? 'text-teal-600' : 'text-gray-700'
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 + index * 0.1 }}
+                  className={`p-5 bg-gradient-to-br ${item.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                      <IconComponent className={`w-6 h-6 ${iconColor}`} />
                     </div>
-                    <p className="text-sm text-gray-600 mb-3">{item.description}</p>
-                    <span
-                      className={`text-xs px-3 py-1 rounded-full shadow-sm ${
-                        item.priority === 'high' ? 'bg-pink-200 text-pink-800' : 'bg-amber-200 text-amber-800'
-                      }`}
-                    >
-                      {item.priority === 'high' ? '높은 우선순위' : '중간 우선순위'}
-                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-gray-800 font-semibold">{item.title}</h4>
+                        <div
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${item.checked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 bg-white'
+                            }`}
+                        >
+                          {item.checked && <CheckCircle className="w-3 h-3 text-white" />}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{item.description}</p>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full shadow-sm ${item.priority === 'high' ? 'bg-pink-200 text-pink-800' : 'bg-amber-200 text-amber-800'
+                          }`}
+                      >
+                        {item.priority === 'high' ? '높은 우선순위' : '중간 우선순위'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              )
+            })}
           </div>
         </div>
       </motion.div>
@@ -493,17 +516,15 @@ export default function SafetyReport() {
             <div className="flex gap-2">
               <button
                 onClick={() => setPeriodType('week')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  periodType === 'week' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${periodType === 'week' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 주간
               </button>
               <button
                 onClick={() => setPeriodType('month')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  periodType === 'month' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${periodType === 'month' ? 'bg-primary-500 text-white hover:bg-primary-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 월간
               </button>

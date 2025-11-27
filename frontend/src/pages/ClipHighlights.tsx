@@ -236,20 +236,18 @@ export default function ClipHighlights() {
         <div className="flex gap-2 border-b border-gray-200">
           <button
             onClick={() => setActiveTab('development')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'development'
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'development'
                 ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <TrendingUp className="w-4 h-4 inline mr-2" />
             발달 클립 ({developmentClips.length})
           </button>
           <button
             onClick={() => setActiveTab('safety')}
-            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-              activeTab === 'safety' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'safety' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
           >
             <Shield className="w-4 h-4 inline mr-2" />
             안전 클립 ({safetyClips.length})

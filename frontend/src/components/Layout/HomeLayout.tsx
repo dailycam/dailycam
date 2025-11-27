@@ -14,9 +14,9 @@ export default function HomeLayout() {
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-3">
-              <img 
-                src="/daily-cam (4).png" 
-                alt="Daily-cam 로고" 
+              <img
+                src="/logo.png"
+                alt="Daily-cam 로고"
                 className="w-12 h-12"
                 onError={(e) => {
                   // 로고 이미지가 없을 경우 폴백
@@ -131,9 +131,9 @@ export default function HomeLayout() {
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
           <div className="flex flex-col items-center justify-center gap-4">
             <div className="flex items-center gap-3">
-              <img 
-                src="/daily-cam (4).png" 
-                alt="Daily-cam 로고" 
+              <img
+                src="/logo.png"
+                alt="Daily-cam 로고"
                 className="w-10 h-10"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none'

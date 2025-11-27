@@ -9,10 +9,16 @@ import SafetyReport from './pages/SafetyReport'
 import ClipHighlights from './pages/ClipHighlights'
 import Settings from './pages/Settings'
 import VideoAnalysisTest from './pages/VideoAnalysisTest'
+import Login from './pages/Login'
+import AuthCallback from './pages/AuthCallback'
 
 function App() {
   return (
     <Routes>
+      {/* 로그인 */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
+
       {/* 홈 (랜딩 페이지) */}
       <Route path="/" element={<HomeLayout />}>
         <Route index element={<Home />} />

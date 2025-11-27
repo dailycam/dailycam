@@ -45,7 +45,7 @@ export default function LiveMonitoring() {
           lastVideoPathRef.current = info.videoPath
           setStreamLoop(info.streamLoop ?? streamLoop)
           setStreamSpeed(info.streamSpeed ?? streamSpeed)
-          
+
           // 기존 스트림이 계속 실행 중이므로 타임스탬프 없이 URL 생성
           // (타임스탬프를 추가하면 새 스트림이 시작되어 영상이 초기화됨)
           const url = getStreamUrl(
@@ -143,7 +143,7 @@ export default function LiveMonitoring() {
       setStreamUrl(null)
       setReconnectAttempts(0)
       setIsStreamActive(true)
-      
+
       // 다음 렌더링 사이클에서 새 URL 설정
       setTimeout(() => {
         setStreamUrl(url)
@@ -193,14 +193,14 @@ export default function LiveMonitoring() {
   const handleStreamError = () => {
     console.warn('스트림 이미지 로드 실패, 재연결 시도...')
     setIsStreamActive(false)
-    
+
     // 재연결 시도 (최대 5회)
     if (reconnectAttempts < 5 && lastVideoPathRef.current) {
       const newAttempts = reconnectAttempts + 1
       setReconnectAttempts(newAttempts)
-      
+
       console.log(`재연결 시도 ${newAttempts}/5`)
-      
+
       // 2초 후 재연결
       reconnectTimeoutRef.current = setTimeout(() => {
         const timestamp = Date.now()
@@ -282,8 +282,8 @@ export default function LiveMonitoring() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">실시간 모니터링</h1>
-          <p className="text-gray-600 mt-1">AI가 실시간으로 아이의 행동을 분석합니다</p>
+          <h1 className="text-2xl font-bold text-gray-900">모니터링</h1>
+          <p className="text-gray-600 mt-1">AI가 아이의 행동을 분석합니다</p>
         </div>
         <div className="flex gap-2">
           {!streamUrl ? (
@@ -339,7 +339,7 @@ export default function LiveMonitoring() {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
-                    <p className="text-base">실시간 카메라 피드</p>
+                    <p className="text-base">카메라 피드</p>
                     <p className="text-sm mt-2">
                       {selectedCamera === 'camera-1'
                         ? '거실 카메라'
@@ -436,7 +436,7 @@ export default function LiveMonitoring() {
 
           {/* AI Analysis Summary */}
           <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">실시간 AI 분석</h3>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">AI 분석</h3>
             <div className="grid grid-cols-3 gap-4">
               <AnalysisStat
                 label="현재 활동"
@@ -464,7 +464,7 @@ export default function LiveMonitoring() {
         <div className="space-y-4">
           {/* Real-time Alerts */}
           <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">실시간 알림</h3>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">알림</h3>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               <AlertItem
                 type="warning"
@@ -655,11 +655,10 @@ function CameraThumbnail({
   return (
     <button
       onClick={onClick}
-      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
-        isActive
+      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${isActive
           ? 'border-primary-500 ring-2 ring-primary-200'
           : 'border-gray-200 hover:border-gray-300'
-      } ${isOffline ? 'opacity-50' : ''}`}
+        } ${isOffline ? 'opacity-50' : ''}`}
     >
       <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
         <Camera className="w-8 h-8 text-gray-600" />
