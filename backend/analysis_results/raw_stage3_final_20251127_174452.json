@@ -1,0 +1,541 @@
+{
+  "meta": {
+    "observation_duration_minutes": 0.17,
+    "assumed_stage": 3,
+    "age_months": 2
+  },
+  "stage_consistency": {
+    "match_level": "전형적",
+    "evidence": [
+      "아이가 지지 없이 안정적으로 혼자 앉아있으며, 상체를 약간 기울여 균형을 잡는 모습이 관찰되었습니다. 이는 6~8개월 영아의 전형적인 대근육 발달에 해당합니다.",
+      "양손을 사용하여 장난감을 잡고, 회전시키고, 몸쪽으로 당기며, 들어 올려 입으로 가져가는 등 정교한 소근육 조작 및 양손 협응 능력을 보였습니다. 이는 6~8개월 영아에게 기대되는 인지 및 소근육 발달 수준과 일치합니다.",
+      "장난감을 입으로 가져가 물고 탐색하는 구강 탐색 행동이 활발하게 관찰되었으며, 이는 이 시기 영아의 일반적인 인지 발달 과정입니다.",
+      "제공된 정보에 따르면 아이의 월령은 2개월로 명시되어 있으나, 관찰된 행동들은 2개월 영아에게는 매우 이른 발달이며, 6~8개월 영아의 발달 기준과 더욱 부합합니다."
+    ],
+    "suggested_stage_for_next_analysis": null
+  },
+  "development_analysis": {
+    "summary": "영상 속 아이는 6~8개월 영아의 발달 기준에 부합하는 안정적인 대근육 및 소근육 발달을 보입니다. 특히 혼자 앉은 자세에서 양손으로 장난감을 능숙하게 조작하고 입으로 탐색하는 모습이 인상적입니다.",
+    "skills": [
+      {
+        "name": "혼자 앉기",
+        "category": "대근육운동",
+        "present": true,
+        "frequency": 2,
+        "level": "숙련",
+        "examples": [
+          "00:00:00 - 아이가 바닥 매트 위에 안정적으로 혼자 앉아있음. 상체는 약간 앞으로 기울어져 있으나 균형을 잘 잡고 있음.",
+          "00:00:09 - 아이가 영상이 끝날 때까지 안정적인 자세로 앉아있음."
+        ]
+      },
+      {
+        "name": "양손을 이용한 물체 조작",
+        "category": "소근육운동",
+        "present": true,
+        "frequency": 6,
+        "level": "숙련",
+        "examples": [
+          "00:00:01 - 아이가 양손으로 큐브 장난감을 잡고 있음.",
+          "00:00:01 - 아이가 양손을 사용하여 큐브 장난감을 약간 회전시키고 있음.",
+          "00:00:05 - 아이가 양손으로 큐브 장난감을 들어 올려 얼굴 쪽으로 가져가기 시작함."
+        ]
+      },
+      {
+        "name": "구강 탐색",
+        "category": "소근육운동",
+        "present": true,
+        "frequency": 5,
+        "level": "숙련",
+        "examples": [
+          "00:00:06 - 아이가 큐브 장난감의 한쪽 모서리를 입으로 가져가 물기 시작함.",
+          "00:00:06 - 아이가 장난감을 입으로 가져가 촉감과 맛을 탐색하고 있음.",
+          "00:00:09 - 아이가 장난감을 입에 문 채 영상이 종료됨."
+        ]
+      },
+      {
+        "name": "시각적 탐색 및 집중",
+        "category": "인지",
+        "present": true,
+        "frequency": 7,
+        "level": "숙련",
+        "examples": [
+          "00:00:00 - 아이가 눈앞에 있는 부드러운 큐브 장난감을 응시하고 있음.",
+          "00:00:02 - 아이가 장난감을 잡고 응시하며 탐색하는 듯한 모습을 보임.",
+          "00:00:04 - 아이가 장난감을 주의 깊게 관찰하고 있음."
+        ]
+      }
+    ],
+    "next_stage_signs": []
+  },
+  "safety_analysis": {
+    "overall_safety_level": "높음",
+    "adult_presence": "거의없음",
+    "environment_risks": [
+      {
+        "risk_type": "질식·삼킴",
+        "severity": "주의",
+        "trigger_behavior": "물건을 입으로 가져가는 구강 탐색 행동",
+        "environment_factor": "아이가 앉아있는 매트 오른쪽에 놓인 작은 흰색 장식용 물체들",
+        "has_safety_device": false,
+        "safety_device_type": null,
+        "comment": "아이가 활발하게 구강 탐색을 하는 시기이므로, 아이의 손이 닿는 곳에 작은 물건이 없도록 치워야 합니다."
+      },
+      {
+        "risk_type": "낙상",
+        "severity": "권장",
+        "trigger_behavior": "기어가는 행동 (향후 발달 시)",
+        "environment_factor": "아이가 앉아있는 곳에서 멀리 떨어져 있지만, 접근 가능한 소파",
+        "has_safety_device": false,
+        "safety_device_type": null,
+        "comment": "아이가 기어다니기 시작하면 소파에서 떨어질 위험이 있으므로, 미리 소파 주변의 안전을 점검하고 필요시 안전장치를 고려하는 것이 좋습니다."
+      },
+      {
+        "risk_type": "기타",
+        "severity": "권장",
+        "trigger_behavior": "기어가는 행동 및 구강 탐색 (향후 발달 시)",
+        "environment_factor": "배경에 놓인 화분",
+        "has_safety_device": false,
+        "safety_device_type": null,
+        "comment": "아이가 기어다니기 시작하면 화분 흙을 만지거나 식물을 입에 넣을 수 있습니다. 아이의 접근을 제한하거나 안전한 위치로 옮기는 것을 권장합니다."
+      }
+    ],
+    "critical_events": [],
+    "incident_events": [],
+    "incident_summary": [
+      {
+        "severity": "주의",
+        "occurrences": 1,
+        "applied_deduction": -10
+      },
+      {
+        "severity": "권장",
+        "occurrences": 2,
+        "applied_deduction": -4
+      }
+    ],
+    "safety_score": 86
+  },
+  "disclaimer": "이 평가는 영상 기반 관찰에 따른 참고용 발달·안전 분석이며, 의학적 진단이나 전문 평가를 대체하지 않습니다.",
+  "stage_determination": {
+    "detected_stage": "3",
+    "confidence": "높음",
+    "evidence": [
+      "아이가 바닥 매트 위에 안정적으로 혼자 앉아있는 행동이 2회 관찰되었으며, 총 10초 동안 자세를 유지했습니다. 이는 지지 없이 혼자 앉는 능력으로, 6~8개월 발달 단계의 주요 특징입니다.",
+      "아이가 양손으로 큐브 장난감을 잡고 회전시키거나 몸쪽으로 당기는 등 능숙하게 조작하는 행동이 4회 관찰되었습니다 (각 1초씩). 이는 두 손으로 물건을 놀리는 6~8개월 발달 단계의 특징과 일치합니다.",
+      "아이가 큐브 장난감을 얼굴 쪽으로 들어 올려 입으로 가져가 물고 탐색하는 행동이 4회 관찰되었습니다 (각 1초씩). 이는 구강 탐색과 물체 조작 능력을 보여주는 행동입니다."
+    ],
+    "alternative_stages": []
+  },
+  "_extracted_metadata": {
+    "video_metadata": {
+      "total_duration_seconds": 10.0,
+      "child_visibility": "명확함",
+      "video_quality": "좋음",
+      "environment_type": "거실"
+    },
+    "timeline_observations": [
+      {
+        "timestamp": "00:00:00",
+        "category": "대근육",
+        "action": "앉기",
+        "detail": "아이가 바닥 매트 위에 안정적으로 혼자 앉아있음. 상체는 약간 앞으로 기울어져 있으나 균형을 잘 잡고 있음.",
+        "duration_seconds": 9,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:00",
+        "category": "인지",
+        "action": "물체 응시",
+        "detail": "아이가 눈앞에 있는 부드러운 큐브 장난감을 응시하고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:00",
+        "category": "소근육",
+        "action": "손으로 물체 지지",
+        "detail": "아이가 양손을 큐브 장난감 위에 올려놓고 지지하고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:01",
+        "category": "소근육",
+        "action": "양손으로 잡기",
+        "detail": "아이가 양손으로 큐브 장난감을 잡고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:01",
+        "category": "소근육",
+        "action": "물체 조작 (회전)",
+        "detail": "아이가 양손을 사용하여 큐브 장난감을 약간 회전시키고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:02",
+        "category": "인지",
+        "action": "물체 탐색",
+        "detail": "아이가 장난감을 잡고 응시하며 탐색하는 듯한 모습을 보임.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:02",
+        "category": "소근육",
+        "action": "물체 조작 (유지)",
+        "detail": "아이가 큐브 장난감을 양손으로 안정적으로 잡고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:03",
+        "category": "소근육",
+        "action": "물체 조작 (몸쪽으로 당기기)",
+        "detail": "아이가 큐브 장난감을 몸쪽으로 약간 당겨옴.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:03",
+        "category": "인지",
+        "action": "시선 고정",
+        "detail": "아이가 장난감에 시선을 고정하고 다음 행동을 준비하는 듯 보임.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:04",
+        "category": "소근육",
+        "action": "물체 잡고 유지",
+        "detail": "아이가 큐브 장난감을 양손으로 잡고 잠시 멈춰있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 6
+      },
+      {
+        "timestamp": "00:00:04",
+        "category": "인지",
+        "action": "물체 관찰",
+        "detail": "아이가 장난감을 주의 깊게 관찰하고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:05",
+        "category": "소근육",
+        "action": "물체 들어 올리기",
+        "detail": "아이가 양손으로 큐브 장난감을 들어 올려 얼굴 쪽으로 가져가기 시작함.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:05",
+        "category": "인지",
+        "action": "시선 추적",
+        "detail": "아이가 들어 올리는 장난감을 시선으로 따라가고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:06",
+        "category": "소근육",
+        "action": "입으로 탐색 (물기)",
+        "detail": "아이가 큐브 장난감의 한쪽 모서리를 입으로 가져가 물기 시작함.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 9
+      },
+      {
+        "timestamp": "00:00:06",
+        "category": "인지",
+        "action": "구강 탐색",
+        "detail": "아이가 장난감을 입으로 가져가 촉감과 맛을 탐색하고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:07",
+        "category": "소근육",
+        "action": "입으로 탐색 (유지)",
+        "detail": "아이가 장난감 모서리를 입에 물고 양손으로 잡고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:07",
+        "category": "인지",
+        "action": "집중",
+        "detail": "아이가 장난감을 입으로 탐색하는 행동에 집중하고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:08",
+        "category": "소근육",
+        "action": "입으로 탐색 (지속)",
+        "detail": "아이가 계속해서 장난감 모서리를 입에 물고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:08",
+        "category": "인지",
+        "action": "감각 탐색",
+        "detail": "아이가 입을 통해 장난감의 질감을 느끼고 있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:09",
+        "category": "소근육",
+        "action": "입으로 탐색 (마무리)",
+        "detail": "아이가 장난감을 입에 문 채 영상이 종료됨.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:00:09",
+        "category": "대근육",
+        "action": "앉기 유지",
+        "detail": "아이가 영상이 끝날 때까지 안정적인 자세로 앉아있음.",
+        "duration_seconds": 1,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      }
+    ],
+    "behavior_summary": {
+      "대근육운동": {
+        "앉기": {
+          "count": 2,
+          "total_duration_seconds": 10,
+          "success_count": 2,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        }
+      },
+      "소근육운동": {
+        "손으로 물체 지지": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "양손으로 잡기": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 조작 (회전)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 조작 (유지)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 조작 (몸쪽으로 당기기)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 잡고 유지": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 들어 올리기": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "입으로 탐색 (물기)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "입으로 탐색 (유지)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "입으로 탐색 (지속)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "입으로 탐색 (마무리)": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        }
+      },
+      "인지": {
+        "물체 응시": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 탐색": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "시선 고정": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "물체 관찰": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "시선 추적": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "구강 탐색": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "집중": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "감각 탐색": {
+          "count": 1,
+          "total_duration_seconds": 1,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        }
+      },
+      "언어": {},
+      "사회정서": {}
+    },
+    "advanced_behaviors": [],
+    "environment": {
+      "location": "거실",
+      "floor_type": "나무 바닥 위에 깔린 직물 매트",
+      "furniture_present": [
+        "소파",
+        "선반/수납장",
+        "화분"
+      ],
+      "toys_and_objects": [
+        "부드러운 큐브 장난감",
+        "흰색 장식용 물체 (조약돌 또는 작은 쿠션 형태)",
+        "담요/덮개"
+      ],
+      "safety_devices": [],
+      "hazards_identified": [
+        {
+          "type": "질식/삼킴",
+          "description": "아이가 앉아있는 매트 오른쪽에 놓인 흰색 장식용 물체들. 아이가 입으로 가져갈 수 있는 작은 크기로 보임.",
+          "location": "매트 오른쪽",
+          "severity": "주의"
+        },
+        {
+          "type": "낙상 위험",
+          "description": "아이가 앉아있는 곳에서 멀리 떨어져 있지만, 아이가 기어갈 경우 접근 가능한 소파.",
+          "location": "배경 왼쪽",
+          "severity": "권장"
+        },
+        {
+          "type": "기타",
+          "description": "배경에 놓인 화분. 아이가 접근하여 흙을 만지거나 식물을 입에 넣을 가능성.",
+          "location": "배경 오른쪽",
+          "severity": "권장"
+        }
+      ]
+    },
+    "safety_observations": [],
+    "adult_presence": {
+      "overall_presence": "거의없음",
+      "interaction_quality": "없음",
+      "interactions": []
+    }
+  }
+}

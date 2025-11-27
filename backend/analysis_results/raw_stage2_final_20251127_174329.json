@@ -1,0 +1,500 @@
+{
+  "meta": {
+    "observation_duration_minutes": 0.17,
+    "assumed_stage": 2,
+    "age_months": 2
+  },
+  "stage_consistency": {
+    "match_level": "전형적",
+    "evidence": [
+      "엎드린 자세에서 머리를 안정적으로 가누고 유지하는 모습이 관찰되었습니다.",
+      "주변 환경에 대한 시각적 탐색과 카메라를 향한 눈맞춤이 숙련된 수준으로 나타났습니다.",
+      "입술을 움직이는 초기 언어 표현 시도가 관찰되었습니다.",
+      "차분하고 호기심 어린 표정으로 감정을 표현하는 모습이 보였습니다."
+    ],
+    "suggested_stage_for_next_analysis": null
+  },
+  "development_analysis": {
+    "summary": "아기는 엎드린 자세에서 머리를 안정적으로 가누고 유지하는 대근육 운동 능력을 보이며, 주변 환경에 대한 시각적 탐색과 눈맞춤, 그리고 초기 입술 움직임을 통한 언어 표현을 시작하고 있습니다. 전반적으로 이 단계의 초기에 기대되는 발달 수준에 부합하는 모습을 보여줍니다.",
+    "skills": [
+      {
+        "name": "엎드린 자세에서 머리 가누기",
+        "category": "대근육운동",
+        "present": true,
+        "frequency": 16,
+        "level": "중간",
+        "examples": [
+          "00:00:01 - 아기가 머리를 완전히 들어 올리고 시선을 정면으로 향하며 안정적으로 지지합니다.",
+          "00:01:01.5 - 머리를 든 상태에서 안정적으로 자세를 유지합니다."
+        ]
+      },
+      {
+        "name": "시각적 탐색 및 눈맞춤",
+        "category": "인지",
+        "present": true,
+        "frequency": 1,
+        "level": "숙련",
+        "examples": [
+          "00:01:01.5 - 아기가 카메라를 향해 시선을 고정하고 움직임 없이 응시하며 주변 환경에 대한 인지적 관심을 보입니다.",
+          "00:01:01.5 - 아기가 카메라를 향해 시선을 고정하고 눈맞춤을 유지합니다."
+        ]
+      },
+      {
+        "name": "초기 언어 표현 (입술 움직임)",
+        "category": "언어",
+        "present": true,
+        "frequency": 2,
+        "level": "초기",
+        "examples": [
+          "00:01:01.5 - 머리를 든 상태에서 입을 살짝 벌리고 다무는 움직임을 보입니다.",
+          "00:01:08 - 머리를 든 상태에서 입을 살짝 벌리고 다무는 움직임을 보입니다."
+        ]
+      },
+      {
+        "name": "감정 표현",
+        "category": "사회정서",
+        "present": true,
+        "frequency": 1,
+        "level": "숙련",
+        "examples": [
+          "00:01:01.5 - 아기가 차분하고 호기심 어린 표정을 지으며 주변 환경에 대한 관심을 보입니다."
+        ]
+      },
+      {
+        "name": "뒤집기 시도",
+        "category": "대근육운동",
+        "present": false,
+        "frequency": 0,
+        "level": "없음",
+        "examples": []
+      },
+      {
+        "name": "물건에 손 뻗어 잡기",
+        "category": "소근육운동",
+        "present": false,
+        "frequency": 0,
+        "level": "없음",
+        "examples": []
+      },
+      {
+        "name": "물건을 입으로 가져가 탐색하기",
+        "category": "소근육운동",
+        "present": false,
+        "frequency": 0,
+        "level": "없음",
+        "examples": []
+      }
+    ],
+    "next_stage_signs": []
+  },
+  "safety_analysis": {
+    "overall_safety_level": "매우높음",
+    "adult_presence": "거의없음",
+    "environment_risks": [
+      {
+        "risk_type": "충돌",
+        "severity": "권장",
+        "trigger_behavior": "기어 다니거나 잡고 일어서는 행동",
+        "environment_factor": "작은 테이블/스툴의 날카로운 모서리",
+        "has_safety_device": false,
+        "safety_device_type": null,
+        "comment": "아기 침대 옆 작은 테이블/스툴의 모서리가 날카로워 보입니다. 아기가 성장하여 기어 다니거나 잡고 일어설 때 부딪힐 위험이 있으므로 모서리 보호대 설치를 권장합니다."
+      },
+      {
+        "risk_type": "충돌",
+        "severity": "권장",
+        "trigger_behavior": "잡고 일어서거나 기대는 행동",
+        "environment_factor": "벽에 고정되지 않은 낮은 수납함",
+        "has_safety_device": false,
+        "safety_device_type": null,
+        "comment": "아기 침대 옆 낮은 수납함이 벽에 고정되어 있는지 확인이 필요합니다. 아기가 잡고 일어서거나 기대면 넘어질 수 있으므로 가구 고정 장치 설치를 권장합니다."
+      }
+    ],
+    "critical_events": [],
+    "incident_events": [
+      {
+        "event_id": "E001",
+        "severity": "권장",
+        "timestamp_range": "00:00:00-00:00:10",
+        "description": "아기 침대 옆 작은 테이블/스툴의 날카로운 모서리가 확인됩니다. 아기가 성장하여 기어 다니거나 잡고 일어설 때 충돌 위험이 있습니다.",
+        "has_safety_device": false
+      },
+      {
+        "event_id": "E002",
+        "severity": "권장",
+        "timestamp_range": "00:00:00-00:00:10",
+        "description": "아기 침대 옆 낮은 수납함이 벽에 고정되어 있는지 확인이 필요합니다. 아기가 잡고 일어서거나 기대어 넘어질 위험이 있습니다.",
+        "has_safety_device": false
+      }
+    ],
+    "incident_summary": [
+      {
+        "severity": "권장",
+        "occurrences": 4,
+        "applied_deduction": -8
+      }
+    ],
+    "safety_score": 92
+  },
+  "disclaimer": "이 평가는 영상 기반 관찰에 따른 참고용 발달·안전 분석이며, 의학적 진단이나 전문 평가를 대체하지 않습니다.",
+  "stage_determination": {
+    "detected_stage": "2",
+    "confidence": "중간",
+    "evidence": [
+      "아기가 엎드린 자세에서 팔꿈치로 몸을 지지하며 머리를 완전히 들어 올리고 시선을 정면으로 향하는 행동이 1회 관찰되었습니다 (총 0.5초).",
+      "엎드린 자세에서 머리를 안정적으로 든 상태를 16회 반복적으로 유지하는 행동이 총 8.0초 동안 관찰되었습니다. 이는 2단계의 '엎드린 자세에서 팔로 몸 지탱하며 상체·머리 들어올림' 특징과 일치합니다.",
+      "카메라를 향해 시선을 고정하고 눈맞춤을 7.5초 동안 유지하는 숙련된 행동이 관찰되었습니다.",
+      "주변 환경에 대한 인지적 관심을 보이며 시선을 7.5초 동안 고정하는 숙련된 행동이 관찰되었습니다.",
+      "아이의 개월 수는 2개월로 1단계에 해당하지만, 관찰된 대근육운동(머리 들고 유지하기) 및 사회정서/인지(숙련된 눈맞춤 및 시선 추적) 발달은 2단계의 특징을 강하게 보입니다."
+    ],
+    "alternative_stages": [
+      {
+        "stage": "1",
+        "reason": "아이의 실제 개월 수가 2개월로 1단계에 해당하며, 언어 발달(입술 움직임만 있고 소리는 들리지 않음)은 1단계의 특징과 더 가깝기 때문에 1단계의 상위 범위에 있을 가능성도 있습니다."
+      }
+    ]
+  },
+  "_extracted_metadata": {
+    "video_metadata": {
+      "total_duration_seconds": 10.0,
+      "child_visibility": "명확함",
+      "video_quality": "좋음",
+      "environment_type": "침실"
+    },
+    "timeline_observations": [
+      {
+        "timestamp": "00:00:00",
+        "category": "대근육운동",
+        "action": "엎드려 있기",
+        "detail": "아기가 엎드린 자세로 매트 위에 머리를 대고 있음. 팔꿈치로 몸을 지지하고 있음.",
+        "duration_seconds": 0.5,
+        "skill_level": "초기",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:00.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들기 시도",
+        "detail": "아기가 머리를 바닥에서 천천히 들어 올리기 시작함.",
+        "duration_seconds": 0.5,
+        "skill_level": "초기",
+        "success": true,
+        "importance": 7
+      },
+      {
+        "timestamp": "00:00:01",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들기",
+        "detail": "아기가 머리를 완전히 들어 올리고 시선을 정면으로 향함. 목과 등 근육을 사용하여 안정적으로 머리를 지지함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:01.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 든 상태에서 안정적으로 자세를 유지하며 입을 살짝 움직임.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:01.5",
+        "category": "언어",
+        "action": "입술 움직임",
+        "detail": "머리를 든 상태에서 입을 살짝 벌리고 다무는 움직임을 보임. 소리는 들리지 않음.",
+        "duration_seconds": 0.5,
+        "skill_level": "초기",
+        "success": true,
+        "importance": 5
+      },
+      {
+        "timestamp": "00:01:02",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:02.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함. 표정은 차분함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:03",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:03.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:04",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:04.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:05",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:05.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:06",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:06.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:07",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:07.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:08",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정하며 입을 살짝 움직임.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:08",
+        "category": "언어",
+        "action": "입술 움직임",
+        "detail": "머리를 든 상태에서 입을 살짝 벌리고 다무는 움직임을 보임. 소리는 들리지 않음.",
+        "duration_seconds": 0.5,
+        "skill_level": "초기",
+        "success": true,
+        "importance": 5
+      },
+      {
+        "timestamp": "00:01:08.5",
+        "category": "대근육운동",
+        "action": "엎드려 머리 들고 유지하기",
+        "detail": "머리를 안정적으로 들고 시선을 고정함.",
+        "duration_seconds": 0.5,
+        "skill_level": "중간",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:01.5",
+        "category": "사회정서",
+        "action": "눈맞춤",
+        "detail": "아기가 카메라를 향해 시선을 고정하고 눈맞춤을 유지함.",
+        "duration_seconds": 7.5,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 9
+      },
+      {
+        "timestamp": "00:01:01.5",
+        "category": "인지",
+        "action": "시선 추적",
+        "detail": "아기가 카메라를 향해 시선을 고정하고 움직임 없이 응시함. 주변 환경에 대한 인지적 관심이 보임.",
+        "duration_seconds": 7.5,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 8
+      },
+      {
+        "timestamp": "00:01:01.5",
+        "category": "사회정서",
+        "action": "감정 표현",
+        "detail": "아기가 차분하고 호기심 어린 표정을 지으며 주변 환경에 대한 관심을 보임.",
+        "duration_seconds": 7.5,
+        "skill_level": "숙련",
+        "success": true,
+        "importance": 7
+      }
+    ],
+    "behavior_summary": {
+      "대근육운동": {
+        "엎드려 있기": {
+          "count": 1,
+          "total_duration_seconds": 0.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "초기"
+        },
+        "엎드려 머리 들기 시도": {
+          "count": 1,
+          "total_duration_seconds": 0.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "초기"
+        },
+        "엎드려 머리 들기": {
+          "count": 1,
+          "total_duration_seconds": 0.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "중간"
+        },
+        "엎드려 머리 들고 유지하기": {
+          "count": 16,
+          "total_duration_seconds": 8.0,
+          "success_count": 16,
+          "fail_count": 0,
+          "skill_level": "중간"
+        }
+      },
+      "소근육운동": {},
+      "인지": {
+        "시선 추적": {
+          "count": 1,
+          "total_duration_seconds": 7.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        }
+      },
+      "언어": {
+        "입술 움직임": {
+          "count": 2,
+          "total_duration_seconds": 1.0,
+          "success_count": 2,
+          "fail_count": 0,
+          "skill_level": "초기"
+        }
+      },
+      "사회정서": {
+        "눈맞춤": {
+          "count": 1,
+          "total_duration_seconds": 7.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        },
+        "감정 표현": {
+          "count": 1,
+          "total_duration_seconds": 7.5,
+          "success_count": 1,
+          "fail_count": 0,
+          "skill_level": "숙련"
+        }
+      }
+    },
+    "advanced_behaviors": [],
+    "environment": {
+      "location": "침실",
+      "floor_type": "매트",
+      "furniture_present": [
+        "아기 침대",
+        "원목 플레이짐",
+        "수납함",
+        "작은 테이블/스툴"
+      ],
+      "toys_and_objects": [
+        "플레이짐 걸이 장난감 (꽃, 별 모양)",
+        "매트 무늬"
+      ],
+      "safety_devices": [],
+      "hazards_identified": [
+        {
+          "type": "충돌 위험",
+          "description": "작은 테이블/스툴의 모서리가 날카로워 보임. 아기가 기어 다니거나 잡고 일어설 때 부딪힐 위험이 있음.",
+          "location": "아기 침대 옆",
+          "severity": "권장"
+        },
+        {
+          "type": "가구 전도 위험",
+          "description": "낮은 수납함이 벽에 고정되어 있는지 확인 필요. 아기가 잡고 일어서거나 기대면 넘어질 수 있음.",
+          "location": "아기 침대 옆",
+          "severity": "권장"
+        }
+      ]
+    },
+    "safety_observations": [],
+    "adult_presence": {
+      "overall_presence": "거의없음",
+      "interaction_quality": "없음",
+      "interactions": []
+    }
+  }
+}
