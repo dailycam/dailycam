@@ -35,7 +35,7 @@ import SettingsPage from './Settings'
 const features = [
   {
     name: '실시간 AI 분석',
-    description: 'GPT-4 Vision을 활용한 실시간 영상 분석으로 아이의 안전을 지킵니다.',
+    description: 'Gemini를 활용한 실시간 영상 분석으로 아이의 안전을 지킵니다.',
     icon: Brain,
   },
   {

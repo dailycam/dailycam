@@ -615,7 +615,7 @@ class GeminiService:
 
             vlm_generation_config = genai.types.GenerationConfig(
                 temperature=0.0,  # 사실 기반 추출
-                top_k=32,
+                top_k=30,
                 top_p=0.95,
             )
 
