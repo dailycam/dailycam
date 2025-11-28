@@ -12,9 +12,8 @@ import {
   MapPin,
   Upload,
   X,
-  Settings,
 } from 'lucide-react'
-import { uploadVideoForStreaming, getStreamUrl, stopStream } from '../lib/api'
+import { uploadVideoForStreaming, getStreamUrl, stopStream, startStream } from '../lib/api'
 
 export default function LiveMonitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
@@ -29,6 +28,8 @@ export default function LiveMonitoring() {
   const [streamLoop, setStreamLoop] = useState(true)
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [isStreamActive, setIsStreamActive] = useState(false)
+  const [isStartingStream, setIsStartingStream] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamImgRef = useRef<HTMLImageElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -164,6 +165,43 @@ export default function LiveMonitoring() {
     }
   }
 
+  // 가짜 라이브 스트림 시작
+  const handleStartFakeStream = async () => {
+    setIsStartingStream(true)
+    setStreamError(null)
+
+    try {
+      console.log('가짜 라이브 스트림 시작:', selectedCamera)
+      const result = await startStream(selectedCamera, true)
+      console.log('스트림 시작 성공:', result)
+
+      // 스트림 URL 설정 (MJPEG 스트리밍)
+      const timestamp = Date.now()
+      const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed, timestamp)
+      setStreamUrl(url)
+      setIsStreamActive(true)
+      setIsPlaying(true)
+      startStreamMonitoring()
+
+      // localStorage에 저장
+      localStorage.setItem(
+        `stream_${selectedCamera}`,
+        JSON.stringify({
+          streamUrl: url,
+          streamLoop: streamLoop,
+          streamSpeed: streamSpeed,
+          cameraId: selectedCamera,
+          isFakeStream: true,
+        })
+      )
+    } catch (error: any) {
+      console.error('스트림 시작 오류:', error)
+      setStreamError(error.message || '스트림 시작 중 오류가 발생했습니다.')
+    } finally {
+      setIsStartingStream(false)
+    }
+  }
+
   // 스트림 중지
   const handleStopStream = async () => {
     try {
@@ -287,13 +325,23 @@ export default function LiveMonitoring() {
         </div>
         <div className="flex gap-2">
           {!streamUrl ? (
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              비디오 업로드
-            </button>
+            <>
+              <button
+                onClick={handleStartFakeStream}
+                disabled={isStartingStream}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play className="w-4 h-4" />
+                {isStartingStream ? '스트림 시작 중...' : '스트림 시작'}
+              </button>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                비디오 업로드
+              </button>
+            </>
           ) : (
             <button
               onClick={handleStopStream}
@@ -305,6 +353,22 @@ export default function LiveMonitoring() {
           )}
         </div>
       </div>
+
+      {/* 에러 메시지 */}
+      {streamError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{streamError}</span>
+            <button
+              onClick={() => setStreamError(null)}
+              className="ml-auto text-red-500 hover:text-red-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -106,6 +106,28 @@ export function getStreamUrl(
 }
 
 /**
+ * 가짜 라이브 스트림을 시작합니다.
+ */
+export async function startStream(
+  cameraId: string,
+  enableAnalysis: boolean = true
+): Promise<{ message: string; camera_id: string; status: string; analysis_enabled: boolean }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/start-stream/${cameraId}?enable_analysis=${enableAnalysis}`,
+    {
+      method: 'POST',
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || '스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
  * 스트림을 중지합니다.
  */
 export async function stopStream(cameraId: string): Promise<void> {

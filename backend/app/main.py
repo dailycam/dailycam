@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.homecam import router as homecam_router
+from .api.live_monitoring import router as live_monitoring_router
 
 
 def create_app() -> FastAPI:
@@ -23,21 +24,29 @@ def create_app() -> FastAPI:
             "version": "0.1.0",
             "docs": "/docs",
             "endpoints": {
-                "analyze_video": "/api/homecam/analyze-video"
+                "analyze_video": "/api/homecam/analyze-video",
+                "live_monitoring": "/api/live-monitoring"
             }
         }
     
     # CORS 설정 (프론트엔드에서 접근 가능하도록)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173"],  # Vite 개발 서버
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://[::1]:5173",  # IPv6 localhost
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     
-    # 비디오 분석 라우터만 등록
+    # 비디오 분석 라우터 등록
     app.include_router(homecam_router, prefix="/api/homecam", tags=["homecam"])
+    
+    # 라이브 모니터링 라우터 등록
+    app.include_router(live_monitoring_router, prefix="/api/live-monitoring", tags=["live-monitoring"])
     
     return app
 
