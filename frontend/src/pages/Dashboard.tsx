@@ -79,99 +79,8 @@ export default function Dashboard() {
   }
 
   // 통합 타임라인 데이터 (발달 + 안전 이벤트)
-  const rawTimelineEvents = [
-    {
-      time: '15:00',
-      hour: 15,
-      type: 'development',
-      title: '배밀이 연습 (15분)',
-      description: '대근육 발달 촉진',
-      hasClip: true,
-      category: '운동 발달'
-    },
-    {
-      time: '13:45',
-      hour: 13,
-      type: 'safety',
-      severity: 'warning',
-      title: '침대 가장자리 접근',
-      description: '아기가 침대 가장자리에 접근했습니다. 안전 패드 확인을 권장합니다.',
-      resolved: true,
-      hasClip: true,
-      category: '안전 주의'
-    },
-    {
-      time: '13:00',
-      hour: 13,
-      type: 'development',
-      title: '점심 수유 및 놀이',
-      description: '손 운동 능력 발달',
-      hasClip: false,
-      category: '신체 발달'
-    },
-    {
-      time: '11:20',
-      hour: 11,
-      type: 'safety',
-      severity: 'warning',
-      title: '비정상적인 움직임',
-      description: '평소보다 활발한 움직임이 감지되었습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 주의'
-    },
-    {
-      time: '10:30',
-      hour: 10,
-      type: 'development',
-      title: '낮잠 (1시간)',
-      description: '안정적인 수면 패턴',
-      hasClip: false,
-      category: '생활 리듬',
-      isSleep: true
-    },
-    {
-      time: '09:00',
-      hour: 9,
-      type: 'development',
-      title: '놀이 시간 (20분)',
-      description: '시각 추적 능력 향상',
-      hasClip: true,
-      category: '인지 발달'
-    },
-    {
-      time: '08:30',
-      hour: 8,
-      type: 'safety',
-      severity: 'info',
-      title: '안전한 수면 자세',
-      description: '바른 자세로 수면 중입니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인',
-      isSleep: true
-    },
-    {
-      time: '07:30',
-      hour: 7,
-      type: 'development',
-      title: '기상 및 아침 수유',
-      description: '규칙적인 생활 리듬',
-      hasClip: false,
-      category: '생활 리듬'
-    },
-    {
-      time: '06:00',
-      hour: 6,
-      type: 'safety',
-      severity: 'info',
-      title: '기상',
-      description: '정상적으로 기상했습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인'
-    },
-  ]
+  // 실제 데이터베이스에서 가져온 데이터 사용, 없으면 빈 배열
+  const rawTimelineEvents = dashboardData?.timelineEvents || []
 
   // 수면 이벤트 그룹화 함수
   const groupSleepEvents = (events: any[]) => {
@@ -311,7 +220,7 @@ export default function Dashboard() {
   // 기간별 데이터 생성 함수
   const generateChartData = () => {
     if (timeRange === 'day') {
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
 
       return dayTimeRanges.map(range => {
@@ -355,7 +264,7 @@ export default function Dashboard() {
       })
     } else if (timeRange === 'week') {
       // 7일: 일자별 평균
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
 
       return Array.from({ length: 7 }, (_, i) => {
@@ -374,7 +283,7 @@ export default function Dashboard() {
       })
     } else if (timeRange === 'month') {
       // 한달: 5일 단위로 묶어서 표시 (1~5일, 6~10일, 11~15일, 16~20일, 21~25일, 26~30일)
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
 
       const ranges = [
@@ -402,7 +311,7 @@ export default function Dashboard() {
       })
     } else {
       // 1년: 달별
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
       const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
@@ -432,7 +341,7 @@ export default function Dashboard() {
   const stats = [
     {
       label: '안전 점수',
-      value: dashboardData.safetyScore.toString(),
+      value: (dashboardData?.safetyScore ?? 0).toString(),
       unit: '점',
       change: '+3',
       changeLabel: '지난주 대비',
@@ -443,7 +352,7 @@ export default function Dashboard() {
     },
     {
       label: '발달 점수',
-      value: '92',
+      value: (dashboardData?.developmentScore ?? 0).toString(),
       unit: '점',
       change: '+7',
       changeLabel: '지난주 대비',
@@ -454,7 +363,7 @@ export default function Dashboard() {
     },
     {
       label: '모니터링 시간',
-      value: dashboardData.monitoringHours.toString(),
+      value: (dashboardData?.monitoringHours ?? 0).toFixed(1),
       unit: '시간',
       change: '오늘',
       changeLabel: '누적',
@@ -465,7 +374,7 @@ export default function Dashboard() {
     },
     {
       label: '이벤트 감지',
-      value: dashboardData.incidentCount.toString(),
+      value: (dashboardData?.incidentCount ?? 0).toString(),
       unit: '건',
       change: '2건 주의',
       changeLabel: '모두 해결됨',
@@ -547,26 +456,36 @@ export default function Dashboard() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-4 mb-4">
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">배밀이 2미터 성공!</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              오후 3시, 좋아하는 장난감을 향해 2미터나 배밀이로 이동했어요. 대근육 발달의 중요한 순간이에요!
-            </p>
-          </div>
+          {dashboardData.recommendations && dashboardData.recommendations.length > 0 ? (
+            dashboardData.recommendations.map((rec, index) => {
+              // priority에 따른 배경색 설정
+              const bgColorMap: Record<string, string> = {
+                high: 'bg-[#FFE6E6]',      // 빨간색 계열
+                medium: 'bg-[#E6F2FF]',    // 파란색 계열
+                low: 'bg-[#E6FFE6]',       // 초록색 계열
+              }
+              const bgColor = bgColorMap[rec.priority] || 'bg-[#E6F2FF]'
 
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">옹알이 20% 증가</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              다양한 음절의 옹알이가 지난주보다 20% 늘었어요. 언어 발달이 빠르게 진행되고 있어요!
-            </p>
-          </div>
-
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">안전한 하루</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              오늘 하루 2건의 주의 알림이 있었지만 모두 빠르게 해결되어 안전한 하루를 보냈어요.
-            </p>
-          </div>
+              return (
+                <div key={index} className={`card p-6 border-0 shadow-sm ${bgColor}`}>
+                  <h3 className="text-lg font-semibold mb-2">{rec.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {rec.description}
+                  </p>
+                </div>
+              )
+            })
+          ) : (
+            // 데이터가 없을 때 기본 메시지
+            <>
+              <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
+                <h3 className="text-lg font-semibold mb-2">분석을 시작해보세요</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  영상을 업로드하면 AI가 분석 결과를 제공합니다.
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* CTA 버튼 */}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import {
   Baby,
@@ -13,8 +13,6 @@ import {
   Music,
   Hand,
   Target,
-  Star,
-  MessageCircle,
 } from 'lucide-react'
 import {
   RadarChart,
@@ -31,29 +29,52 @@ import {
   Tooltip,
   Cell,
 } from 'recharts'
+import { getDevelopmentData, DevelopmentData } from '../lib/api'
 
 export default function DevelopmentReport() {
   const [date, setDate] = useState<Date>(new Date())
+  const [developmentData, setDevelopmentData] = useState<DevelopmentData | null>(null)
+  // const [loading, setLoading] = useState(true) // 로딩 UI 필요시 사용
 
-  // 개인 발달 5각형 데이터
-  const radarData = [
-    { category: '언어', score: 88, fullMark: 100 },
-    { category: '운동', score: 92, fullMark: 100 },
-    { category: '인지', score: 85, fullMark: 100 },
-    { category: '사회성', score: 90, fullMark: 100 },
-    { category: '정서', score: 87, fullMark: 100 },
-  ]
+  // API에서 데이터 로드
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const data = await getDevelopmentData(7)
+        setDevelopmentData(data)
+      } catch (error) {
+        console.error('발달 데이터 로드 실패:', error)
+      }
+    }
+
+    loadData()
+  }, [])
+
+  // 로딩 중이거나 데이터가 없으면 기본값 사용
+  const radarData = developmentData
+    ? Object.entries(developmentData.developmentRadarScores).map(([category, score]) => ({
+      category,
+      score,
+      fullMark: 100,
+    }))
+    : [
+      { category: '언어', score: 0, fullMark: 100 },
+      { category: '운동', score: 0, fullMark: 100 },
+      { category: '인지', score: 0, fullMark: 100 },
+      { category: '사회성', score: 0, fullMark: 100 },
+      { category: '정서', score: 0, fullMark: 100 },
+    ]
 
   // 최고점수를 가진 영역 찾기
   const maxScore = Math.max(...radarData.map(item => item.score))
   const strongestArea = radarData.find(item => item.score === maxScore)
 
-  const dailyDevelopmentFrequency = [
-    { category: '언어', count: 18, color: '#0284c7' },
-    { category: '운동', count: 25, color: '#22c55e' },
-    { category: '인지', count: 12, color: '#f59e0b' },
-    { category: '사회성', count: 15, color: '#0ea5e9' },
-    { category: '정서', count: 9, color: '#06b6d4' },
+  const dailyDevelopmentFrequency = developmentData?.dailyDevelopmentFrequency || [
+    { category: '언어', count: 0, color: '#0284c7' },
+    { category: '운동', count: 0, color: '#22c55e' },
+    { category: '인지', count: 0, color: '#f59e0b' },
+    { category: '사회성', count: 0, color: '#0ea5e9' },
+    { category: '정서', count: 0, color: '#06b6d4' },
   ]
 
   const recommendedActivities = [
@@ -94,6 +115,7 @@ export default function DevelopmentReport() {
       gradient: 'from-primary-50 to-cyan-50',
     },
   ]
+
 
   return (
     <div className="p-8">
@@ -143,32 +165,14 @@ export default function DevelopmentReport() {
                 <h2 className="text-primary-900 text-xl font-semibold">오늘의 발달 요약</h2>
               </div>
               <div className="space-y-3 text-sm text-gray-700 leading-relaxed mb-6">
-                <p className="flex items-start gap-3">
+                <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
                     <Target className="w-5 h-5 text-primary-600" />
                   </div>
                   <span>
-                    오늘 아이는 총 <span className="text-primary-600 font-semibold">79건</span>의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.
+                    {developmentData?.developmentSummary || '아직 분석된 데이터가 없습니다. 영상을 업로드하면 AI가 분석합니다.'}
                   </span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <Star className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <span>
-                    오전 9시경 시각 추적 능력이 눈에 띄게 향상되었고, 오후 3시에는 배밀이 자세로 약{' '}
-                    <span className="text-primary-600 font-semibold">2미터 이동</span>하는 모습이 포착되었습니다. 이는 대근육 발달의 중요한 이정표입니다.
-                  </span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center flex-shrink-0">
-                    <MessageCircle className="w-5 h-5 text-cyan-600" />
-                  </div>
-                  <span>
-                    언어 발달에서도 다양한 음절의 옹알이가 18회 관찰되어 지난주 대비{' '}
-                    <span className="text-primary-600 font-semibold">20% 증가</span>했습니다. 전반적으로 또래 평균보다 우수한 발달을 보이고 있습니다.
-                  </span>
-                </p>
+                </div>
               </div>
 
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-primary-100">
@@ -216,7 +220,9 @@ export default function DevelopmentReport() {
                 </div>
               </motion.div>
               <p className="text-sm text-gray-600 mb-2">현재 발달 단계</p>
-              <p className="text-primary-600 mb-4 text-2xl font-bold">7개월</p>
+              <p className="text-primary-600 mb-4 text-2xl font-bold">
+                {developmentData?.ageMonths || 0}개월
+              </p>
 
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center justify-center gap-2 mb-2">

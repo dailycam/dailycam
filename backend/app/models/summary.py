@@ -1,51 +1,24 @@
-"""Daily summary model for dashboard statistics"""
+"""DailySummary model - 일별 통계 테이블"""
 
-from sqlalchemy import Column, Integer, Date, DateTime, ForeignKey, Float
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, Float, Date, JSON, UniqueConstraint
 from app.database import Base
 
 
 class DailySummary(Base):
-    """대시보드 통계용 일별 요약 데이터 모델"""
-    __tablename__ = "daily_summaries"
+    """일별 통계 모델 - 하루 데이터를 요약 저장 (그래프 그리기용)"""
+    __tablename__ = "daily_summary"
     
-    # 기본 컬럼
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    summary_date = Column(Date, nullable=False, index=True)
+    summary_date = Column(Date, nullable=False, unique=True, index=True)  # 2024-11-28 (X축)
+    avg_safety_score = Column(Float, nullable=True)  # 평균 안전도 (꺾은선 그래프 Y축)
+    monitoring_hours = Column(Float, nullable=True)  # 모니터링 시간 ("누적 8시간")
+    incident_counts = Column(JSON, nullable=True)  # 파이 차트 {"낙상": 2, "충돌": 1}
+    development_counts = Column(JSON, nullable=True)  # 바 차트 {"운동": 15, "언어": 8}
     
-    # 안전 통계
-    avg_safety_score = Column(Float, nullable=True)
-    min_safety_score = Column(Float, nullable=True)
-    max_safety_score = Column(Float, nullable=True)
-    
-    # 이벤트 감지 횟수
-    total_incident_count = Column(Integer, default=0)
-    danger_count = Column(Integer, default=0)
-    warning_count = Column(Integer, default=0)
-    info_count = Column(Integer, default=0)
-    
-    # 발달 통계
-    avg_development_score = Column(Float, nullable=True)
-    total_development_events = Column(Integer, default=0)
-    
-    # 발달 영역별 감지 횟수
-    language_count = Column(Integer, default=0)
-    motor_count = Column(Integer, default=0)
-    cognitive_count = Column(Integer, default=0)
-    social_count = Column(Integer, default=0)
-    emotional_count = Column(Integer, default=0)
-    
-    # 모니터링 시간
-    monitoring_hours = Column(Float, nullable=True)
-    
-    # 타임스탬프
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    user = relationship("User", backref="daily_summaries")
+    __table_args__ = (
+        UniqueConstraint('summary_date', name='uq_daily_summary_date'),
+    )
     
     def __repr__(self):
-        return f"<DailySummary(user_id={self.user_id}, date={self.summary_date}, safety={self.avg_safety_score})>"
+        return f"<DailySummary(id={self.id}, date={self.summary_date}, avg_safety={self.avg_safety_score})>"
+

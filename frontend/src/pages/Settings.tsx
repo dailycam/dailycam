@@ -13,6 +13,7 @@ import {
   Save,
   LogOut,
 } from 'lucide-react'
+import { getAuthToken, removeAuthToken } from '../lib/auth'
 
 interface UserInfo {
   id: number
@@ -67,7 +68,7 @@ export default function Settings() {
   // 사용자 정보 가져오기
   useEffect(() => {
     const fetchUserInfo = async () => {
-      const token = localStorage.getItem('access_token')
+      const token = getAuthToken()
 
       if (!token) {
         navigate('/login')
@@ -89,7 +90,7 @@ export default function Settings() {
             has_billing_key: Boolean(data.has_billing_key),
           })
         } else {
-          localStorage.removeItem('access_token')
+          removeAuthToken()
           navigate('/login')
         }
       } catch (error) {
@@ -109,7 +110,7 @@ export default function Settings() {
 
     try {
       setIsCancelling(true)
-      const token = localStorage.getItem('access_token')
+      const token = getAuthToken()
       const res = await fetch('http://localhost:8000/api/payments/subscribe/basic/cancel', {
         method: 'POST',
         headers: {

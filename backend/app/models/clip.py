@@ -1,61 +1,26 @@
-"""Highlight clip model for storing important video moments"""
+"""HighlightClip model - 하이라이트 테이블"""
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, Text, Enum as SQLEnum
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Enum
 from app.database import Base
 import enum
 
 
 class ClipCategory(str, enum.Enum):
-    """클립 카테고리"""
-    DEVELOPMENT = "development"  # 발달 클립
-    SAFETY = "safety"            # 안전 클립
-
-
-class ClipImportance(str, enum.Enum):
-    """클립 중요도"""
-    HIGH = "high"        # 높음
-    MEDIUM = "medium"    # 중간
-    WARNING = "warning"  # 주의
-    INFO = "info"        # 정보
+    """클립 대분류"""
+    DEVELOPMENT = "발달"
+    SAFETY = "안전"
 
 
 class HighlightClip(Base):
-    """하이라이트 클립 정보 모델"""
-    __tablename__ = "highlight_clips"
+    """하이라이트 클립 모델 - ClipHighlights.tsx의 카드 리스트"""
+    __tablename__ = "highlight_clip"
     
-    # 기본 컬럼
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    analysis_log_id = Column(Integer, ForeignKey("analysis_logs.id", ondelete="SET NULL"), nullable=True)
-    
-    # 클립 정보
-    title = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
-    category = Column(SQLEnum(ClipCategory), nullable=False, index=True)
-    subcategory = Column(String(100), nullable=True)
-    
-    # 영상 정보
-    video_path = Column(String(1000), nullable=True)
-    thumbnail_path = Column(String(1000), nullable=True)
-    thumbnail_emoji = Column(String(10), nullable=True)
-    duration_seconds = Column(Float, nullable=True)
-    timestamp_start = Column(String(20), nullable=True)
-    timestamp_end = Column(String(20), nullable=True)
-    
-    # 중요도 및 태그
-    importance = Column(SQLEnum(ClipImportance), nullable=False, index=True)
-    tags = Column(String(500), nullable=True)
-    
-    # 메타데이터
-    clip_timestamp = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    user = relationship("User", backref="highlight_clips")
-    analysis_log = relationship("AnalysisLog", backref="highlight_clips")
+    title = Column(String(255), nullable=False)  # "배밀이 2미터 이동 성공!"
+    video_url = Column(String(512), nullable=False)  # 영상 주소 (재생 버튼 클릭 시)
+    thumbnail_url = Column(String(512), nullable=True)  # 썸네일 (카드 이미지)
+    category = Column(Enum(ClipCategory), nullable=False)  # "발달", "안전" (탭 구분용)
     
     def __repr__(self):
         return f"<HighlightClip(id={self.id}, title={self.title}, category={self.category})>"
+

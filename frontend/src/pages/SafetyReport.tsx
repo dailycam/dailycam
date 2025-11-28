@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import {
   Shield,
@@ -25,67 +25,107 @@ import {
   Pie,
   Cell,
 } from 'recharts'
+import { getAuthHeader } from '../lib/auth'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+interface SafetyReportData {
+  trendData: Array<{ date: string; 안전도: number }>
+  incidentTypeData: Array<{ name: string; value: number; color: string; count: number }>
+  clockData: Array<{ hour: number; safetyLevel: string; safetyScore: number }>
+  safetySummary: string
+  safetyScore: number
+}
 
 export default function SafetyReport() {
   const [selectedHour, setSelectedHour] = useState<number | null>(null)
   const [periodType, setPeriodType] = useState<'week' | 'month'>('week')
+  const [safetyData, setSafetyData] = useState<SafetyReportData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // 주간 안전도 추이 데이터
-  const weeklySafetyData = [
-    { date: '월', 안전도: 90 },
-    { date: '화', 안전도: 92 },
-    { date: '수', 안전도: 88 },
-    { date: '목', 안전도: 91 },
-    { date: '금', 안전도: 93 },
-    { date: '토', 안전도: 89 },
-    { date: '일', 안전도: 92 },
-  ]
+  // 실제 데이터 가져오기
+  useEffect(() => {
+    async function loadSafetyData() {
+      try {
+        setLoading(true)
+        const response = await fetch(
+          `${API_BASE_URL}/api/safety/summary?period_type=${periodType}`,
+          {
+            method: 'GET',
+            headers: {
+              ...getAuthHeader(),
+            },
+          }
+        )
 
-  // 월간 안전도 추이 데이터
-  const monthlySafetyData = [
-    { date: '1주', 안전도: 88 },
-    { date: '2주', 안전도: 90 },
-    { date: '3주', 안전도: 91 },
-    { date: '4주', 안전도: 92 },
-  ]
-
-  const currentData = periodType === 'week' ? weeklySafetyData : monthlySafetyData
-
-  // 24시간 시계 데이터
-  const clockData = Array.from({ length: 24 }, (_, hour) => {
-    let safetyLevel: 'safe' | 'warning' | 'danger' | null = null
-    let safetyScore = 95
-
-    if (hour === 11) {
-      safetyLevel = 'warning'
-      safetyScore = 75
-    } else if (hour === 13) {
-      safetyLevel = 'warning'
-      safetyScore = 70
-    } else if (hour >= 0 && hour < 6 || hour >= 20 && hour < 24) {
-      safetyLevel = 'safe'
-      safetyScore = 98
-    } else if (hour >= 6 && hour < 20) {
-      safetyLevel = 'safe'
-      safetyScore = 90
+        if (response.ok) {
+          const data = await response.json()
+          setSafetyData(data)
+        } else {
+          // API 실패 시 기본값 사용
+          setSafetyData({
+            trendData: periodType === 'week' 
+              ? Array.from({ length: 7 }, (_, i) => ({ date: ['월', '화', '수', '목', '금', '토', '일'][i], 안전도: 0 }))
+              : Array.from({ length: 4 }, (_, i) => ({ date: `${i + 1}주`, 안전도: 0 })),
+            incidentTypeData: [
+              { name: '낙상', value: 35, color: '#fca5a5', count: 0 },
+              { name: '충돌/부딛힘', value: 25, color: '#fdba74', count: 0 },
+              { name: '끼임', value: 15, color: '#fde047', count: 0 },
+              { name: '전도(가구 넘어짐)', value: 10, color: '#86efac', count: 0 },
+              { name: '감전', value: 10, color: '#7dd3fc', count: 0 },
+              { name: '질식', value: 5, color: '#c4b5fd', count: 0 },
+            ],
+            clockData: Array.from({ length: 24 }, (_, hour) => ({
+              hour,
+              safetyLevel: 'safe',
+              safetyScore: 95
+            })),
+            safetySummary: '아직 분석된 데이터가 없습니다.',
+            safetyScore: 0
+          })
+        }
+      } catch (error) {
+        console.error('안전 리포트 데이터 로딩 오류:', error)
+        // 에러 시 기본값 사용
+        setSafetyData({
+          trendData: periodType === 'week' 
+            ? Array.from({ length: 7 }, (_, i) => ({ date: ['월', '화', '수', '목', '금', '토', '일'][i], 안전도: 0 }))
+            : Array.from({ length: 4 }, (_, i) => ({ date: `${i + 1}주`, 안전도: 0 })),
+          incidentTypeData: [
+            { name: '낙상', value: 35, color: '#fca5a5', count: 0 },
+            { name: '충돌/부딛힘', value: 25, color: '#fdba74', count: 0 },
+            { name: '끼임', value: 15, color: '#fde047', count: 0 },
+            { name: '전도(가구 넘어짐)', value: 10, color: '#86efac', count: 0 },
+            { name: '감전', value: 10, color: '#7dd3fc', count: 0 },
+            { name: '질식', value: 5, color: '#c4b5fd', count: 0 },
+          ],
+          clockData: Array.from({ length: 24 }, (_, hour) => ({
+            hour,
+            safetyLevel: 'safe',
+            safetyScore: 95
+          })),
+          safetySummary: '아직 분석된 데이터가 없습니다.',
+          safetyScore: 0
+        })
+      } finally {
+        setLoading(false)
+      }
     }
 
-    return {
-      hour,
-      safetyLevel,
-      safetyScore,
-    }
-  })
+    loadSafetyData()
+  }, [periodType])
 
-  // 안전사고 유형 데이터
-  const incidentTypeData = [
-    { name: '낙상', value: 35, color: '#fca5a5', count: 2 }, // 조금 더 진한 파스텔 핑크
-    { name: '충돌/부딛힘', value: 25, color: '#fdba74', count: 1 }, // 조금 더 진한 파스텔 오렌지
-    { name: '끼임', value: 15, color: '#fde047', count: 0 }, // 조금 더 진한 파스텔 옐로우
-    { name: '전도(가구 넘어짐)', value: 10, color: '#86efac', count: 0 }, // 조금 더 진한 파스텔 그린
-    { name: '감전', value: 10, color: '#7dd3fc', count: 0 }, // 조금 더 진한 파스텔 스카이블루
-    { name: '질식', value: 5, color: '#c4b5fd', count: 0 }, // 조금 더 진한 파스텔 퍼플
-  ]
+  if (loading || !safetyData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">로딩 중...</div>
+      </div>
+    )
+  }
+
+  const currentData = safetyData.trendData
+  const clockData = safetyData.clockData
+  const incidentTypeData = safetyData.incidentTypeData
 
   // 안전 체크리스트
   const safetyChecklist = [
@@ -123,7 +163,7 @@ export default function SafetyReport() {
     },
   ]
 
-  const currentSafetyScore = 92
+  const currentSafetyScore = safetyData.safetyScore
 
   // 시계 바늘 각도 계산
   const getClockAngle = (hour: number) => {
@@ -199,7 +239,7 @@ export default function SafetyReport() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <Shield className="w-12 h-12 mb-3 opacity-90" />
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.8, delay: 0.6 }} className="text-center">
-                      <span className="block text-5xl font-bold">92</span>
+                      <span className="block text-5xl font-bold">{safetyData.safetyScore}</span>
                       <span className="text-lg opacity-90">점</span>
                     </motion.div>
                   </div>
@@ -208,7 +248,10 @@ export default function SafetyReport() {
 
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-6">
                 <h2 className="text-white mb-2 text-xl font-semibold">오늘의 안전도</h2>
-                <p className="text-white/90 text-sm">안전 상태 우수 · 위험 감지 0건</p>
+                <p className="text-white/90 text-sm">
+                  {safetyData.safetyScore >= 90 ? '안전 상태 우수' : safetyData.safetyScore >= 75 ? '안전 상태 양호' : '주의 필요'} · 
+                  위험 감지 {incidentTypeData.reduce((sum, item) => sum + item.count, 0)}건
+                </p>
               </motion.div>
             </div>
 
@@ -219,18 +262,22 @@ export default function SafetyReport() {
                 <h3 className="text-white font-semibold">AI 안전 분석</h3>
               </div>
               <div className="space-y-3 text-sm text-white leading-relaxed mb-4">
-                <p className="flex items-start gap-3">
+                <div className="flex items-start gap-3">
                   <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
                     <Sparkles className="w-4 h-4 text-white" />
                   </div>
-                  <span>오늘 하루 아이의 안전 상태는 전반적으로 양호합니다. 총 2건의 주의 알림이 발생했으나 모두 정상 범위로 회복되었습니다.</span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 text-white" />
+                  <span>{safetyData.safetySummary || '아직 분석된 데이터가 없습니다.'}</span>
+                </div>
+                {incidentTypeData.reduce((sum, item) => sum + item.count, 0) > 0 && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-white/30 flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 text-white" />
+                    </div>
+                    <span>
+                      총 {incidentTypeData.reduce((sum, item) => sum + item.count, 0)}건의 안전 이벤트가 감지되었습니다.
+                    </span>
                   </div>
-                  <span>오후 1시 45분경 침대 가장자리 접근이 감지되었으며, 이후 안전한 영역으로 복귀했습니다.</span>
-                </p>
+                )}
               </div>
 
               <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 border border-white/30 mb-4">
@@ -239,18 +286,18 @@ export default function SafetyReport() {
                   <p className="text-xs text-white font-semibold">AI 안전 권장사항</p>
                 </div>
                 <div className="space-y-1.5 text-xs text-white">
-                  <p className="flex items-start gap-1">
+                  <div className="flex items-start gap-1">
                     <span>•</span>
                     <span>전반적으로 안전한 환경이 유지되고 있습니다.</span>
-                  </p>
-                  <p className="flex items-start gap-1">
+                  </div>
+                  <div className="flex items-start gap-1">
                     <span>•</span>
                     <span>오후 시간대에 활동량이 증가하므로 주변 환경을 더 자주 확인해주세요.</span>
-                  </p>
-                  <p className="flex items-start gap-1">
+                  </div>
+                  <div className="flex items-start gap-1">
                     <span>•</span>
                     <span>침대 가장자리 안전 패드 보강을 권장합니다.</span>
-                  </p>
+                  </div>
                 </div>
               </div>
 
@@ -261,7 +308,7 @@ export default function SafetyReport() {
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-white/80 mb-1">주의 알림</p>
-                  <p className="text-white text-lg font-semibold">2건</p>
+                  <p className="text-white text-lg font-semibold">{incidentTypeData.reduce((sum, item) => sum + item.count, 0)}건</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-white/80 mb-1">위험 감지</p>

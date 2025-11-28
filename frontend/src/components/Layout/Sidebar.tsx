@@ -11,6 +11,7 @@ import {
   TestTube,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { getAuthToken } from '../../lib/auth'
 
 const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
@@ -40,7 +41,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     const fetchUserInfo = async () => {
-      const token = localStorage.getItem('access_token')
+      const token = getAuthToken()
       if (!token) return
 
       try {

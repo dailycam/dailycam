@@ -587,7 +587,15 @@ class GeminiService:
         generation_params: Optional[dict] = None,
     ) -> dict:
         """
-        메타데이터 기반 비디오 분석 (Group A/B 순차 처리 방식)
+        메타데이터 방식으로 비디오를 분석합니다.
+        3단계 프로세스:
+          1) VLM으로 메타데이터 추출 (영상 기반)
+          2) LLM으로 발달 단계 판단 (메타데이터 기반)
+          3) LLM으로 단계별 상세 분석 (메타데이터 + 단계별 프롬프트)
+
+        NOTE:
+          - 홈캠 8시간짜리 영상은 1시간 단위로 잘라서 이 함수에 전달하는 것을 권장합니다.
+          - 이 함수는 "최대 1시간 분량의 클립"을 한 번 분석하는 단위로 설계되었습니다.
         """
         try:
             mime_type = content_type or "video/mp4"
@@ -606,14 +614,17 @@ class GeminiService:
             metadata_prompt = self._load_prompt("vlm_metadata.ko.txt")
 
             vlm_generation_config = genai.types.GenerationConfig(
-                temperature=0.0,
+                temperature=0.0,  # 사실 기반 추출
                 top_k=30,
                 top_p=0.95,
             )
 
             response = self.model.generate_content(
                 [
-                    {"mime_type": mime_type, "data": video_base64},
+                    {
+                        "mime_type": mime_type,
+                        "data": video_base64,
+                    },
                     metadata_prompt,
                 ],
                 generation_config=vlm_generation_config,
@@ -624,36 +635,90 @@ class GeminiService:
 
             metadata_text = response.text.strip()
             metadata = self._extract_and_parse_json(metadata_text)
-            
-            # 비디오 길이 보정 로직 (OpenCV)
+
+            print(
+                f"[1차 완료] 관찰 {len(metadata.get('timeline_observations', []))}개, "
+                f"안전 이벤트 {len(metadata.get('safety_observations', []))}개"
+            )
+
+            # 1-1) 비디오 길이 계산 (OpenCV → 메타데이터 보정)
             calculated_duration = self._get_video_duration(video_bytes, mime_type)
             if calculated_duration:
                 video_duration_seconds = calculated_duration
+                if "video_metadata" not in metadata:
+                    metadata["video_metadata"] = {}
+                metadata["video_metadata"]["total_duration_seconds"] = calculated_duration
+                print(f"[비디오 길이] OpenCV 측정값 사용: {calculated_duration}초")
             else:
-                video_duration_seconds = metadata.get("video_metadata", {}).get("total_duration_seconds", 0)
+                video_duration_seconds = metadata.get("video_metadata", {}).get(
+                    "total_duration_seconds"
+                )
+                print(f"[비디오 길이] VLM 추정값 사용: {video_duration_seconds}초")
 
-            video_duration_minutes = round(video_duration_seconds / 60, 2) if video_duration_seconds else None
+            video_duration_minutes = (
+                round(video_duration_seconds / 60, 2)
+                if video_duration_seconds
+                else None
+            )
+            print(
+                f"[비디오 길이] {video_duration_seconds}초 ({video_duration_minutes}분)"
+            )
+
+            # 1-2) 메타데이터 상한 적용 (토큰 절감)
+            timeline_obs = metadata.get("timeline_observations")
+            if isinstance(timeline_obs, list) and len(timeline_obs) > self.MAX_TIMELINE_OBS:
+                print(
+                    f"[메타데이터 압축] timeline_observations "
+                    f"{len(timeline_obs)}개 → {self.MAX_TIMELINE_OBS}개로 축소"
+                )
+                metadata["timeline_observations"] = timeline_obs[: self.MAX_TIMELINE_OBS]
+
+            safety_obs = metadata.get("safety_observations")
+            if isinstance(safety_obs, list) and len(safety_obs) > self.MAX_SAFETY_OBS:
+                print(
+                    f"[메타데이터 압축] safety_observations "
+                    f"{len(safety_obs)}개 → {self.MAX_SAFETY_OBS}개로 축소"
+                )
+                metadata["safety_observations"] = safety_obs[: self.MAX_SAFETY_OBS]
 
             # ----------------------------------------------------------
             # 2단계: LLM 호출 → 발달 단계 판단
             # ----------------------------------------------------------
             detected_stage = stage
             stage_determination_result = None
+            initial_stage_from_age = None
 
             if stage is None:
                 if age_months is not None:
-                    detected_stage = self._determine_stage_from_age_months(age_months)
-                    print(f"[발달 단계 초기화] age_months={age_months}개월 → 초기 단계: {detected_stage}단계")
-                else:
-                    print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
-                    
-                    stage_header_prompt = self._load_prompt("header.ko.txt")
-                    metadata_json_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
-                    
-                    combined_prompt_stage = f"""[입력 방식]
+                    initial_stage_from_age = self._determine_stage_from_age_months(
+                        age_months
+                    )
+                    print(
+                        f"[발달 단계 초기화] age_months={age_months}개월 "
+                        f"→ 초기 단계: {initial_stage_from_age}단계"
+                    )
+
+                print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
+
+                stage_header_prompt = self._load_prompt("header.ko.txt")
+
+                age_hint = ""
+                if age_months is not None and initial_stage_from_age is not None:
+                    age_hint = f"""
+[개월 수 정보]
+- 이 아이의 개월 수: {age_months}개월
+- 개월 수 기반 예상 단계: {initial_stage_from_age}단계
+- 이 정보를 참고하되, 실제 관찰된 행동 패턴이 더 중요합니다.
+- 관찰된 행동이 예상 단계와 다르다면, 관찰 결과를 우선하여 판단하세요.
+"""
+
+                # compact JSON으로 토큰 절감
+                metadata_json_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+
+                combined_prompt_stage = f"""[입력 방식]
 비디오 대신 비디오에서 추출된 메타데이터를 제공합니다.
 이 메타데이터를 바탕으로 발달 단계를 판단하세요.
-
+{age_hint}
 [메타데이터]
 ```json
 {metadata_json_str}
@@ -667,111 +732,238 @@ class GeminiService:
 - 위 발달 단계 기준과 비교하여 판단
 - evidence에는 구체적인 빈도/지속시간을 포함
 """
-                    
-                    response = self.model.generate_content(combined_prompt_stage)
-                    
-                    if not response or not hasattr(response, "text"):
-                        raise ValueError("Gemini 단계 판단 응답이 올바르지 않습니다.")
-                    
-                    result_text = response.text.strip()
-                    stage_determination_result = self._extract_and_parse_json(result_text)
-                    detected_stage = stage_determination_result.get("detected_stage")
-                    
-                    if not detected_stage:
-                        detected_stage = "1"  # Fallback
-                        print("[발달 단계] 판단 실패, 기본값 사용: 1단계")
-                    else:
-                        print(f"[2차 완료] 판단된 단계: {detected_stage}, 신뢰도: {stage_determination_result.get('confidence')}")
+
+                response = self.model.generate_content(combined_prompt_stage)
+
+                if not response or not hasattr(response, "text"):
+                    raise ValueError("Gemini 단계 판단 응답이 올바르지 않습니다.")
+
+                result_text = response.text.strip()
+                stage_determination_result = self._extract_and_parse_json(result_text)
+                detected_stage = stage_determination_result.get("detected_stage")
+
+                if not detected_stage:
+                    raise ValueError("발달 단계를 판단할 수 없습니다.")
+
+                if initial_stage_from_age and detected_stage != initial_stage_from_age:
+                    print(
+                        f"[발달 단계 조정] 초기 {initial_stage_from_age}단계 "
+                        f"→ AI 판단 {detected_stage}단계 "
+                        f"(신뢰도: {stage_determination_result.get('confidence')})"
+                    )
+                else:
+                    print(
+                        f"[2차 완료] 판단된 단계: {detected_stage}, "
+                        f"신뢰도: {stage_determination_result.get('confidence')}"
+                    )
+            else:
+                print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
+                detected_stage = stage
 
             # ----------------------------------------------------------
-            # 3단계: Group A & B 순차 분석 (Sequential Processing)
+            # 3단계: LLM 호출 → 단계별 상세 분석
             # ----------------------------------------------------------
-            print(f"=== [3단계 진입] {detected_stage}단계 기준 분리 분석 시작 ===")
-            
-            # 메타데이터 JSON 문자열 준비
+            print(f"[3차 LLM] {detected_stage}단계 기준으로 상세 분석 중...")
+
+            if age_months is None and stage_determination_result:
+                estimated_age = stage_determination_result.get("age_months_estimate")
+                if estimated_age:
+                    age_months = estimated_age
+                    print(f"[개월 수] 판단 결과에서 추정: {age_months}개월")
+
+            stage_prompt = self._load_vlm_prompt(
+                stage=detected_stage,
+                age_months=age_months,
+                video_duration_seconds=video_duration_seconds,
+            )
+
             metadata_json_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
 
-            # [CALL A] 안전 분석 (Safety)
-            print(">>> [Group A] 안전 분석 요청 중...")
-            safety_prompt_template = self._load_prompt("groups/group_a_safety.ko.txt")
-            
-            full_safety_prompt = f"""
-{safety_prompt_template}
+            combined_prompt_detail = f"""[입력 방식 - 중요!]
+비디오를 직접 보는 것이 아니라, 비디오에서 이미 추출된 메타데이터를 분석합니다.
+메타데이터에는 timeline_observations, behavior_summary, safety_observations 등이 포함되어 있습니다.
 
-[분석할 메타데이터]
+[메타데이터]
 ```json
 {metadata_json_str}
 ```
+
+{stage_prompt}
+
+[메타데이터 기반 분석 방법]
+아래 프롬프트에서 "탐지", "관찰", "기록" 등의 표현은 메타데이터를 분석하는 것으로 해석하세요.
+
+1. development_analysis.skills 생성:
+   - behavior_summary에서 각 행동의 빈도(count)와 지속시간(total_duration_seconds) 확인
+   - timeline_observations에서 해당 행동의 구체적 예시(examples) 추출
+   - frequency는 behavior_summary의 count 값 사용
+   - examples는 timeline_observations에서 해당 action의 detail 사용
+
+2. safety_analysis.incident_events 생성:
+   - safety_observations의 각 항목을 incident_events로 변환
+   - event_id는 "E001", "E002" 형식으로 순차 부여
+   - severity는 safety_observations의 severity 값 사용
+   - timestamp_range는 safety_observations의 timestamp 사용
+     (단일 시점인 경우 +5초 하여 "HH:MM:SS-HH:MM:SS" 범위로 변환)
+   - description은 description에 trigger_behavior와 environment_factor를 포함하여 상세히 기술
+   - has_safety_device는 safety_observations의 has_safety_device 값 사용
+
+3. safety_analysis.critical_events 생성:
+   - safety_observations 중 severity가 '사고발생' 또는 '위험'인 항목은 critical_events에도 기록
+   - event_type은 severity에 따라 '실제사고' 또는 '사고직전위험상황'으로 분류
+
+4. safety_analysis.environment_risks 생성:
+   - environment.hazards_identified의 각 항목을 environment_risks로 변환
+   - risk_type, severity, environment_factor, has_safety_device 등을 적절히 채움
+
+5. safety_analysis.overall_safety_level 평가:
+   - adult_presence 정보를 반영하여 보호자의 개입 수준과 동반 여부를 고려해 판단
+
+6. development_analysis.next_stage_signs 생성:
+   - 현재 단계보다 더 발달된 행동이 보이면 이를 추출하여 기록
+
+7. development_analysis.summary 생성:
+   - behavior_summary의 전체 패턴을 보고 2-3문장으로 요약
+   - 빈도가 높은 행동들을 중심으로 서술
+
+8. 출력 스키마:
+   - 프롬프트에 정의된 JSON 스키마를 정확히 따를 것
+   - 모든 필수 필드를 포함할 것
 """
-            
-            safety_response = self.model.generate_content(full_safety_prompt)
-            safety_result_json = self._extract_and_parse_json(safety_response.text)
-            print("<<< [Group A] 안전 분석 완료")
 
-            # [CALL B] 발달 분석 (Development)
-            print(">>> [Group B] 발달 분석 요청 중...")
-            development_prompt_template = self._load_prompt("groups/group_b_development.ko.txt")
-            
-            full_dev_prompt = f"""
-{development_prompt_template}
+            generation_config = None
+            if generation_params:
+                print(f"[Generation Config] 사용자 설정 적용: {generation_params}")
+                generation_config = genai.types.GenerationConfig(
+                    temperature=generation_params.get("temperature", 0.4),
+                    top_k=generation_params.get("top_k", 30),
+                    top_p=generation_params.get("top_p", 0.95),
+                )
 
-[분석할 메타데이터]
-```json
-{metadata_json_str}
-```
-"""
-            
-            dev_response = self.model.generate_content(full_dev_prompt)
-            dev_result_json = self._extract_and_parse_json(dev_response.text)
-            print("<<< [Group B] 발달 분석 완료")
+            print("[Gemini API 호출 시작 (LLM 상세 분석 모드)]")
+            response = self.model.generate_content(
+                combined_prompt_detail,
+                generation_config=generation_config,
+            )
+            print("[Gemini API 호출 완료]")
 
+            if not response or not hasattr(response, "text"):
+                raise ValueError("Gemini 상세 분석 응답이 올바르지 않습니다.")
 
-            # -------------------------------------------------------
-            # [결과 병합] 최종 리턴 데이터 구성
-            # -------------------------------------------------------
-            final_result = {
-                "meta": {
-                    "assumed_stage": detected_stage,
-                    "age_months": age_months,
-                    "observation_duration_minutes": video_duration_minutes
-                },
-                # Group A 결과 병합
-                "safety_analysis": safety_result_json.get("safety_analysis", {}),
-                
-                # Group B 결과 병합
-                "development_analysis": dev_result_json.get("development_analysis", {}),
-                
-                # 원본 메타데이터 (디버깅용)
-                "_extracted_metadata": metadata
-            }
+            result_text = response.text.strip()
+            print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
+            print(f"[Gemini 원본 응답 미리보기 (처음 500자)]\n{result_text[:500]}")
 
-            # 안전 점수 재계산 (기존 로직 유지)
-            if "safety_analysis" in final_result:
-                safety_analysis = final_result["safety_analysis"]
-                safety_score, incident_summary = self._calculate_safety_score(safety_analysis)
-                safety_analysis["safety_score"] = safety_score
-                safety_analysis["incident_summary"] = incident_summary
-                
-                # overall_safety_level 설정
-                if safety_score >= 90:
-                    level = "매우높음"
-                elif safety_score >= 75:
-                    level = "높음"
-                elif safety_score >= 65:
-                    level = "중간"
-                elif safety_score >= 55:
-                    level = "낮음"
-                else:
-                    level = "매우낮음"
-                safety_analysis["overall_safety_level"] = level
-                print(f"[안전도 레벨 자동 설정] safety_score: {safety_score} → overall_safety_level: {level}")
+            try:
+                analysis_data = self._extract_and_parse_json(result_text)
+                print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
 
-            print("[3차 완료] Group A/B 분석 완료")
-            return final_result
+                # 단계 판단 결과 추가
+                if stage_determination_result:
+                    analysis_data["stage_determination"] = {
+                        "detected_stage": stage_determination_result.get(
+                            "detected_stage"
+                        ),
+                        "confidence": stage_determination_result.get("confidence"),
+                        "evidence": stage_determination_result.get("evidence", []),
+                        "alternative_stages": stage_determination_result.get(
+                            "alternative_stages", []
+                        ),
+                    }
 
+                    if "meta" not in analysis_data:
+                        analysis_data["meta"] = {}
+
+                    if (
+                        "assumed_stage" not in analysis_data["meta"]
+                        or not analysis_data["meta"].get("assumed_stage")
+                    ):
+                        analysis_data["meta"]["assumed_stage"] = detected_stage
+
+                    if age_months is None:
+                        estimated_age = stage_determination_result.get(
+                            "age_months_estimate"
+                        )
+                        if estimated_age and (
+                            "age_months" not in analysis_data["meta"]
+                            or analysis_data["meta"].get("age_months") is None
+                        ):
+                            analysis_data["meta"]["age_months"] = estimated_age
+
+                    print(
+                        f"[2단계 정보 병합] 최종 발달 단계: {detected_stage}단계 "
+                        f"(신뢰도: {stage_determination_result.get('confidence')})"
+                    )
+
+                # 비디오 길이 meta 설정
+                if video_duration_minutes is not None:
+                    if "meta" not in analysis_data:
+                        analysis_data["meta"] = {}
+                    analysis_data["meta"][
+                        "observation_duration_minutes"
+                    ] = video_duration_minutes
+                    print(
+                        f"[비디오 길이 자동 설정] observation_duration_minutes: {video_duration_minutes}분"
+                    )
+
+                # safety_score / overall_safety_level 재계산
+                if "safety_analysis" in analysis_data:
+                    safety_analysis = analysis_data["safety_analysis"]
+                    safety_score, incident_summary = self._calculate_safety_score(
+                        safety_analysis
+                    )
+                    safety_analysis["safety_score"] = safety_score
+                    safety_analysis["incident_summary"] = incident_summary
+
+                    if isinstance(
+                        safety_analysis.get("safety_score"), (int, float)
+                    ):
+                        score = safety_analysis["safety_score"]
+                        if score >= 90:
+                            level = "매우높음"
+                        elif score >= 75:
+                            level = "높음"
+                        elif score >= 65:
+                            level = "중간"
+                        elif score >= 55:
+                            level = "낮음"
+                        else:
+                            level = "매우낮음"
+                        safety_analysis["overall_safety_level"] = level
+                        print(
+                            f"[안전도 레벨 자동 설정] safety_score: {score} → overall_safety_level: {level}"
+                        )
+
+                # 디버깅용: 추출 메타데이터도 함께 반환
+                analysis_data["_extracted_metadata"] = metadata
+
+                print("[3차 완료] 상세 분석 완료")
+                return analysis_data
+
+            except json.JSONDecodeError as json_err:
+                print("⚠️ JSON 파싱 실패.")
+                print(f"[추출된 JSON 텍스트 (처음 500자)]\n{result_text[:500]}")
+                print(f"[추출된 JSON 텍스트 (마지막 500자)]\n{result_text[-500:]}")
+                print(f"[에러 위치] {json_err}")
+                raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
+
+        except json.JSONDecodeError as e:
+            import traceback
+
+            print(f"❌ JSON 파싱 오류: {str(e)}")
+            print(f"상세:\n{traceback.format_exc()}")
+            raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
+        except ValueError:
+            # 400 계열로 매핑될 수 있도록 그대로 올림
+            raise
         except Exception as e:
-            print(f"❌ 분석 중 오류 발생: {str(e)}")
-            raise e
+            import traceback
+
+            error_trace = traceback.format_exc()
+            error_msg = str(e)
+            print(f"❌ Gemini 메타데이터 기반 비디오 분석 오류: {error_msg}")
+            print(f"상세 에러:\n{error_trace}")
+            raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
 
 # 싱글톤 인스턴스
