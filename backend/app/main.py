@@ -11,6 +11,7 @@ from .api.homecam import router as homecam_router
 from .api.live_monitoring import router as live_monitoring_router
 from .api.auth.router import router as auth_router
 from .api.payments.router import router as payments_router, process_due_subscriptions
+from .api.endpoints import analysis
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -136,6 +137,13 @@ def create_app() -> FastAPI:
 
     # 결제 / 구독
     app.include_router(payments_router)
+
+    # AI 분석 (Group A/B)
+    app.include_router(
+        analysis.router,
+        prefix="/api/v1/analysis",
+        tags=["Analysis"]
+    )
 
     return app
 

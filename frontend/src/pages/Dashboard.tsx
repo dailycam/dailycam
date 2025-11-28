@@ -19,7 +19,25 @@ import { mockDashboardData } from '../utils/mockData'
 
 type TimeRangeType = 'day' | 'week' | 'month' | 'year'
 
+// 화면 너비를 감지하는 커스텀 훅
+function useWindowWidth() {
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    function handleResize() {
+      setWindowWidth(window.innerWidth);
+    }
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return windowWidth;
+}
+
 export default function Dashboard() {
+  const windowWidth = useWindowWidth(); // 훅 호출
+  const isMobile = windowWidth < 768;   // 모바일 화면 기준 설정 (768px 미만)
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
@@ -419,8 +437,8 @@ export default function Dashboard() {
       change: '+3',
       changeLabel: '지난주 대비',
       icon: Shield,
-      color: 'text-primary-600',
-      bgColor: 'bg-primary-50',
+      color: 'text-safe',
+      bgColor: 'bg-safe-50',
       trend: 'up'
     },
     {
@@ -518,15 +536,15 @@ export default function Dashboard() {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="mb-8"
       >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className={`${sectionTitleClass} font-bold`}>오늘의 하이라이트</h2>
-              <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
+          <div>
+            <h2 className={`${sectionTitleClass} font-bold`}>오늘의 하이라이트</h2>
+            <p className="text-sm text-gray-500">AI가 분석한 지수의 하루</p>
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-4 mb-4">
           <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
@@ -555,14 +573,14 @@ export default function Dashboard() {
         <div className="grid lg:grid-cols-2 gap-4">
           <a
             href="/development-report"
-            className="w-full btn-primary flex items-center justify-center h-14 shadow-md"
+            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 text-white h-14 rounded-lg flex items-center justify-center font-medium transition-colors hover:from-primary-600 hover:to-primary-700"
           >
             발달 리포트 자세히 보기
             <ChevronRight className="w-5 h-5 ml-1" />
           </a>
           <a
             href="/safety-report"
-            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-md h-14 rounded-lg flex items-center justify-center font-medium transition-colors"
+            className="w-full bg-gradient-to-r from-safe to-safe-dark text-white h-14 rounded-lg flex items-center justify-center font-medium transition-colors hover:from-safe-dark hover:to-green-700"
           >
             안전 리포트 자세히 보기
             <ChevronRight className="w-5 h-5 ml-1" />
@@ -579,7 +597,7 @@ export default function Dashboard() {
       >
         <div className="card p-6 border-0 shadow-sm">
           {/* 헤더 */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
               <Clock className="w-6 h-6 text-primary-500" />
               <div>
@@ -593,14 +611,14 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               {/* 기간 선택 버튼 */}
               <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setTimeRange('day')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'day'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   하루
@@ -608,8 +626,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('week')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'week'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   7일
@@ -617,8 +635,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('month')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'month'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   한달
@@ -626,8 +644,8 @@ export default function Dashboard() {
                 <button
                   onClick={() => setTimeRange('year')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === 'year'
-                      ? 'bg-white text-primary-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   1년
@@ -677,7 +695,7 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center justify-end gap-4 mb-4 text-sm">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary-500"></div>
+                <div className="w-3 h-3 rounded-full bg-safe"></div>
                 <span className="text-gray-600">안전 점수</span>
               </div>
               <div className="flex items-center gap-2">
@@ -689,8 +707,8 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: timeRange === 'year' ? 40 : 60 }}>
                 <defs>
                   <linearGradient id="colorSafetyDaily" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0284c7" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#86efac" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#86efac" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorDevelopmentDaily" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
@@ -701,7 +719,7 @@ export default function Dashboard() {
                 <XAxis
                   dataKey="time"
                   tick={{ fontSize: 12, fill: '#9ca3af' }}
-                  interval={0}
+                  interval={isMobile ? 'preserveEnd' : 0}
                   angle={timeRange === 'year' || timeRange === 'month' ? -45 : -45}
                   textAnchor="end"
                   height={timeRange === 'year' || timeRange === 'month' ? 80 : 60}
@@ -729,7 +747,7 @@ export default function Dashboard() {
                 <Area
                   type="monotone"
                   dataKey="safety"
-                  stroke="#0284c7"
+                  stroke="#22c55e"
                   strokeWidth={2}
                   fill="url(#colorSafetyDaily)"
                   animationDuration={1500}
@@ -755,7 +773,9 @@ export default function Dashboard() {
                 <Activity className="w-5 h-5 text-primary-500" />
                 활동 상세 내역
               </h3>
-              <div className="overflow-x-auto">
+
+              {/* --- 기존 테이블: 데스크톱 화면용 --- */}
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-gray-200">
@@ -1086,6 +1106,48 @@ export default function Dashboard() {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              {/* --- 새로운 카드 리스트: 모바일 화면용 --- */}
+              <div className="block lg:hidden space-y-4">
+                {timeRanges.map((range) => {
+                  const eventsInRange = timelineEvents.filter(e =>
+                    e.hour >= range.start && e.hour <= range.end
+                  );
+
+                  if (eventsInRange.length === 0) {
+                    return null; // 해당 시간대에 이벤트가 없으면 렌더링하지 않음
+                  }
+
+                  return (
+                    <div key={range.label} className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+                      <h4 className="font-bold text-primary-600 mb-3 pb-2 border-b">{range.label}</h4>
+                      <div className="space-y-3">
+                        {eventsInRange.map((event, idx) => {
+                          const Icon = event.type === 'development' ? Baby : Shield;
+                          const iconColor = event.type === 'development'
+                            ? 'text-blue-500'
+                            : event.severity === 'warning'
+                              ? 'text-yellow-500'
+                              : 'text-green-500';
+
+                          return (
+                            <div key={idx}>
+                              <div className="flex items-start gap-3">
+                                <Icon className={`w-4 h-4 mt-1 ${iconColor}`} />
+                                <div className="flex-1">
+                                  <p className="font-semibold text-sm text-gray-800">{event.title}</p>
+                                  <p className="text-xs text-gray-600">{event.description}</p>
+                                  <p className="text-xs text-gray-400 mt-1">{event.time}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

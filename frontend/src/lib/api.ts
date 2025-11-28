@@ -195,12 +195,12 @@ export interface IncidentSummaryItem {
 export interface SafetyAnalysis {
   overall_safety_level?: '매우낮음' | '낮음' | '중간' | '높음' | '매우높음'
   adult_presence?:
-    | '항상동반'
-    | '자주동반'
-    | '드물게동반'
-    | '거의없음'
-    | '판단불가'
-    | Record<string, any>
+  | '항상동반'
+  | '자주동반'
+  | '드물게동반'
+  | '거의없음'
+  | '판단불가'
+  | Record<string, any>
   environment_risks?: EnvironmentRisk[]
   critical_events?: CriticalEvent[]
   incident_events?: IncidentEvent[]

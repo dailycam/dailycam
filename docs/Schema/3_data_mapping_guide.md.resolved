@@ -1,0 +1,608 @@
+# 3. 데이터 매핑 가이드
+
+프론트엔드 컴포넌트가 백엔드 어느 테이블/컬럼에서 데이터를 가져와야 하는지 상세히 매핑합니다.
+
+---
+
+## 1. Settings.tsx - 구독 정보
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface UserInfo {
+  id: number
+  email: string
+  name: string
+  picture: string
+  created_at: string
+  is_subscribed: boolean | number
+  next_billing_at?: string | null
+  subscription_plan?: string | null
+  has_billing_key?: boolean
+}
+```
+
+### 백엔드 매핑
+
+**사용 테이블:** `users`
+
+**API 엔드포인트:** `GET /api/auth/me`
+
+**응답 예시:**
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "name": "김지수",
+  "picture": "https://...",
+  "created_at": "2024-11-01T10:00:00Z",
+  "is_subscribed": 1,
+  "subscription_plan": "BASIC",
+  "subscription_customer_uid": "user_1",
+  "next_billing_at": "2024-12-01T00:00:00Z",
+  "has_billing_key": true
+}
+```
+
+**컬럼 매핑:**
+- `is_subscribed` → `users.is_subscribed` (0 또는 1)
+- `subscription_plan` → `users.subscription_plan` ("BASIC", "PREMIUM" 등)
+- `next_billing_at` → `users.next_billing_at` (DateTime)
+- `has_billing_key` → `users.subscription_customer_uid IS NOT NULL`
+
+**UI 동작 로직:**
+- `is_subscribed=1, has_billing_key=true`: "활성" 배지, 자동결제 중
+- `is_subscribed=1, has_billing_key=false`: "만료 예정" 배지, 자동결제 해지됨
+- `is_subscribed=0`: "미사용" 배지
+
+---
+
+## 2. SubscriptionPage.tsx - 결제 정보
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface MeResponse {
+  id: number
+  email: string
+  name: string
+}
+```
+
+### 백엔드 매핑
+
+**사용 테이블:** `users`
+
+**API 엔드포인트:**
+- `GET /api/auth/me` - 사용자 정보 조회
+- `POST /api/payments/subscribe/basic/confirm` - 결제 검증 및 구독 활성화
+
+**결제 검증 요청 바디:**
+```json
+{
+  "imp_uid": "imp_123456789",
+  "merchant_uid": "basic_1700123456789",
+  "customer_uid": "user_1"
+}
+```
+
+**결제 검증 후 DB 업데이트:**
+```python
+user.is_subscribed = 1
+user.subscription_plan = "BASIC"
+user.subscription_customer_uid = "user_1"
+user.next_billing_at = datetime.now() + timedelta(days=30)
+```
+
+---
+
+## 3. Dashboard.tsx - 대시보드 통계
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface DashboardData {
+  safetyScore: number           // 오늘 안전 점수
+  monitoringHours: number       // 모니터링 시간
+  incidentCount: number         // 이벤트 감지 횟수
+  chartData: Array<{            // 시간대별 차트 데이터
+    time: string
+    safety: number
+    development: number
+  }>
+  timelineEvents: Array<{       // 타임라인 이벤트
+    time: string
+    hour: number
+    type: 'development' | 'safety'
+    title: string
+    description: string
+    hasClip: boolean
+    category: string
+  }>
+}
+```
+
+### 백엔드 매핑
+
+**API 엔드포인트:** `GET /api/dashboard?days=7`
+
+**사용 테이블:**
+- `daily_summaries` - 일별 통계
+- `safety_events` - 타임라인 이벤트
+- `highlight_clips` - 클립 연동
+
+**쿼리 로직:**
+
+```python
+from datetime import date, timedelta
+from sqlalchemy import func
+
+# 오늘 안전 점수 (실시간)
+today = date.today()
+daily_summary = db.query(DailySummary).filter(
+    DailySummary.user_id == user_id,
+    DailySummary.summary_date == today
+).first()
+
+safety_score = daily_summary.avg_safety_score if daily_summary else 95
+
+# 모니터링 시간
+monitoring_hours = daily_summary.monitoring_hours if daily_summary else 0
+
+# 이벤트 감지 횟수
+incident_count = db.query(func.count(SafetyEvent.id)).filter(
+    SafetyEvent.user_id == user_id,
+    func.date(SafetyEvent.event_timestamp) == today
+).scalar()
+
+# 주간 차트 데이터 (7일)
+chart_data = db.query(DailySummary).filter(
+    DailySummary.user_id == user_id,
+    DailySummary.summary_date >= today - timedelta(days=7),
+    DailySummary.summary_date <= today
+).order_by(DailySummary.summary_date).all()
+
+# 타임라인 이벤트 (오늘)
+timeline_events = db.query(SafetyEvent).filter(
+    SafetyEvent.user_id == user_id,
+    func.date(SafetyEvent.event_timestamp) == today
+).order_by(SafetyEvent.event_timestamp.desc()).all()
+```
+
+**컬럼 매핑:**
+
+| 프론트엔드 | 백엔드 테이블.컬럼 |
+|-----------|------------------|
+| `safetyScore` | `daily_summaries.avg_safety_score` |
+| `monitoringHours` | `daily_summaries.monitoring_hours` |
+| `incidentCount` | `safety_events` (COUNT) |
+| `chartData[].time` | `daily_summaries.summary_date` |
+| `chartData[].safety` | `daily_summaries.avg_safety_score` |
+| `chartData[].development` | `daily_summaries.avg_development_score` |
+| `timelineEvents[].time` | `safety_events.timestamp_range` |
+| `timelineEvents[].type` | 'safety' (SafetyEvent 테이블이므로) |
+| `timelineEvents[].title` | `safety_events.event_type` + 자동 생성 |
+| `timelineEvents[].description` | `safety_events.description` |
+| `timelineEvents[].hasClip` | `safety_events.has_clip` |
+
+**응답 예시:**
+```json
+{
+  "safetyScore": 92,
+  "monitoringHours": 16,
+  "incidentCount": 4,
+  "chartData": [
+    {"time": "1일차", "safety": 88, "development": 90},
+    {"time": "2일차", "safety": 90, "development": 92}
+  ],
+  "timelineEvents": [
+    {
+      "time": "15:00",
+      "hour": 15,
+      "type": "safety",
+      "title": "침대 가장자리 접근",
+      "description": "아기가 침대 가장자리에 접근했습니다.",
+      "hasClip": true,
+      "category": "안전 주의"
+    }
+  ]
+}
+```
+
+---
+
+## 4. SafetyReport.tsx - 안전 리포트
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface SafetyReportData {
+  currentSafetyScore: number
+  weeklySafetyData: Array<{date: string, 안전도: number}>
+  monthlySafetyData: Array<{date: string, 안전도: number}>
+  clockData: Array<{
+    hour: number
+    safetyLevel: 'safe' | 'warning' | 'danger'
+    safetyScore: number
+  }>
+  incidentTypeData: Array<{
+    name: string
+    value: number
+    count: number
+  }>
+}
+```
+
+### 백엔드 매핑
+
+**API 엔드포인트:** `GET /api/safety-report?period=week`
+
+**사용 테이블:**
+- `daily_summaries` - 주간/월간 추이
+- `safety_events` - 24시간 시계, 사건 유형 통계
+
+**쿼리 로직:**
+
+```python
+from datetime import date, timedelta
+
+# 주간 안전도 추이 (최근 7일)
+weekly_data = db.query(DailySummary).filter(
+    DailySummary.user_id == user_id,
+    DailySummary.summary_date >= date.today() - timedelta(days=7)
+).order_by(DailySummary.summary_date).all()
+
+# 24시간 시계 데이터
+clock_data = db.query(
+    SafetyEvent.event_hour,
+    func.avg(SafetyEvent.severity).label('avg_severity')
+).filter(
+    SafetyEvent.user_id == user_id,
+    func.date(SafetyEvent.event_timestamp) == date.today()
+).group_by(SafetyEvent.event_hour).all()
+
+# 사건 유형별 통계
+incident_types = db.query(
+    SafetyEvent.event_type,
+    func.count(SafetyEvent.id).label('count')
+).filter(
+    SafetyEvent.user_id == user_id,
+    func.date(SafetyEvent.event_timestamp) == date.today()
+).group_by(SafetyEvent.event_type).all()
+```
+
+**컬럼 매핑:**
+
+| 프론트엔드 | 백엔드 테이블.컬럼 |
+|-----------|------------------|
+| `currentSafetyScore` | `daily_summaries.avg_safety_score` (오늘) |
+| `weeklySafetyData[].안전도` | `daily_summaries.avg_safety_score` |
+| `clockData[].hour` | `safety_events.event_hour` |
+| `clockData[].safetyLevel` | `safety_events.severity` 기반 계산 |
+| `incidentTypeData[].name` | `safety_events.event_type` |
+| `incidentTypeData[].count` | `safety_events` COUNT |
+
+---
+
+## 5. DevelopmentReport.tsx - 발달 리포트
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface DevelopmentReportData {
+  radarData: Array<{
+    category: '언어' | '운동' | '인지' | '사회성' | '정서'
+    score: number
+    fullMark: 100
+  }>
+  dailyDevelopmentFrequency: Array<{
+    category: string
+    count: number
+  }>
+  recommendedActivities: Array<{
+    title: string
+    category: string
+    description: string
+  }>
+}
+```
+
+### 백엔드 매핑
+
+**API 엔드포인트:** `GET /api/development-report?date=2024-11-19`
+
+**사용 테이블:**
+- `daily_summaries` - 일별 발달 빈도
+- `analysis_logs` - VLM 분석 결과 (JSON)
+
+**쿼리 로직:**
+
+```python
+# 오늘 발달 영역별 빈도
+today_summary = db.query(DailySummary).filter(
+    DailySummary.user_id == user_id,
+    DailySummary.summary_date == date.today()
+).first()
+
+daily_frequency = [
+    {"category": "언어", "count": today_summary.language_count},
+    {"category": "운동", "count": today_summary.motor_count},
+    {"category": "인지", "count": today_summary.cognitive_count},
+    {"category": "사회성", "count": today_summary.social_count},
+    {"category": "정서", "count": today_summary.emotional_count}
+]
+
+# 최근 분석 로그에서 발달 점수 추출 (5각형 차트용)
+recent_logs = db.query(AnalysisLog).filter(
+    AnalysisLog.user_id == user_id
+).order_by(AnalysisLog.created_at.desc()).limit(10).all()
+
+# JSON에서 skills 추출하여 카테고리별 평균 레벨 계산
+radar_data = calculate_radar_from_logs(recent_logs)
+```
+
+**컬럼 매핑:**
+
+| 프론트엔드 | 백엔드 테이블.컬럼 |
+|-----------|------------------|
+| `radarData[].category` | 'language', 'motor', 'cognitive', 'social', 'emotional' |
+| `radarData[].score` | `analysis_logs.analysis_result['development_analysis']['skills']` 집계 |
+| dailyDevelopmentFrequency[].count` | `daily_summaries.language_count` 등 |
+
+**응답 예시:**
+```json
+{
+  "radarData": [
+    {"category": "언어", "score": 88, "fullMark": 100},
+    {"category": "운동", "score": 92, "fullMark": 100}
+  ],
+  "dailyDevelopmentFrequency": [
+    {"category": "언어", "count": 18},
+    {"category": "운동", "count": 25}
+  ]
+}
+```
+
+---
+
+## 6. ClipHighlights.tsx - 클립 하이라이트
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface ClipData {
+  id: string
+  title: string
+  category: string
+  timestamp: string
+  duration: string
+  thumbnail: string
+  description: string
+  importance: 'high' | 'medium' | 'warning' | 'info'
+}
+
+const developmentClips: ClipData[]
+const safetyClips: ClipData[]
+```
+
+### 백엔드 매핑
+
+**API 엔드포인트:** `GET /api/clips?category=development&date=2024-11-19`
+
+**사용 테이블:** `highlight_clips`
+
+**쿼리 로직:**
+
+```python
+# 발달 클립 조회
+dev_clips = db.query(HighlightClip).filter(
+    HighlightClip.user_id == user_id,
+    HighlightClip.category == ClipCategory.DEVELOPMENT,
+    func.date(HighlightClip.clip_timestamp) == target_date
+).order_by(HighlightClip.clip_timestamp.desc()).all()
+
+# 안전 클립 조회
+safety_clips = db.query(HighlightClip).filter(
+    HighlightClip.user_id == user_id,
+    HighlightClip.category == ClipCategory.SAFETY,
+    func.date(HighlightClip.clip_timestamp) == target_date
+).order_by(HighlightClip.clip_timestamp.desc()).all()
+```
+
+**컬럼 매핑:**
+
+| 프론트엔드 | 백엔드 테이블.컬럼 |
+|-----------|------------------|
+| [id](file:///c:/dev/dailycam-main/frontend/src/pages/Dashboard.tsx#22-37) | `highlight_clips.id` |
+| `title` | `highlight_clips.title` |
+| `category` | `highlight_clips.subcategory` |
+| `timestamp` | `highlight_clips.clip_timestamp` |
+| `duration` | `highlight_clips.duration_seconds` → "0:45" 변환 |
+| `thumbnail` | `highlight_clips.thumbnail_emoji` 또는 `thumbnail_path` |
+| `description` | `highlight_clips.description` |
+| `importance` | `highlight_clips.importance` |
+
+**응답 예시:**
+```json
+{
+  "developmentClips": [
+    {
+      "id": "dev-1",
+      "title": "배밀이 자세로 2미터 이동",
+      "category": "운동 발달",
+      "timestamp": "2024-11-19 15:23",
+      "duration": "0:45",
+      "thumbnail": "🤸",
+      "description": "아기가 배밀이 자세로 약 2미터를 이동하는 모습이 포착되었습니다.",
+      "importance": "high"
+    }
+  ],
+  "safetyClips": [...]
+}
+```
+
+---
+
+## 7. VideoAnalysisTest.tsx - AI 분석 결과
+
+### 프론트엔드 데이터 요구사항
+
+```typescript
+interface VideoAnalysisResult {
+  meta: {...}
+  safety_analysis: {...}
+  development_analysis: {...}
+  stage_determination: {...}
+  disclaimer: string
+}
+```
+
+### 백엔드 매핑
+
+**API 엔드포인트:** `POST /api/analysis/video`
+
+**요청:**
+```typescript
+const formData = new FormData()
+formData.append('video', videoFile)
+formData.append('ageMonths', ageMonths)
+formData.append('temperature', temperature)
+formData.append('topK', topK)
+formData.append('topP', topP)
+```
+
+**응답:** VLM JSON 그대로 반환
+
+**저장 로직:**
+```python
+# 1. VLM 분석 수행
+vlm_result = await gemini_service.analyze_video(video, params)
+
+# 2. AnalysisLog에 저장
+analysis_log = AnalysisLog(
+    user_id=current_user.id,
+    video_filename=video.filename,
+    video_path=saved_path,
+    analysis_result=vlm_result,  # JSON 전체 저장
+    assumed_stage=vlm_result['meta']['assumed_stage'],
+    safety_score=vlm_result['safety_analysis']['safety_score'],
+    ai_temperature=params.temperature
+)
+db.add(analysis_log)
+db.commit()
+
+# 3. SafetyEvent 별도 저장
+for incident in vlm_result['safety_analysis']['incident_events']:
+    event = SafetyEvent(
+        user_id=current_user.id,
+        analysis_log_id=analysis_log.id,
+        severity=incident['severity'],
+        description=incident['description'],
+        timestamp_range=incident['timestamp_range'],
+        # ...
+    )
+    db.add(event)
+
+# 4. HighlightClip 생성 (중요도 높은 이벤트만)
+if vlm_result['safety_analysis']['critical_events']:
+    for critical in vlm_result['safety_analysis']['critical_events']:
+        clip = HighlightClip(
+            user_id=current_user.id,
+            analysis_log_id=analysis_log.id,
+            title=f"중요 사건: {critical['event_type']}",
+            category=ClipCategory.SAFETY,
+            importance=ClipImportance.HIGH,
+            # ...
+        )
+        db.add(clip)
+
+db.commit()
+```
+
+**컬럼 매핑:**
+- VLM 결과 전체 → `analysis_logs.analysis_result` (JSON)
+- 각 필드 → `analysis_logs`의 개별 컬럼 (인덱싱용)
+- 이벤트 → `safety_events` 테이블에 분리 저장
+- 클립 → `highlight_clips` 테이블에 저장
+
+---
+
+## 요약: API 엔드포인트 목록
+
+| 페이지 | API 엔드포인트 | 사용 테이블 |
+|-------|---------------|-----------|
+| Settings | `GET /api/auth/me` | `users` |
+| SubscriptionPage | `POST /api/payments/subscribe/basic/confirm` | `users` |
+| Dashboard | `GET /api/dashboard?days=7` | `daily_summaries`, `safety_events` |
+| SafetyReport | `GET /api/safety-report?period=week` | `daily_summaries`, `safety_events` |
+| DevelopmentReport | `GET /api/development-report?date=2024-11-19` | `daily_summaries`, `analysis_logs` |
+| ClipHighlights | `GET /api/clips?category=development` | `highlight_clips` |
+| VideoAnalysisTest | `POST /api/analysis/video` | `analysis_logs`, `safety_events`, `highlight_clips` |
+
+---
+
+## 데이터 흐름 다이어그램
+
+```
+1. 비디오 업로드 (VideoAnalysisTest)
+   ↓
+2. VLM 분석 수행
+   ↓
+3. AnalysisLog 저장 (JSON + 메타데이터)
+   ├─ SafetyEvent 저장 (개별 사건)
+   ├─ HighlightClip 생성 (중요 사건)
+   └─ DailySummary 집계 (배치 작업)
+   ↓
+4. 프론트엔드 조회
+   ├─ Dashboard: DailySummary + SafetyEvent
+   ├─ SafetyReport: DailySummary + SafetyEvent
+   ├─ DevelopmentReport: DailySummary + AnalysisLog
+   └─ ClipHighlights: HighlightClip
+```
+
+---
+
+## 주의사항
+
+### 1. JSON 필드 접근 (PostgreSQL)
+```python
+# PostgreSQL JSON 쿼리
+from sqlalchemy.dialects.postgresql import JSONB
+
+db.query(AnalysisLog).filter(
+    AnalysisLog.analysis_result['meta']['assumed_stage'].astext == '중기영아기'
+).all()
+```
+
+### 2. MySQL JSON 쿼리
+```python
+from sqlalchemy import func
+
+db.query(AnalysisLog).filter(
+    func.json_extract(AnalysisLog.analysis_result, '$.meta.assumed_stage') == '중기영아기'
+).all()
+```
+
+### 3. 타임존 처리
+```python
+from datetime import datetime, timezone
+
+# UTC로 저장
+event.event_timestamp = datetime.now(timezone.utc)
+
+# 프론트엔드로 전송 시 ISO 8601 형식
+return event.event_timestamp.isoformat()
+```
+
+### 4. 페이지네이션
+```python
+# 클립 목록 조회 시
+page = request.args.get('page', 1, type=int)
+per_page = 20
+
+clips = db.query(HighlightClip).filter(
+    HighlightClip.user_id == user_id
+).order_by(
+    HighlightClip.clip_timestamp.desc()
+).offset((page - 1) * per_page).limit(per_page).all()
+```

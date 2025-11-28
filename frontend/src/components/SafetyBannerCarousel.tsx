@@ -37,7 +37,7 @@ export function SafetyBannerCarousel() {
                 <p className="mt-6 text-lg leading-8 text-gray-600">
                   기존 홈캠을 AI 안전 모니터링 시스템으로 업그레이드하세요.
                   <br />
-                  GPT-4 Vision이 실시간으로 위험을 감지하고 즉시 알려드립니다.
+                  Gemini가 실시간으로 위험을 감지하고 즉시 알려드립니다.
                 </p>
                 <div className="mt-10 flex items-center justify-center gap-x-6">
                   <Link
@@ -66,7 +66,7 @@ export function SafetyBannerCarousel() {
             <div className="absolute top-20 left-10 w-24 h-24 bg-white/30 rounded-full" />
             <div className="absolute bottom-32 right-20 w-32 h-32 bg-white/20 rounded-full" />
             <div className="absolute top-1/2 right-40 w-16 h-16 bg-white/40 rounded-full" />
-            
+
             <div className="container mx-auto px-8 h-full flex items-center">
               <div className="grid md:grid-cols-2 gap-12 items-center w-full">
                 <div className="z-10">
@@ -97,7 +97,7 @@ export function SafetyBannerCarousel() {
                         <h3 className="text-gray-900">아이곁에</h3>
                         <ShieldCheck className="text-indigo-600" size={24} />
                       </div>
-                      <ImageWithFallback 
+                      <ImageWithFallback
                         src="https://images.unsplash.com/photo-1503284116362-30c49f508156?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWJ5JTIwY3Jhd2xpbmclMjBob21lfGVufDF8fHx8MTc2Mjg1MDc3MXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
                         alt="아이 모니터링"
                         className="w-full h-64 object-cover rounded-lg mb-4"
@@ -119,7 +119,7 @@ export function SafetyBannerCarousel() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Floating notification */}
                     <div className="absolute -left-8 top-20 bg-indigo-600 text-white p-4 rounded-lg shadow-xl max-w-xs transform -rotate-3">
                       <div className="flex items-start gap-3">
@@ -180,7 +180,7 @@ export function SafetyBannerCarousel() {
                           <span className="text-white text-sm">2024.11.12</span>
                         </div>
                       </div>
-                      <ImageWithFallback 
+                      <ImageWithFallback
                         src="https://images.unsplash.com/photo-1543346242-2b8e41fb91ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYWJ5JTIwcm9vbSUyMG51cnNlcnl8ZW58MXx8fHwxNzYyOTA1ODM0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
                         alt="아기방"
                         className="w-full h-48 object-cover"
@@ -271,7 +271,7 @@ export function SafetyBannerCarousel() {
                         </div>
                         <span className="text-white text-sm">4개 클립</span>
                       </div>
-                      <ImageWithFallback 
+                      <ImageWithFallback
                         src="https://images.unsplash.com/photo-1725297952113-36be1c7cefb4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0b2RkbGVyJTIwcGxheWluZyUyMHNhZmVseXxlbnwxfHx8fDE3NjI5MDU4MzR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
                         alt="아이 활동"
                         className="w-full h-64 object-cover"
@@ -299,7 +299,7 @@ export function SafetyBannerCarousel() {
                           <span className="text-yellow-600">16:35</span>
                         </div>
                       </div>
-                      
+
                       {/* Heatmap indicator */}
                       <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-t">
                         <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -320,7 +320,7 @@ export function SafetyBannerCarousel() {
           <div className="relative h-[600px] bg-gradient-to-br from-violet-100 via-purple-50 to-fuchsia-50 overflow-hidden">
             {/* Background image with overlay */}
             <div className="absolute inset-0 right-0 w-1/2 md:w-2/5">
-              <ImageWithFallback 
+              <ImageWithFallback
                 src="https://images.unsplash.com/photo-1541545705343-80ecdec063ff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmZhbnQlMjBzbGVlcCUyMG1vbml0b3J8ZW58MXx8fHwxNzYyOTA1ODM1fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
                 alt="아기 안전"
                 className="w-full h-full object-cover opacity-50"
@@ -360,7 +360,7 @@ export function SafetyBannerCarousel() {
                       <CheckSquare className="text-violet-600" size={24} />
                       <h3 className="text-gray-900">오늘의 체크리스트</h3>
                     </div>
-                    
+
                     <div className="space-y-4">
                       <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border-l-4 border-red-400">
                         <div className="w-5 h-5 rounded border-2 border-red-400 flex-shrink-0 mt-0.5" />
@@ -369,7 +369,7 @@ export function SafetyBannerCarousel() {
                           <div className="text-sm text-red-600">우선순위: 높음</div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-start gap-3 p-4 bg-orange-50 rounded-lg border-l-4 border-orange-400">
                         <div className="w-5 h-5 rounded border-2 border-orange-400 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
@@ -377,7 +377,7 @@ export function SafetyBannerCarousel() {
                           <div className="text-sm text-orange-600">우선순위: 높음</div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
                         <div className="w-5 h-5 rounded border-2 border-yellow-400 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
@@ -385,7 +385,7 @@ export function SafetyBannerCarousel() {
                           <div className="text-sm text-yellow-600">우선순위: 중간</div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
                         <div className="w-5 h-5 rounded border-2 border-blue-400 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
