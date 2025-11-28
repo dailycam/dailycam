@@ -106,6 +106,19 @@ class GeminiService:
         """
         개월 수를 기준으로 초기 발달 단계를 결정합니다.
         이는 AI 분석의 시작점(기준점)으로 사용되며, AI는 실제 관찰을 통해 다른 단계를 제안할 수 있습니다.
+        
+        Stage 범위 (config.yaml 기준):
+        - Stage 1: 0-2개월
+        - Stage 2: 3-5개월
+        - Stage 3: 6-8개월
+        - Stage 4: 9-11개월
+        - Stage 5: 12-17개월
+        - Stage 6: 18-23개월
+        - Stage 7: 24-29개월
+        - Stage 8: 30-35개월
+        - Stage 9: 36-47개월
+        - Stage 10: 48-59개월
+        - Stage 11: 60-71개월
         """
         if age_months <= 2:
             return "1"
@@ -117,8 +130,18 @@ class GeminiService:
             return "4"
         elif age_months <= 17:
             return "5"
-        else:
+        elif age_months <= 23:
             return "6"
+        elif age_months <= 29:
+            return "7"
+        elif age_months <= 35:
+            return "8"
+        elif age_months <= 47:
+            return "9"
+        elif age_months <= 59:
+            return "10"
+        else:
+            return "11"
 
     def _format_duration(self, seconds: float) -> str:
         """초를 HH:MM:SS 형식으로 변환합니다."""
@@ -592,7 +615,7 @@ class GeminiService:
 
             vlm_generation_config = genai.types.GenerationConfig(
                 temperature=0.0,  # 사실 기반 추출
-                top_k=32,
+                top_k=30,
                 top_p=0.95,
             )
 

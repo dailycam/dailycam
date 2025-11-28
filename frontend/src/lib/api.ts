@@ -217,12 +217,12 @@ export interface IncidentSummaryItem {
 export interface SafetyAnalysis {
   overall_safety_level?: '매우낮음' | '낮음' | '중간' | '높음' | '매우높음'
   adult_presence?:
-    | '항상동반'
-    | '자주동반'
-    | '드물게동반'
-    | '거의없음'
-    | '판단불가'
-    | Record<string, any>
+  | '항상동반'
+  | '자주동반'
+  | '드물게동반'
+  | '거의없음'
+  | '판단불가'
+  | Record<string, any>
   environment_risks?: EnvironmentRisk[]
   critical_events?: CriticalEvent[]
   incident_events?: IncidentEvent[]
@@ -511,6 +511,10 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
     })
 
     if (!response.ok) {
+      // 404 에러는 백엔드에 엔드포인트가 없는 경우이므로 조용히 목 데이터로 fallback
+      if (response.status === 404) {
+        throw new Error('DASHBOARD_ENDPOINT_NOT_FOUND')
+      }
       throw new Error('대시보드 데이터를 가져오는 중 오류가 발생했습니다.')
     }
 
@@ -528,9 +532,12 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       risks: data.risks || [],
       recommendations: data.recommendations || [],
     }
-  } catch (error) {
+  } catch (error: any) {
     // 백엔드 연결 실패 시 목 데이터 반환
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+    // 404 에러는 조용히 처리 (백엔드에 엔드포인트가 없는 경우)
+    if (error?.message !== 'DASHBOARD_ENDPOINT_NOT_FOUND') {
+      console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+    }
     return {
       summary: "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 주방 데드존에 3회 접근했습니다.",
       rangeDays: rangeDays,

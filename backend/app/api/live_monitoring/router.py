@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Live monitoring API routes"""
 
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException
@@ -137,7 +138,6 @@ async def stop_stream(camera_id: str):
         "camera_id": camera_id,
         "status": "stopped"
     }
-
 
 @router.get("/stream/{camera_id}")
 async def stream_video(
@@ -301,4 +301,3 @@ async def list_hourly_files(camera_id: str):
         "total_files": len(files_info),
         "files": files_info
     }
-

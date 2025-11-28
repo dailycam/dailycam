@@ -35,7 +35,7 @@ import SettingsPage from './Settings'
 const features = [
   {
     name: '실시간 AI 분석',
-    description: 'GPT-4 Vision을 활용한 실시간 영상 분석으로 아이의 안전을 지킵니다.',
+    description: 'Gemini를 활용한 실시간 영상 분석으로 아이의 안전을 지킵니다.',
     icon: Brain,
   },
   {
@@ -151,7 +151,7 @@ const previewNavItems: {
   href: string
 }[] = [
     { id: 'dashboard', label: '대시보드', description: '주요 안전 지표', icon: LayoutDashboard, href: '/dashboard' },
-    { id: 'live', label: '실시간 모니터링', description: '라이브 스트림', icon: MonitorPlay, href: '/live-monitoring' },
+    { id: 'live', label: '모니터링', description: '라이브 스트림', icon: MonitorPlay, href: '/live-monitoring' },
     { id: 'development', label: '발달 리포트', description: 'AI 발달 분석', icon: TrendingUp, href: '/development-report' },
     { id: 'safety', label: '안전 리포트', description: '안전도·트렌드', icon: Shield, href: '/safety-report' },
     { id: 'clips', label: '클립 하이라이트', description: '주요 순간 모음', icon: Film, href: '/clip-highlights' },
@@ -483,7 +483,7 @@ export default function Home() {
                 <div className="h-16 flex items-center px-6 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     <img
-                      src="/daily-cam (4).png"
+                      src="/logo.png"
                       alt="Daily-cam 로고"
                       className="w-10 h-10 rounded-xl border border-gray-100 object-cover"
                       onError={(e) => {
