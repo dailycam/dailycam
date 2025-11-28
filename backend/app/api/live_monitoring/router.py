@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 """Live monitoring API routes"""
 
-from fastapi import APIRouter, UploadFile, File, Query, HTTPException
+from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends
 from fastapi.responses import StreamingResponse, Response
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -15,6 +14,10 @@ from app.services.live_monitoring.hourly_analyzer import (
     start_hourly_analysis_for_camera,
     stop_hourly_analysis_for_camera
 )
+from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis
+from app.database.session import get_db
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 router = APIRouter()
 
@@ -64,7 +67,8 @@ async def upload_video_for_streaming(
 @router.post("/start-stream/{camera_id}")
 async def start_stream(
     camera_id: str,
-    enable_analysis: bool = Query(True, description="1시간 단위 분석 활성화")
+    enable_analysis: bool = Query(True, description="1시간 단위 분석 활성화"),
+    enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화")
 ):
     """
     가짜 라이브 스트림 시작
@@ -83,8 +87,13 @@ async def start_stream(
             detail=f"영상 디렉토리가 없습니다: {video_dir}"
         )
     
-    # 스트림 생성기 생성
-    generator = FakeLiveStreamGenerator(camera_id, video_dir, buffer_dir)
+    # 스트림 생성기 생성 (실시간 탐지 활성화)
+    generator = FakeLiveStreamGenerator(
+        camera_id, 
+        video_dir, 
+        buffer_dir, 
+        enable_realtime_detection=enable_realtime_detection
+    )
     active_streams[camera_id] = generator
     
     # 백그라운드 태스크로 실행
@@ -95,13 +104,15 @@ async def start_stream(
     if enable_analysis:
         await start_hourly_analysis_for_camera(camera_id)
     
-    print(f"[API] 스트림 시작: {camera_id} (분석: {enable_analysis})")
+    print(f"[API] 스트림 시작: {camera_id} (분석: {enable_analysis}, 실시간 탐지: {enable_realtime_detection})")
     
     return {
         "message": f"스트림 시작: {camera_id}",
         "camera_id": camera_id,
         "status": "running",
-        "analysis_enabled": enable_analysis
+        "analysis_enabled": enable_analysis,
+        "realtime_detection_enabled": enable_realtime_detection,
+        "stream_url": f"/api/live-monitoring/stream/{camera_id}"
     }
 
 
@@ -300,4 +311,126 @@ async def list_hourly_files(camera_id: str):
         "camera_id": camera_id,
         "total_files": len(files_info),
         "files": files_info
+    }
+
+
+@router.get("/events/{camera_id}")
+async def get_realtime_events(
+    camera_id: str,
+    limit: int = Query(50, description="최대 이벤트 수"),
+    since: datetime = Query(None, description="이 시간 이후의 이벤트만 조회"),
+    event_type: str = Query(None, description="이벤트 타입 필터 (safety/development)"),
+    db: Session = Depends(get_db)
+):
+    """
+    실시간 이벤트 조회
+    """
+    query = db.query(RealtimeEvent).filter(RealtimeEvent.camera_id == camera_id)
+    
+    if since:
+        query = query.filter(RealtimeEvent.timestamp >= since)
+    
+    if event_type:
+        query = query.filter(RealtimeEvent.event_type == event_type)
+    
+    events = query.order_by(desc(RealtimeEvent.timestamp)).limit(limit).all()
+    
+    return {
+        "camera_id": camera_id,
+        "total": len(events),
+        "events": [
+            {
+                "id": event.id,
+                "timestamp": event.timestamp.isoformat(),
+                "event_type": event.event_type,
+                "severity": event.severity,
+                "title": event.title,
+                "description": event.description,
+                "location": event.location,
+                "metadata": event.event_metadata
+            }
+            for event in events
+        ]
+    }
+
+
+@router.get("/events/{camera_id}/latest")
+async def get_latest_events(
+    camera_id: str,
+    limit: int = Query(10, description="최대 이벤트 수"),
+    db: Session = Depends(get_db)
+):
+    """
+    최신 실시간 이벤트 조회 (폴링용)
+    """
+    events = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id
+    ).order_by(desc(RealtimeEvent.timestamp)).limit(limit).all()
+    
+    return {
+        "camera_id": camera_id,
+        "count": len(events),
+        "events": [
+            {
+                "id": event.id,
+                "timestamp": event.timestamp.isoformat(),
+                "event_type": event.event_type,
+                "severity": event.severity,
+                "title": event.title,
+                "description": event.description,
+                "location": event.location,
+                "metadata": event.event_metadata
+            }
+            for event in events
+        ]
+    }
+
+
+@router.get("/stats/{camera_id}")
+async def get_monitoring_stats(
+    camera_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    모니터링 통계 조회
+    """
+    from datetime import datetime, timedelta
+    
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 오늘의 이벤트 수
+    total_events = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id,
+        RealtimeEvent.timestamp >= today_start
+    ).count()
+    
+    # 위험 이벤트 수
+    danger_events = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id,
+        RealtimeEvent.timestamp >= today_start,
+        RealtimeEvent.severity == 'danger'
+    ).count()
+    
+    # 경고 이벤트 수
+    warning_events = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id,
+        RealtimeEvent.timestamp >= today_start,
+        RealtimeEvent.severity == 'warning'
+    ).count()
+    
+    # 최근 1시간 이벤트 수
+    hour_ago = now - timedelta(hours=1)
+    recent_events = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id,
+        RealtimeEvent.timestamp >= hour_ago
+    ).count()
+    
+    return {
+        "camera_id": camera_id,
+        "today_total_events": total_events,
+        "danger_events": danger_events,
+        "warning_events": warning_events,
+        "recent_hour_events": recent_events,
+        "is_active": camera_id in active_streams
     }

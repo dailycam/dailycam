@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import asyncio
 from app.services.live_monitoring.video_queue import VideoQueue
+from app.services.live_monitoring.realtime_detector import RealtimeEventDetector
 
 
 class FakeLiveStreamGenerator:
@@ -14,7 +15,7 @@ class FakeLiveStreamGenerator:
     1시간마다 자동으로 잘라서 저장
     """
     
-    def __init__(self, camera_id: str, video_dir: Path, buffer_dir: Path):
+    def __init__(self, camera_id: str, video_dir: Path, buffer_dir: Path, enable_realtime_detection: bool = True):
         self.camera_id = camera_id
         self.video_queue = VideoQueue(camera_id, video_dir)
         self.buffer_dir = buffer_dir
@@ -29,6 +30,11 @@ class FakeLiveStreamGenerator:
         self.target_width = 640
         self.target_height = 480
         self.target_fps = 1.0  # 분석용 1fps
+        
+        # 실시간 이벤트 탐지기
+        self.enable_realtime_detection = enable_realtime_detection
+        self.detector = RealtimeEventDetector(camera_id) if enable_realtime_detection else None
+        self.detection_frame_interval = 30  # 30프레임마다 탐지 (약 1초마다)
         
     async def start_streaming(self):
         """스트리밍 시작 (비동기)"""
@@ -98,6 +104,15 @@ class FakeLiveStreamGenerator:
             ret, frame = cap.read()
             if not ret:
                 break
+            
+            # 실시간 이벤트 탐지 (일정 간격마다)
+            if self.enable_realtime_detection and self.detector and frame_count % self.detection_frame_interval == 0:
+                try:
+                    events = self.detector.process_frame(frame)
+                    if events:
+                        self.detector.save_events(events)
+                except Exception as e:
+                    print(f"[실시간 탐지] 오류: {e}")
             
             # 프레임 샘플링
             if frame_count % frame_skip == 0:

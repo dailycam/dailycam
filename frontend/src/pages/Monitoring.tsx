@@ -16,7 +16,16 @@ import {
   Eye,
 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { uploadVideoForStreaming, getStreamUrl, stopStream } from '../lib/api'
+import { 
+  uploadVideoForStreaming, 
+  getStreamUrl, 
+  stopStream, 
+  startStream,
+  getLatestEvents,
+  getMonitoringStats,
+  RealtimeEvent,
+  MonitoringStats
+} from '../lib/api'
 
 export default function Monitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
@@ -31,14 +40,44 @@ export default function Monitoring() {
   const [streamLoop, setStreamLoop] = useState(true)
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [isStreamActive, setIsStreamActive] = useState(false)
+  const [isStartingStream, setIsStartingStream] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([])
+  const [monitoringStats, setMonitoringStats] = useState<MonitoringStats | null>(null)
+  const [isLoadingData, setIsLoadingData] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamImgRef = useRef<HTMLImageElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const streamCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastVideoPathRef = useRef<string | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 페이지 로드 시 저장된 스트림 정보 복원
+  // 실시간 데이터 로드
+  const loadRealtimeData = async () => {
+    try {
+      setIsLoadingData(true)
+      
+      // 최신 이벤트 조회
+      const eventsData = await getLatestEvents(selectedCamera, 20)
+      setRealtimeEvents(eventsData.events)
+      
+      // 통계 조회
+      const statsData = await getMonitoringStats(selectedCamera)
+      setMonitoringStats(statsData)
+      
+      console.log('실시간 데이터 로드 완료:', { events: eventsData.count, stats: statsData })
+    } catch (error) {
+      console.error('실시간 데이터 로드 실패:', error)
+    } finally {
+      setIsLoadingData(false)
+    }
+  }
+
+  // 페이지 로드 시 저장된 스트림 정보 복원 및 데이터 로드
   useEffect(() => {
+    // 실시간 데이터 로드
+    loadRealtimeData()
+    
     const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
     if (savedStreamInfo) {
       try {
@@ -81,6 +120,22 @@ export default function Monitoring() {
       localStorage.removeItem(`stream_${selectedCamera}`)
     }
   }, [streamUrl, streamLoop, streamSpeed, selectedCamera])
+
+  // 실시간 데이터 폴링 (스트림이 활성화되어 있을 때)
+  useEffect(() => {
+    if (isStreamActive) {
+      // 5초마다 데이터 갱신
+      pollingIntervalRef.current = setInterval(() => {
+        loadRealtimeData()
+      }, 5000)
+      
+      return () => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+        }
+      }
+    }
+  }, [isStreamActive, selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,6 +208,66 @@ export default function Monitoring() {
       setUploadError(errorMessage)
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  // 시간 포맷 헬퍼 함수
+  const formatTimeAgo = (timestamp: string): string => {
+    const now = new Date()
+    const eventTime = new Date(timestamp)
+    const diffMs = now.getTime() - eventTime.getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    const diffMin = Math.floor(diffSec / 60)
+    const diffHour = Math.floor(diffMin / 60)
+    
+    if (diffSec < 60) return '방금 전'
+    if (diffMin < 60) return `${diffMin}분 전`
+    if (diffHour < 24) return `${diffHour}시간 전`
+    return eventTime.toLocaleDateString('ko-KR')
+  }
+
+  const formatTime = (timestamp: string): string => {
+    const eventTime = new Date(timestamp)
+    return eventTime.toLocaleTimeString('ko-KR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
+  }
+
+  // 가짜 라이브 스트림 시작
+  const handleStartFakeStream = async () => {
+    setIsStartingStream(true)
+    setStreamError(null)
+
+    try {
+      console.log('가짜 라이브 스트림 시작:', selectedCamera)
+      const result = await startStream(selectedCamera, true)
+      console.log('스트림 시작 성공:', result)
+
+      // 스트림 URL 설정 (MJPEG 스트리밍)
+      const timestamp = Date.now()
+      const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed, timestamp)
+      setStreamUrl(url)
+      setIsStreamActive(true)
+      setIsPlaying(true)
+      startStreamMonitoring()
+
+      // localStorage에 저장
+      localStorage.setItem(
+        `stream_${selectedCamera}`,
+        JSON.stringify({
+          streamUrl: url,
+          streamLoop: streamLoop,
+          streamSpeed: streamSpeed,
+          cameraId: selectedCamera,
+          isFakeStream: true,
+        })
+      )
+    } catch (error: any) {
+      console.error('스트림 시작 오류:', error)
+      setStreamError(error.message || '스트림 시작 중 오류가 발생했습니다.')
+    } finally {
+      setIsStartingStream(false)
     }
   }
 
@@ -269,13 +384,60 @@ export default function Monitoring() {
         transition={{ duration: 0.6 }}
         className="mb-8"
       >
-        <div className="flex items-center gap-3 mb-2">
-          <MonitorPlay className="w-8 h-8 text-primary-600" />
-          <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
-            모니터링
-          </h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <MonitorPlay className="w-8 h-8 text-primary-600" />
+            <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
+              모니터링
+            </h1>
+          </div>
+          <div className="flex gap-2">
+            {!streamUrl ? (
+              <>
+                <button
+                  onClick={handleStartFakeStream}
+                  disabled={isStartingStream}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="w-4 h-4" />
+                  {isStartingStream ? '스트림 시작 중...' : '스트림 시작'}
+                </button>
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  비디오 업로드
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleStopStream}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                스트림 중지
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-gray-600">AI가 아이의 행동을 분석합니다</p>
+        
+        {/* 에러 메시지 */}
+        {streamError && (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              <span>{streamError}</span>
+              <button
+                onClick={() => setStreamError(null)}
+                className="ml-auto text-red-500 hover:text-red-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Main Grid */}
@@ -494,26 +656,27 @@ export default function Monitoring() {
               <h3 className="text-lg font-semibold text-gray-900">알림</h3>
             </div>
             <div className="space-y-3 max-h-64 overflow-y-auto">
-              <AlertItem
-                type="warning"
-                message="데드존 근처 접근"
-                time="방금 전"
-              />
-              <AlertItem
-                type="info"
-                message="세이프존으로 이동"
-                time="2분 전"
-              />
-              <AlertItem
-                type="warning"
-                message="가구 모서리 근접"
-                time="5분 전"
-              />
-              <AlertItem
-                type="safe"
-                message="안전한 활동 중"
-                time="10분 전"
-              />
+              {isLoadingData ? (
+                <div className="text-center py-4 text-gray-500">
+                  <Activity className="w-6 h-6 mx-auto mb-2 animate-spin" />
+                  <p className="text-sm">데이터 로딩 중...</p>
+                </div>
+              ) : realtimeEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">아직 이벤트가 없습니다</p>
+                  <p className="text-xs mt-1">스트림을 시작하면 실시간 이벤트가 표시됩니다</p>
+                </div>
+              ) : (
+                realtimeEvents.slice(0, 10).map((event) => (
+                  <AlertItem
+                    key={event.id}
+                    type={event.severity}
+                    message={event.title}
+                    time={formatTimeAgo(event.timestamp)}
+                  />
+                ))
+              )}
             </div>
           </motion.div>
 
@@ -529,26 +692,26 @@ export default function Monitoring() {
               <h3 className="text-lg font-semibold text-gray-900">활동 타임라인</h3>
             </div>
             <div className="space-y-4">
-              <TimelineItem
-                time="15:45"
-                activity="거실에서 놀이 중"
-                status="safe"
-              />
-              <TimelineItem
-                time="15:30"
-                activity="주방 근처 접근"
-                status="warning"
-              />
-              <TimelineItem
-                time="15:15"
-                activity="낮잠에서 깨어남"
-                status="info"
-              />
-              <TimelineItem
-                time="14:00"
-                activity="낮잠 시작"
-                status="safe"
-              />
+              {isLoadingData ? (
+                <div className="text-center py-4 text-gray-500">
+                  <Clock className="w-6 h-6 mx-auto mb-2 animate-spin" />
+                  <p className="text-sm">타임라인 로딩 중...</p>
+                </div>
+              ) : realtimeEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">활동 기록이 없습니다</p>
+                </div>
+              ) : (
+                realtimeEvents.slice(0, 8).map((event) => (
+                  <TimelineItem
+                    key={event.id}
+                    time={formatTime(event.timestamp)}
+                    activity={event.description}
+                    status={event.severity}
+                  />
+                ))
+              )}
             </div>
           </motion.div>
 
@@ -566,9 +729,18 @@ export default function Monitoring() {
                 <h3 className="text-lg font-semibold">오늘의 통계</h3>
               </div>
               <div className="space-y-3">
-                <QuickStat label="모니터링 시간" value="8시간 45분" />
-                <QuickStat label="감지된 위험" value="3건" />
-                <QuickStat label="세이프존 체류" value="92%" />
+                <QuickStat 
+                  label="오늘 알림" 
+                  value={`${monitoringStats?.today_total_events || 0}건`} 
+                />
+                <QuickStat 
+                  label="위험 이벤트" 
+                  value={`${monitoringStats?.danger_events || 0}건`} 
+                />
+                <QuickStat 
+                  label="최근 1시간" 
+                  value={`${monitoringStats?.recent_hour_events || 0}건`} 
+                />
               </div>
             </div>
           </motion.div>
@@ -760,17 +932,18 @@ function AlertItem({
   message,
   time,
 }: {
-  type: 'warning' | 'info' | 'safe'
+  type: 'danger' | 'warning' | 'info' | 'safe'
   message: string
   time: string
 }) {
   const typeConfig = {
+    danger: { bg: 'bg-red-50', icon: 'text-red-600', border: 'border-red-200' },
     warning: { bg: 'bg-warning-50', icon: 'text-warning', border: 'border-warning-200' },
     info: { bg: 'bg-blue-50', icon: 'text-blue-600', border: 'border-blue-200' },
     safe: { bg: 'bg-safe-50', icon: 'text-safe', border: 'border-safe-200' },
   }
 
-  const config = typeConfig[type]
+  const config = typeConfig[type] || typeConfig.info // fallback to info if type is unknown
 
   return (
     <div className={`p-3 rounded-lg border ${config.bg} ${config.border}`}>
@@ -793,9 +966,10 @@ function TimelineItem({
 }: {
   time: string
   activity: string
-  status: 'safe' | 'warning' | 'info'
+  status: 'danger' | 'safe' | 'warning' | 'info'
 }) {
   const statusColors = {
+    danger: 'bg-red-500',
     safe: 'bg-safe',
     warning: 'bg-warning',
     info: 'bg-blue-500',
@@ -804,7 +978,7 @@ function TimelineItem({
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
+        <div className={`w-3 h-3 rounded-full ${statusColors[status] || statusColors.info}`}></div>
         <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
       </div>
       <div className="flex-1 pb-4">

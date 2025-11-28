@@ -5,6 +5,29 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
+ * 실시간 이벤트 인터페이스
+ */
+export interface RealtimeEvent {
+  id: number
+  timestamp: string
+  event_type: 'safety' | 'development'
+  severity: 'danger' | 'warning' | 'info' | 'safe'
+  title: string
+  description: string
+  location: string
+  metadata: any
+}
+
+export interface MonitoringStats {
+  camera_id: string
+  today_total_events: number
+  danger_events: number
+  warning_events: number
+  recent_hour_events: number
+  is_active: boolean
+}
+
+/**
  * 라이브 스트리밍 관련 API
  */
 
@@ -122,6 +145,69 @@ export async function startStream(
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || '스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
+ * 실시간 이벤트 조회
+ */
+export async function getRealtimeEvents(
+  cameraId: string,
+  limit: number = 50,
+  since?: string,
+  eventType?: 'safety' | 'development'
+): Promise<{ camera_id: string; total: number; events: RealtimeEvent[] }> {
+  const params = new URLSearchParams()
+  params.append('limit', limit.toString())
+  if (since) params.append('since', since)
+  if (eventType) params.append('event_type', eventType)
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/events/${cameraId}?${params}`,
+    { method: 'GET' }
+  )
+
+  if (!response.ok) {
+    throw new Error('이벤트 조회 실패')
+  }
+
+  return await response.json()
+}
+
+/**
+ * 최신 실시간 이벤트 조회 (폴링용)
+ */
+export async function getLatestEvents(
+  cameraId: string,
+  limit: number = 10
+): Promise<{ camera_id: string; count: number; events: RealtimeEvent[] }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/events/${cameraId}/latest?limit=${limit}`,
+    { method: 'GET' }
+  )
+
+  if (!response.ok) {
+    throw new Error('최신 이벤트 조회 실패')
+  }
+
+  return await response.json()
+}
+
+/**
+ * 모니터링 통계 조회
+ */
+export async function getMonitoringStats(
+  cameraId: string
+): Promise<MonitoringStats> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/stats/${cameraId}`,
+    { method: 'GET' }
+  )
+
+  if (!response.ok) {
+    throw new Error('통계 조회 실패')
   }
 
   return await response.json()
