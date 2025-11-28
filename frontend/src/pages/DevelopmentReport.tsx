@@ -15,6 +15,8 @@ import {
   Target,
   Star,
   MessageCircle,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   RadarChart,
@@ -35,26 +37,41 @@ import {
 export default function DevelopmentReport() {
   const [date, setDate] = useState<Date>(new Date())
 
+  // --- 색상 통일을 위한 팔레트 정의 ---
+  const COLOR_PALETTE = {
+    LANGUAGE: '#0284c7', // primary-600 (파랑)
+    MOTOR: '#22c55e',    // safe-500 (초록)
+    COGNITIVE: '#f59e0b', // warning-500 (주황)
+    SOCIAL: '#0ea5e9',   // sky-500 (하늘)
+    EMOTION: '#06b6d4',  // cyan-600 (청록)
+  };
+  // ------------------------------------
+
+
   // 개인 발달 5각형 데이터
   const radarData = [
-    { category: '언어', score: 88, fullMark: 100 },
-    { category: '운동', score: 92, fullMark: 100 },
-    { category: '인지', score: 85, fullMark: 100 },
-    { category: '사회성', score: 90, fullMark: 100 },
-    { category: '정서', score: 87, fullMark: 100 },
+    { category: '언어', score: 88, fullMark: 100, color: COLOR_PALETTE.LANGUAGE },
+    { category: '운동', score: 92, fullMark: 100, color: COLOR_PALETTE.MOTOR },
+    { category: '인지', score: 85, fullMark: 100, color: COLOR_PALETTE.COGNITIVE },
+    { category: '사회성', score: 90, fullMark: 100, color: COLOR_PALETTE.SOCIAL },
+    { category: '정서', score: 87, fullMark: 100, color: COLOR_PALETTE.EMOTION },
   ]
 
   // 최고점수를 가진 영역 찾기
   const maxScore = Math.max(...radarData.map(item => item.score))
   const strongestArea = radarData.find(item => item.score === maxScore)
 
+  // 금일 발달 행동 빈도 데이터
   const dailyDevelopmentFrequency = [
-    { category: '언어', count: 18, color: '#0284c7' },
-    { category: '운동', count: 25, color: '#22c55e' },
-    { category: '인지', count: 12, color: '#f59e0b' },
-    { category: '사회성', count: 15, color: '#0ea5e9' },
-    { category: '정서', count: 9, color: '#06b6d4' },
+    { category: '언어', count: 18, color: COLOR_PALETTE.LANGUAGE },
+    { category: '운동', count: 25, color: COLOR_PALETTE.MOTOR },
+    { category: '인지', count: 12, color: COLOR_PALETTE.COGNITIVE },
+    { category: '사회성', count: 15, color: COLOR_PALETTE.SOCIAL },
+    { category: '정서', count: 9, color: COLOR_PALETTE.EMOTION },
   ]
+
+  // --- AI 추천 활동 카드 배경색 통일: 파란 계열(from-primary-50 to-blue-50)로 통일 ---
+  const BLUE_GRADIENT = 'from-primary-50 to-blue-50'
 
   const recommendedActivities = [
     {
@@ -64,7 +81,7 @@ export default function DevelopmentReport() {
       description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
       duration: '10-15분',
       benefit: '인지 능력 향상',
-      gradient: 'from-warning-50 to-orange-50',
+      gradient: BLUE_GRADIENT, // 변경됨
     },
     {
       title: '배밀이 연습',
@@ -73,7 +90,7 @@ export default function DevelopmentReport() {
       description: '좋아하는 장난감을 앞에 두고 손을 뻗게 유도하세요.',
       duration: '15-20분',
       benefit: '대근육 발달',
-      gradient: 'from-safe-50 to-green-50',
+      gradient: BLUE_GRADIENT, // 변경됨
     },
     {
       title: '노래 부르기',
@@ -82,7 +99,7 @@ export default function DevelopmentReport() {
       description: '다양한 동요와 자장가를 들려주세요.',
       duration: '5-10분',
       benefit: '언어 자극',
-      gradient: 'from-primary-50 to-blue-50',
+      gradient: BLUE_GRADIENT, // 유지됨
     },
     {
       title: '촉각 놀이',
@@ -91,9 +108,20 @@ export default function DevelopmentReport() {
       description: '다양한 질감의 천이나 장난감을 만지게 해주세요.',
       duration: '10분',
       benefit: '감각 발달',
-      gradient: 'from-primary-50 to-cyan-50',
+      gradient: 'from-primary-50 to-cyan-50', // 파란-시안 계열 유지
     },
   ]
+  // --------------------------------------------------------------------------------------
+
+  // 중간에 들어갈 더미 카드 데이터
+  const middleCardData = {
+    title: '성장 예측',
+    value: '95%',
+    description: '향후 30일 목표 발달 성취 예측치',
+    icon: TrendingUp,
+    color: 'text-safe-600',
+    bg: 'bg-safe-50',
+  }
 
   return (
     <div className="p-8">
@@ -108,7 +136,7 @@ export default function DevelopmentReport() {
           <div className="flex items-center gap-3 mb-2">
             <Baby className="w-8 h-8 text-primary-600" />
             <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
-              발달 리포트
+              아이 발달 리포트
             </h1>
           </div>
           <p className="text-gray-600">AI 분석 기반 영유아 발달 현황을 확인하세요</p>
@@ -125,7 +153,7 @@ export default function DevelopmentReport() {
         </div>
       </motion.div>
 
-      {/* AI Daily Summary & Development Stage */}
+      {/* AI Daily Summary & Development Stage (이 섹션은 유지) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -224,7 +252,7 @@ export default function DevelopmentReport() {
                   <p className="text-sm text-gray-700 font-medium">발달 강점</p>
                 </div>
                 <p className="text-base text-gray-800 leading-relaxed">
-                  지수는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요! 🌟
+                  지수는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요!
                 </p>
               </div>
             </div>
@@ -232,23 +260,24 @@ export default function DevelopmentReport() {
         </motion.div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Charts Section: 3분할 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* 1. 영역별 발달 분석 (Radar Chart) - 1/3 크기 */}
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col">
             <div className="mb-6 h-8">
               <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold">
                 <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
                 영역별 발달 분석
               </h3>
-              <p className="text-sm text-gray-600">우리 아이의 5가지 발달 영역 현황입니다</p>
+              <p className="text-sm text-gray-600">5가지 발달 영역 현황</p>
             </div>
 
-            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+            <div className="flex items-center justify-center flex-1 min-h-[300px] py-4">
               <ResponsiveContainer width="100%" height={320}>
                 <RadarChart data={radarData}>
                   <defs>
@@ -272,31 +301,56 @@ export default function DevelopmentReport() {
               </ResponsiveContainer>
             </div>
 
+            {/* 하단 영역 점수 표시: 배경색 통일 */}
             <div className="mt-4 grid grid-cols-5 gap-2">
               {radarData.map((item, index) => (
-                <div key={index} className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-2.5 text-center">
+                <div
+                  key={index}
+                  className="rounded-lg p-2.5 text-center bg-gray-50"
+                >
                   <p className="text-xs text-gray-600 mb-1">{item.category}</p>
-                  <p className="text-lg text-primary-600 font-semibold">{item.score}</p>
+                  <p className="text-lg font-semibold" style={{ color: item.color }}>{item.score}</p>
                 </div>
               ))}
             </div>
           </div>
         </motion.div>
 
+        {/* 2. 중간 더미 카드 - 1/3 크기 */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
         >
-          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col items-center justify-center">
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center ${middleCardData.bg} shadow-xl mb-4`}>
+              <middleCardData.icon className={`w-10 h-10 ${middleCardData.color}`} />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">{middleCardData.title}</h3>
+            <p className={`text-5xl font-extrabold ${middleCardData.color} mb-4`}>{middleCardData.value}</p>
+            <p className="text-base text-gray-500 text-center">{middleCardData.description}</p>
+            <div className="mt-4 text-xs text-gray-400 border-t pt-3">
+              <p>💡 AI 모델 기반 예측값입니다. 지속적인 데이터 축적이 정확도를 높입니다.</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* 3. 금일 발달 행동 빈도 (Bar Chart) - 1/3 크기 */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.5 }}
+        >
+          <div className="card p-8 border-0 shadow-lg h-full flex flex-col">
             <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
               <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-cyan-400 rounded-full" />
               금일 발달 행동 빈도
             </h3>
-            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
+            <div className="flex items-center justify-center flex-1 min-h-[300px] py-4">
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={dailyDevelopmentFrequency}>
                   <defs>
+                    {/* 막대 차트의 그라데이션 */}
                     {dailyDevelopmentFrequency.map((item, index) => (
                       <linearGradient key={index} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={item.color} stopOpacity={0.9} />
@@ -315,7 +369,7 @@ export default function DevelopmentReport() {
                       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                     }}
                   />
-                  <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
+                  <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]} barSize={20}>
                     {dailyDevelopmentFrequency.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
                     ))}
@@ -323,6 +377,8 @@ export default function DevelopmentReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            {/* 하단 영역 횟수 표시 */}
             <div className="mt-4 grid grid-cols-5 gap-2">
               {dailyDevelopmentFrequency.map((item, index) => (
                 <div key={index} className="text-center">
@@ -358,7 +414,7 @@ export default function DevelopmentReport() {
                     activity.icon === 'Music' ? Music :
                       activity.icon === 'Hand' ? Hand : Eye
 
-              // 배경에 맞는 아이콘 색상 선택
+              // 아이콘 색상 (배경과 대비를 위해 기존 색상 유지)
               const iconColor =
                 activity.icon === 'Eye' ? 'text-orange-600' :
                   activity.icon === 'Activity' ? 'text-green-600' :
@@ -371,6 +427,7 @@ export default function DevelopmentReport() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.6 + index * 0.1 }}
+                  // 배경 그라데이션을 BLUE_GRADIENT로 통일
                   className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
                 >
                   <div className="flex items-start gap-3">

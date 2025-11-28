@@ -79,98 +79,29 @@ export default function Dashboard() {
   }
 
   // 통합 타임라인 데이터 (발달 + 안전 이벤트)
-  const rawTimelineEvents = [
-    {
-      time: '15:00',
-      hour: 15,
-      type: 'development',
-      title: '배밀이 연습 (15분)',
-      description: '대근육 발달 촉진',
-      hasClip: true,
-      category: '운동 발달'
-    },
-    {
-      time: '13:45',
-      hour: 13,
-      type: 'safety',
-      severity: 'warning',
-      title: '침대 가장자리 접근',
-      description: '아기가 침대 가장자리에 접근했습니다. 안전 패드 확인을 권장합니다.',
-      resolved: true,
-      hasClip: true,
-      category: '안전 주의'
-    },
-    {
-      time: '13:00',
-      hour: 13,
-      type: 'development',
-      title: '점심 수유 및 놀이',
-      description: '손 운동 능력 발달',
-      hasClip: false,
-      category: '신체 발달'
-    },
-    {
-      time: '11:20',
-      hour: 11,
-      type: 'safety',
-      severity: 'warning',
-      title: '비정상적인 움직임',
-      description: '평소보다 활발한 움직임이 감지되었습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 주의'
-    },
-    {
-      time: '10:30',
-      hour: 10,
-      type: 'development',
-      title: '낮잠 (1시간)',
-      description: '안정적인 수면 패턴',
-      hasClip: false,
-      category: '생활 리듬',
-      isSleep: true
-    },
-    {
-      time: '09:00',
-      hour: 9,
-      type: 'development',
-      title: '놀이 시간 (20분)',
-      description: '시각 추적 능력 향상',
-      hasClip: true,
-      category: '인지 발달'
-    },
-    {
-      time: '08:30',
-      hour: 8,
-      type: 'safety',
-      severity: 'info',
-      title: '안전한 수면 자세',
-      description: '바른 자세로 수면 중입니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인',
-      isSleep: true
-    },
-    {
-      time: '07:30',
-      hour: 7,
-      type: 'development',
-      title: '기상 및 아침 수유',
-      description: '규칙적인 생활 리듬',
-      hasClip: false,
-      category: '생활 리듬'
-    },
-    {
-      time: '06:00',
-      hour: 6,
-      type: 'safety',
-      severity: 'info',
-      title: '기상',
-      description: '정상적으로 기상했습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인'
-    },
+  const rawTimelineEvents: any[] = [
+    // 발달 이벤트
+    { time: '09:15', hour: 9, type: 'development', title: '배밀이 시도', description: '장난감을 향해 이동', hasClip: true },
+    { time: '10:30', hour: 10, type: 'development', title: '옹알이', description: '다양한 소리 발성', hasClip: false },
+    { time: '14:20', hour: 14, type: 'development', title: '앉기 연습', description: '혼자 앉기 시도', hasClip: true },
+    { time: '15:45', hour: 15, type: 'development', title: '손 뻗기', description: '물건 잡기 시도', hasClip: false },
+    { time: '17:10', hour: 17, type: 'development', title: '미소 짓기', description: '엄마 보고 웃음', hasClip: true },
+
+    // 안전 주의 이벤트
+    { time: '11:20', hour: 11, type: 'safety', severity: 'warning', title: '침대 가장자리 접근', description: '안전 패드 확인 필요', resolved: true, hasClip: true },
+    { time: '13:45', hour: 13, type: 'safety', severity: 'warning', title: '작은 물건 접근', description: '즉시 제거함', resolved: true, hasClip: false },
+
+    // 안전 위험 이벤트
+    { time: '16:30', hour: 16, type: 'safety', severity: 'danger', title: '낙상 위험', description: '빠르게 대응함', resolved: true, hasClip: true },
+
+    // 안전 권장 이벤트
+    { time: '08:00', hour: 8, type: 'safety', severity: 'info', title: '안전한 놀이 시간', description: '정상 활동', hasClip: false },
+    { time: '12:00', hour: 12, type: 'safety', severity: 'info', title: '식사 시간', description: '안전하게 진행', hasClip: false },
+    { time: '18:30', hour: 18, type: 'safety', severity: 'info', title: '목욕 시간', description: '안전 확인 완료', hasClip: true },
+
+    // 안전 확인 이벤트
+    { time: '07:00', hour: 7, type: 'safety', severity: 'safe', title: '기상', description: '안전한 수면 환경', hasClip: false },
+    { time: '20:00', hour: 20, type: 'safety', severity: 'safe', title: '취침 준비', description: '안전 점검 완료', hasClip: false },
   ]
 
   // 수면 이벤트 그룹화 함수
@@ -299,14 +230,26 @@ export default function Dashboard() {
 
   const timelineEvents = groupSleepEvents(rawTimelineEvents)
 
+  // 시간 구간 생성 (테이블용 - 하루일 때만 사용)
   const dayTimeRanges = [
-    { start: 4, end: 7, label: '04시~07시' },
-    { start: 8, end: 11, label: '08시~11시' },
-    { start: 12, end: 15, label: '12시~15시' },
-    { start: 16, end: 19, label: '16시~19시' },
-    { start: 20, end: 23, label: '20시~23시' },
-    { start: 0, end: 3, label: '00시~03시' },
-  ]
+    // 06시부터 시작 (06시~07시)
+    { start: 6, end: 7, label: '06:00' },
+    // 2시간 간격으로 변경
+    { start: 8, end: 9, label: '08:00' },
+    { start: 10, end: 11, label: '10:00' },
+    { start: 12, end: 13, label: '12:00' },
+    { start: 14, end: 15, label: '14:00' },
+    { start: 16, end: 17, label: '16:00' },
+    { start: 18, end: 19, label: '18:00' },
+    { start: 20, end: 21, label: '20:00' },
+    { start: 22, end: 23, label: '22:00' },
+    // ✅ 24시 지점을 명시적으로 추가 (하루의 끝)
+    { start: 24, end: 1, label: '24:00' },
+    { start: 2, end: 3, label: '2:00' },
+    { start: 4, end: 5, label: '4:00' },
+  ];
+
+
 
   // 기간별 데이터 생성 함수
   const generateChartData = () => {
@@ -438,6 +381,7 @@ export default function Dashboard() {
       changeLabel: '지난주 대비',
       icon: Shield,
       color: 'text-safe',
+      // ✅ 배경색을 'bg-safe-50'으로 통일
       bgColor: 'bg-safe-50',
       trend: 'up'
     },
@@ -449,7 +393,8 @@ export default function Dashboard() {
       changeLabel: '지난주 대비',
       icon: Baby,
       color: 'text-primary-600',
-      bgColor: 'bg-primary-50',
+      // ✅ 배경색을 'bg-safe-50'으로 통일
+      bgColor: 'bg-safe-50',
       trend: 'up'
     },
     {
@@ -459,7 +404,8 @@ export default function Dashboard() {
       change: '오늘',
       changeLabel: '누적',
       icon: Eye,
-      color: 'text-safe',
+      // ✅ 아이콘, 메인 숫자, 변화 값 모두 'text-teal-600'으로 통일
+      color: 'text-teal-600',
       bgColor: 'bg-safe-50',
       trend: 'neutral'
     },
@@ -471,11 +417,11 @@ export default function Dashboard() {
       changeLabel: '모두 해결됨',
       icon: Activity,
       color: 'text-warning',
-      bgColor: 'bg-warning-50',
+      // ✅ 배경색을 'bg-safe-50'으로 통일
+      bgColor: 'bg-safe-50',
       trend: 'neutral'
     },
   ]
-
   return (
     <div className="p-6 lg:p-10 max-w-7xl mx-auto">
       {/* Hero Section - 감성적 인사말 */}
@@ -491,7 +437,7 @@ export default function Dashboard() {
             지수는 기분이 아주 좋아요!
           </h1>
           <p className="text-gray-600 leading-relaxed">
-            오늘 하루도 건강하고 안전하게 보냈어요. 특히 배밀이 연습에서 큰 진전을 보였답니다 🎉
+            오늘 하루도 건강하고 안전하게 보냈어요. 특히 배밀이 연습에서 큰 진전을 보였답니다!
           </p>
         </div>
       </motion.div>
@@ -726,8 +672,16 @@ export default function Dashboard() {
                 />
                 <YAxis
                   tick={{ fontSize: 12, fill: '#9ca3af' }}
-                  domain={[70, 100]}
-                  label={{ value: '점수', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#9ca3af' } }}
+                  domain={[50, 100]}
+                  // ✅ ticks 속성을 추가하여 눈금 간격을 100, 90, 80, 70으로 명시
+                  ticks={[100, 90, 80, 70, 60, 50]}
+                  label={{
+                    value: '점수',
+                    angle: 0,
+                    position: 'outerLeft',
+                    offset: 15,
+                    style: { textAnchor: 'end', fill: '#9ca3af' }
+                  }}
                 />
                 <Tooltip
                   contentStyle={{
@@ -776,16 +730,17 @@ export default function Dashboard() {
 
               {/* --- 기존 테이블: 데스크톱 화면용 --- */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full border-collapse">
+                <table
+                  className="w-full border-collapse table-fixed" style={{ tableLayout: 'fixed', minWidth: '2400px' }}>
                   <thead>
                     <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 sticky left-0 bg-white z-10">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 sticky left-0 bg-white z-10 w-[120px]">
                         카테고리
                       </th>
                       {timeRanges.map((range) => (
                         <th
                           key={`${range.start}-${range.end}`}
-                          className="text-center py-3 px-3 text-xs font-semibold text-gray-700 min-w-[120px]"
+                          className="text-center py-3 px-4 text-xs font-semibold text-gray-700 w-[200px]"
                         >
                           {range.label}
                         </th>
@@ -810,18 +765,37 @@ export default function Dashboard() {
                         return (
                           <td
                             key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
+                            // ✅ h-36을 h-28로 낮추고 py-0 유지
+                            className="py-0 px-3 text-center align-top w-[200px] h-28 overflow-y-auto"
                           >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
+                            <div className="w-full overflow-hidden h-full">
+                              {eventsInRange.length > 0 ? (
+                                <div className="space-y-2 h-full">
+                                  {eventsInRange.map((event, idx) => {
+                                    if (event.isSleepGroup) {
+                                      return (
+                                        <div key={idx} className="space-y-1">
+                                          <div className="text-xs font-medium text-gray-900 truncate">
+                                            {event.title}
+                                          </div>
+                                          {event.hasClip && (
+                                            <button className="mt-1 text-primary-600 hover:text-primary-700">
+                                              <Video className="w-3 h-3 mx-auto" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      )
+                                    }
+                                    const [hours, minutes] = event.time.split(':')
+                                    const timeStr = `${hours}시 ${minutes}분`
                                     return (
                                       <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
+                                        <div className="text-xs font-medium text-gray-900 truncate">
+                                          {event.title}({timeStr})
                                         </div>
+                                        {event.description && (
+                                          <div className="text-xs text-primary-600 truncate">{event.description}</div>
+                                        )}
                                         {event.hasClip && (
                                           <button className="mt-1 text-primary-600 hover:text-primary-700">
                                             <Video className="w-3 h-3 mx-auto" />
@@ -829,30 +803,12 @@ export default function Dashboard() {
                                         )}
                                       </div>
                                     )
-                                  }
-
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-primary-600">{event.description}</div>
-                                      )}
-                                      {event.hasClip && (
-                                        <button className="mt-1 text-primary-600 hover:text-primary-700">
-                                          <Video className="w-3 h-3 mx-auto" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-400">-</div>
+                              )}
+                            </div>
                           </td>
                         )
                       })}
@@ -876,16 +832,16 @@ export default function Dashboard() {
                         return (
                           <td
                             key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
+                            // ✅ h-36을 h-28로 낮추고 py-0 유지
+                            className="py-0 px-3 text-center align-top w-[200px] h-28 overflow-y-auto"
                           >
                             {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-2 h-full">
                                 {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
                                   if (event.isSleepGroup) {
                                     return (
                                       <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
+                                        <div className="text-xs font-medium text-gray-900 truncate">
                                           {event.title}
                                         </div>
                                         {event.hasClip && (
@@ -896,16 +852,15 @@ export default function Dashboard() {
                                       </div>
                                     )
                                   }
-
                                   const [hours, minutes] = event.time.split(':')
                                   const timeStr = `${hours}시 ${minutes}분`
                                   return (
                                     <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
+                                      <div className="text-xs font-medium text-gray-900 truncate">
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-warning">{event.description}</div>
+                                        <div className="text-xs text-warning truncate">{event.description}</div>
                                       )}
                                       <div className="flex items-center justify-center gap-1 mt-1">
                                         {event.resolved && (
@@ -947,31 +902,30 @@ export default function Dashboard() {
                         return (
                           <td
                             key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
+                            // ✅ h-36을 h-28로 낮추고 py-0 유지
+                            className="py-0 px-3 text-center align-top w-[200px] h-28 overflow-y-auto"
                           >
                             {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-2 h-full">
                                 {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
                                   if (event.isSleepGroup) {
                                     return (
                                       <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
+                                        <div className="text-xs font-medium text-gray-900 truncate">
                                           {event.title}
                                         </div>
                                       </div>
                                     )
                                   }
-
                                   const [hours, minutes] = event.time.split(':')
                                   const timeStr = `${hours}시 ${minutes}분`
                                   return (
                                     <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
+                                      <div className="text-xs font-medium text-gray-900 truncate">
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-danger">{event.description}</div>
+                                        <div className="text-xs text-danger truncate">{event.description}</div>
                                       )}
                                     </div>
                                   )
@@ -1004,31 +958,30 @@ export default function Dashboard() {
                         return (
                           <td
                             key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
+                            // ✅ h-36을 h-28로 낮추고 py-0 유지
+                            className="py-0 px-3 text-center align-top w-[200px] h-28 overflow-y-auto"
                           >
                             {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-2 h-full">
                                 {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
                                   if (event.isSleepGroup) {
                                     return (
                                       <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
+                                        <div className="text-xs font-medium text-gray-900 truncate">
                                           {event.title}
                                         </div>
                                       </div>
                                     )
                                   }
-
                                   const [hours, minutes] = event.time.split(':')
                                   const timeStr = `${hours}시 ${minutes}분`
                                   return (
                                     <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
+                                      <div className="text-xs font-medium text-gray-900 truncate">
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-blue-500">{event.description}</div>
+                                        <div className="text-xs text-blue-500 truncate">{event.description}</div>
                                       )}
                                     </div>
                                   )
@@ -1061,16 +1014,16 @@ export default function Dashboard() {
                         return (
                           <td
                             key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
+                            // ✅ h-36을 h-28로 낮추고 py-0 유지
+                            className="py-0 px-3 text-center align-top w-[200px] h-28 overflow-y-auto"
                           >
                             {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-2 h-full">
                                 {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
                                   if (event.isSleepGroup) {
                                     return (
                                       <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
+                                        <div className="text-xs font-medium text-gray-900 truncate">
                                           {event.title}
                                         </div>
                                         {event.resolved && (
@@ -1079,16 +1032,15 @@ export default function Dashboard() {
                                       </div>
                                     )
                                   }
-
                                   const [hours, minutes] = event.time.split(':')
                                   const timeStr = `${hours}시 ${minutes}분`
                                   return (
                                     <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
+                                      <div className="text-xs font-medium text-gray-900 truncate">
                                         {event.title}({timeStr})
                                       </div>
                                       {event.description && (
-                                        <div className="text-xs text-safe">{event.description}</div>
+                                        <div className="text-xs text-safe truncate">{event.description}</div>
                                       )}
                                       {event.resolved && (
                                         <CheckCircle2 className="w-3 h-3 text-safe mx-auto mt-1" />
