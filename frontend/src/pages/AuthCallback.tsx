@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { setAuthToken } from '../lib/auth'
 
 export default function AuthCallback() {
     const [searchParams] = useSearchParams()
@@ -9,14 +10,20 @@ export default function AuthCallback() {
         const token = searchParams.get('token')
 
         if (token) {
-            // 토큰을 localStorage에 저장
-            localStorage.setItem('access_token', token)
-
-            // 대시보드로 리다이렉트
-            navigate('/dashboard')
+            // 토큰을 저장 (공통 유틸리티 사용)
+            try {
+                setAuthToken(token)
+                console.log('[AuthCallback] 토큰 저장 완료, 대시보드로 이동')
+                // 대시보드로 리다이렉트
+                navigate('/dashboard', { replace: true })
+            } catch (error) {
+                console.error('[AuthCallback] 토큰 저장 실패:', error)
+                navigate('/login', { replace: true })
+            }
         } else {
             // 토큰이 없으면 로그인 페이지로
-            navigate('/login')
+            console.warn('[AuthCallback] 토큰이 없습니다.')
+            navigate('/login', { replace: true })
         }
     }, [searchParams, navigate])
 

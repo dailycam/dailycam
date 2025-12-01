@@ -1,6 +1,10 @@
 import { Bell, User, LogOut, ChevronDown, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+<<<<<<< HEAD
+=======
+import { getAuthToken, removeAuthToken } from '../../lib/auth'
+>>>>>>> 0d709d7c101ce5910de438595aa0955865579d9b
 
 interface UserInfo {
   id: number
@@ -42,7 +46,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
   // 사용자 정보 가져오기
   useEffect(() => {
     const fetchUserInfo = async () => {
-      const token = localStorage.getItem('access_token')
+      const token = getAuthToken()
 
       if (!token) {
         navigate('/login')
@@ -63,7 +67,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
             is_subscribed: Boolean(data.is_subscribed),
           })
         } else {
-          localStorage.removeItem('access_token')
+          removeAuthToken()
           navigate('/login')
         }
       } catch (error) {
@@ -75,7 +79,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
   }, [navigate])
 
   const handleLogout = async () => {
-    const token = localStorage.getItem('access_token')
+    const token = getAuthToken()
 
     if (token) {
       try {
@@ -90,7 +94,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
       }
     }
 
-    localStorage.removeItem('access_token')
+    removeAuthToken()
     navigate('/')
   }
 
