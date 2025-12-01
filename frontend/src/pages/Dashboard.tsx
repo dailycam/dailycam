@@ -88,6 +88,36 @@ export default function Dashboard() {
   // 실제 데이터베이스에서 가져온 데이터 사용, 없으면 빈 배열
   const rawTimelineEvents = dashboardData?.timelineEvents || []
 
+
+  // 데이터 정규화: severity 및 category만 보정 (시간은 백엔드에서 이미 올바르게 전송됨)
+  const normalizedTimelineEvents = rawTimelineEvents.map(event => {
+    let { severity, category } = event;
+
+    // 1. Severity 보정 (API 불일치 대응)
+    if (severity === 'low' as any) {
+      severity = 'info';
+    }
+
+    // 2. Category 보정 (권장사항 식별 강화)
+    if (severity === 'info') {
+      if (
+        category === '권장' ||
+        event.title.includes('권장') ||
+        event.title.includes('위험') ||
+        (event.description && event.description.includes('권장'))
+      ) {
+        category = '안전 권장';
+      } else if (!category || category === '확인') {
+        category = '안전 확인';
+      }
+    }
+
+    // 백엔드에서 받은 time, hour 값을 그대로 사용
+    return { ...event, severity, category };
+  });
+
+
+
   // 수면 이벤트 그룹화 함수
   const groupSleepEvents = (events: any[]) => {
     // 수면 관련 이벤트 찾기
@@ -212,7 +242,7 @@ export default function Dashboard() {
     })
   }
 
-  const timelineEvents = groupSleepEvents(rawTimelineEvents)
+  const timelineEvents = groupSleepEvents(normalizedTimelineEvents)
 
   // 모달 열기 함수
   const openModal = (events: any[], timeRange: string, category: string) => {
@@ -301,47 +331,56 @@ export default function Dashboard() {
   const generateChartData = () => {
     if (timeRange === 'day') {
       const baseSafetyScore = dashboardData?.safetyScore ?? 90
-      const baseDevelopmentScore = 92
+      const baseDevelopmentScore = dashboardData?.developmentScore ?? 88
 
-      return dayTimeRanges.map(range => {
-        const eventsInRange = timelineEvents.filter(e => {
-          const eventHour = e.hour
-          return eventHour >= range.start && eventHour <= range.end
-        })
+      // 이벤트가 있는 시간대만 필터링
+      const dataPoints = dayTimeRanges
+        .map(range => {
+          const eventsInRange = timelineEvents.filter(e => {
+            const eventHour = e.hour
+            return eventHour >= range.start && eventHour <= range.end
+          })
 
-        const developmentEvents = eventsInRange.filter(e => e.type === 'development')
-        const safetyEvents = eventsInRange.filter(e => e.type === 'safety')
+          // 이벤트가 없으면 null 반환 (그래프에서 제외)
+          if (eventsInRange.length === 0) {
+            return null
+          }
 
-        let developmentScore = baseDevelopmentScore
-        developmentEvents.forEach(() => {
-          developmentScore += 2
-        })
-        safetyEvents.forEach(event => {
-          if (event.severity === 'warning') {
-            developmentScore -= 1
+          const developmentEvents = eventsInRange.filter(e => e.type === 'development')
+          const safetyEvents = eventsInRange.filter(e => e.type === 'safety')
+          const dangerEvents = safetyEvents.filter(e => e.severity === 'danger')
+          const warningEvents = safetyEvents.filter(e => e.severity === 'warning')
+          const infoEvents = safetyEvents.filter(e => e.severity === 'info')
+
+          // 기본 점수에서 시작
+          let developmentScore = baseDevelopmentScore
+          let safetyScore = baseSafetyScore
+
+          // 발달 이벤트: 큰 폭으로 점수 상승
+          developmentScore += developmentEvents.length * 3
+
+          // 위험 이벤트: 큰 폭으로 점수 하락
+          safetyScore -= dangerEvents.length * 15
+          safetyScore -= warningEvents.length * 8
+
+          // 정보성 이벤트: 약간 상승
+          safetyScore += infoEvents.length * 2
+
+          // 범위 제한
+          developmentScore = Math.max(70, Math.min(100, developmentScore))
+          safetyScore = Math.max(70, Math.min(100, safetyScore))
+
+          return {
+            time: range.label,
+            startHour: range.start,
+            endHour: range.end,
+            safety: Math.round(safetyScore),
+            development: Math.round(developmentScore),
           }
         })
+        .filter(point => point !== null) // null 제거
 
-        let safetyScore = baseSafetyScore
-        safetyEvents.forEach(event => {
-          if (event.severity === 'info') {
-            safetyScore += 1
-          } else if (event.severity === 'warning') {
-            safetyScore -= 3
-          }
-        })
-
-        developmentScore = Math.max(70, Math.min(100, developmentScore))
-        safetyScore = Math.max(70, Math.min(100, safetyScore))
-
-        return {
-          time: range.label,
-          startHour: range.start,
-          endHour: range.end,
-          safety: safetyScore,
-          development: developmentScore,
-        }
-      })
+      return dataPoints
     } else if (timeRange === 'week') {
       // 7일: 일자별 평균
       const baseSafetyScore = dashboardData?.safetyScore ?? 90
@@ -861,7 +900,12 @@ export default function Dashboard() {
                       {timeRanges.map((range) => (
                         <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
                           {renderCellContent(
-                            timelineEvents.filter(e => e.type === 'safety' && e.severity === 'info' && e.category === '안전 권장' && e.hour >= range.start && e.hour <= range.end),
+                            timelineEvents.filter(e =>
+                              e.type === 'safety' &&
+                              e.severity === 'info' &&
+                              (e.category === '안전 권장' || e.category === '권장' || e.title.includes('권장')) &&
+                              e.hour >= range.start && e.hour <= range.end
+                            ),
                             range.label,
                             '권장'
                           )}
@@ -880,7 +924,12 @@ export default function Dashboard() {
                       {timeRanges.map((range) => (
                         <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
                           {renderCellContent(
-                            timelineEvents.filter(e => e.type === 'safety' && e.severity === 'info' && e.category === '안전 확인' && e.hour >= range.start && e.hour <= range.end),
+                            timelineEvents.filter(e =>
+                              e.type === 'safety' &&
+                              e.severity === 'info' &&
+                              (e.category === '안전 확인' || e.category === '확인' || (!e.category?.includes('권장') && !e.title.includes('권장'))) &&
+                              e.hour >= range.start && e.hour <= range.end
+                            ),
                             range.label,
                             '확인'
                           )}

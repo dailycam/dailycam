@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import {
   Shield,
   Clock,
@@ -75,7 +75,7 @@ const getSeverityColor = (severity: string | null) => {
 // ===== Components =====
 
 // 커스텀 툴팁 컴포넌트 (Framer Motion 사용)
-const CustomTooltip = ({ tooltip, svgOffset }: { tooltip: TooltipState, svgOffset: { top: number, left: number } }) => {
+const CustomTooltip = ({ tooltip }: { tooltip: TooltipState }) => {
   if (!tooltip.visible || !tooltip.data) return null;
 
   // 툴팁 위치를 SVG 기준으로 계산 (SVG 컨테이너의 절대 위치를 더함)
@@ -111,15 +111,14 @@ const CustomTooltip = ({ tooltip, svgOffset }: { tooltip: TooltipState, svgOffse
       <div className="text-gray-300">{tooltip.data.incident}</div>
     </motion.div>
   );
+
 };
 
-// 미니멀 시계 컴포넌트
+// 미니멀 시계 컴포넌트 (Braun 스타일)
 const SafetyMinimalClockChart = ({ fullClockData, overallScore }: { fullClockData: ClockData[], overallScore: number }) => {
   const cx = 160;
   const cy = 160;
-  const radius = 140; // 시계 휠의 반경 (기준선)
-  const centerRadius = 80; // 중앙 정보 영역 반경
-  const svgWidth = 320;
+
 
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
@@ -131,9 +130,6 @@ const SafetyMinimalClockChart = ({ fullClockData, overallScore }: { fullClockDat
   // 로컬 시간 연동을 위한 state
   const [currentTime, setCurrentTime] = useState(new Date());
   const currentLocalHour = currentTime.getHours();
-
-  // 중앙 정보는 항상 현재 시간에 고정 (링 애니메이션용)
-  const activeHour = currentLocalHour;
 
   // 실시간 업데이트 (1초마다)
   useEffect(() => {
@@ -149,34 +145,33 @@ const SafetyMinimalClockChart = ({ fullClockData, overallScore }: { fullClockDat
   const hourMapData = useMemo(() => {
     const dataArray = [];
     const defaultIncident = '안정적인 상태 유지';
-    const defaultData: ClockData = { hour: 0, safetyLevel: null, safetyScore: 0, color: getSeverityColor(null), incident: defaultIncident };
+    const defaultData: ClockData = { hour: 0, safetyLevel: null, safetyScore: 0, color: '#1f2937', incident: defaultIncident }; // 기본 검은색
 
     for (let i = 0; i < 12; i++) {
       const amData = fullClockData.find(d => d.hour === i);
       const pmData = fullClockData.find(d => d.hour === i + 12);
 
+      // Braun 스타일: 모든 상태에 대해 색상 표시
+      const getColor = (data: ClockData | undefined) => {
+        if (!data || !data.safetyLevel) return '#e5e7eb';
+        return getSeverityColor(data.safetyLevel);
+      };
+
       dataArray.push({
-        am: amData || { ...defaultData, hour: i },
-        pm: pmData || { ...defaultData, hour: i + 12 }
+        am: amData ? { ...amData, color: getColor(amData) } : { ...defaultData, hour: i },
+        pm: pmData ? { ...pmData, color: getColor(pmData) } : { ...defaultData, hour: i + 12 }
       });
     }
     return dataArray;
   }, [fullClockData]);
 
-  // 2. 활성화된 시간의 데이터를 찾습니다. (currentLocalHour에 고정)
-  const activeData = useMemo(() => {
-    return fullClockData.find((d) => d.hour === activeHour) || null;
-  }, [fullClockData, activeHour]);
-
-
-  // 마우스 이벤트 핸들러 (툴팁 위치 및 확대 적용)
-  const handleMouseEnter = useCallback((event: React.MouseEvent<SVGElement>, data: ClockData, index: number, type: 'am' | 'pm') => {
+  // 마우스 이벤트 핸들러
+  const handleMouseEnter = useCallback((event: React.MouseEvent<SVGElement>, data: ClockData) => {
     const targetElement = event.currentTarget as SVGElement;
     const rect = targetElement.getBoundingClientRect();
     const svgRect = (event.currentTarget as SVGElement).viewportElement?.getBoundingClientRect();
 
     if (svgRect) {
-      // 툴팁 위치를 SVG 내부 좌표 (점의 중앙) 기준으로 설정
       const svgX = rect.left - svgRect.left + rect.width / 2;
       const svgY = rect.top - svgRect.top + rect.height / 2;
 
@@ -193,262 +188,138 @@ const SafetyMinimalClockChart = ({ fullClockData, overallScore }: { fullClockDat
     setTooltip(prev => ({ ...prev, visible: false }));
   }, []);
 
-  /**
-   * 24시간 형식을 12시간 시계 라벨 형식으로 변환합니다.
-   */
-  const formatClockHour = (hour: number, isLabel = false, includeMinutes = false) => {
-    let formattedHour: string;
-    let period: string;
 
-    if (hour === 0) {
-      formattedHour = '12';
-      period = 'AM';
-    } else if (hour === 12) {
-      formattedHour = '12';
-      period = 'PM';
-    } else if (hour < 12) {
-      formattedHour = String(hour);
-      period = 'AM';
-    } else {
-      formattedHour = String(hour - 12);
-      period = 'PM';
-    }
 
-    if (isLabel) {
-      return formattedHour;
-    }
-
-    // 분(Minute) 표시 로직 추가
-    if (includeMinutes) {
-      const minutes = currentTime.getMinutes().toString().padStart(2, '0');
-      return `${period} ${formattedHour}:${minutes}`;
-    }
-
-    return `${period} ${formattedHour}`;
-  };
-
-  // 안전 점수에 따른 설명
-  const getScoreDescription = (level: 'safe' | 'warning' | 'danger' | null) => {
-    switch (level) {
-      case 'safe':
-        return '매우 안전';
-      case 'warning':
-        return '주의 필요';
-      case 'danger':
-        return '즉각 조치';
-      default:
-        return '데이터 없음';
-    }
-  };
-
-  // 종합 점수에 따른 색상 및 설명 결정
-  const overallColor = overallScore >= 90 ? '#10b981' : overallScore >= 70 ? '#f59e0b' : '#ef4444';
-  const overallLevel = overallScore >= 90 ? 'safe' : overallScore >= 70 ? 'warning' : 'danger';
+  // 눈금 생성 (60개)
+  const ticks = Array.from({ length: 60 }, (_, i) => {
+    const isMajor = i % 5 === 0;
+    const angle = i * 6; // 6도씩 회전
+    return { index: i, isMajor, angle };
+  });
 
   return (
-    // relative 포지셔닝을 통해 CustomTooltip이 SVG 기준으로 절대 위치하도록 설정
-    <div className="flex flex-col items-center justify-center flex-1 py-4 relative">
-      <svg width={svgWidth} height={svgWidth} viewBox="0 0 320 320" className="relative max-w-full">
+    <div className="flex flex-col items-center justify-center flex-1 w-full h-full relative min-h-[400px]">
+      <svg viewBox="0 0 320 320" className="w-full h-full">
         <defs>
-          {/* 네온 글로우 필터 */}
-          <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur5" />
-            <feOffset in="blur5" dx="0" dy="0" result="offsetBlur" />
-            <feFlood floodColor="white" floodOpacity="0.4" result="flood" />
-            <feComposite in="flood" in2="offsetBlur" operator="in" result="glow" />
+          <filter id="hand-shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="1" result="blur" />
+            <feOffset in="blur" dx="1" dy="1" result="offsetBlur" />
             <feMerge>
-              <feMergeNode in="glow" />
+              <feMergeNode in="offsetBlur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
 
-        {/* 1. Outer Clock Ring (12개의 시계 위치에 단일 점을 배치) */}
-        {hourMapData.map((dataPair, index) => {
-          const amData = dataPair.am;
-          const pmData = dataPair.pm;
+        {/* 2. 눈금 (Ticks) 및 데이터 표시 */}
+        <g transform={`translate(${cx}, ${cy})`}>
+          {ticks.map((tick) => {
+            if (tick.isMajor) {
+              // 5분 단위 주요 눈금 -> 데이터 표시 (AM/PM 분할)
+              const hourIndex = tick.index / 5;
+              const dataPair = hourMapData[hourIndex];
+              // 12시는 인덱스 0으로 처리됨
 
-          // 12개의 시계 위치 (index 0=12시, index 1=1시, ..., index 11=11시)
-          const angle = index * 30 - 90; // -90도부터 시작하여 12시 방향을 위로 맞춤
-          const radian = (angle * Math.PI) / 180;
+              return (
+                <g key={tick.index} transform={`rotate(${tick.angle - 90})`}>
+                  {/* PM 데이터 (바깥쪽 절반) */}
+                  <motion.rect
+                    x={105}
+                    y={-2}
+                    width={10}
+                    height={4}
+                    fill={dataPair.pm.color}
+                    className="cursor-pointer hover:opacity-80"
+                    onMouseEnter={(e) => handleMouseEnter(e, dataPair.pm)}
+                    onMouseLeave={handleMouseLeave}
+                  />
+                  {/* AM 데이터 (안쪽 절반) */}
+                  <motion.rect
+                    x={94}
+                    y={-2}
+                    width={10}
+                    height={4}
+                    fill={dataPair.am.color}
+                    className="cursor-pointer hover:opacity-80"
+                    onMouseEnter={(e) => handleMouseEnter(e, dataPair.am)}
+                    onMouseLeave={handleMouseLeave}
+                  />
+                </g>
+              );
+            } else {
+              // 1분 단위 작은 눈금
+              return (
+                <g key={tick.index} transform={`rotate(${tick.angle - 90})`}>
+                  <rect x={110} y={-0.5} width={5} height={1} fill="#9ca3af" />
+                </g>
+              );
+            }
+          })}
 
-          // 각 직사각형의 중심 위치
-          const xCenter = cx + radius * Math.cos(radian);
-          const yCenter = cy + radius * Math.sin(radian);
+          {/* 3. 숫자 (Numbers) */}
+          {hourMapData.map((_, i) => {
+            const angle = i * 30 - 90;
+            const rad = (angle * Math.PI) / 180;
+            const numX = Math.cos(rad) * 75; // 숫자 위치 반지름
+            const numY = Math.sin(rad) * 75;
+            const number = i === 0 ? 12 : i;
 
-          // 점의 기본 크기 및 호버 상태
-          const baseWidth = 20;
-          const baseHeight = 4;
-          const hoveredWidth = 28;
-          const hoveredHeight = 6;
+            return (
+              <text
+                key={i}
+                x={numX}
+                y={numY}
+                dy={5} // 수직 중앙 정렬 보정
+                textAnchor="middle"
+                className="text-xl font-bold fill-gray-900"
+                style={{ fontFamily: 'Inter, sans-serif' }}
+              >
+                {number}
+              </text>
+            );
+          })}
+        </g>
 
-          // 호버 상태 체크 (툴팁 데이터의 시간과 일치하는지 확인)
-          const isAmHovered = tooltip.data?.hour === amData.hour;
-          const isPmHovered = tooltip.data?.hour === pmData?.hour;
+        {/* 중앙 데이터 표시 (심플하게) */}
+        {/* 요청에 따라 안전 점수 표시 요소를 주석 처리합니다. */}
+        {/* <g transform={`translate(${cx}, ${cy + 40})`}>
+          <text y={0} textAnchor="middle" className="text-[10px] font-bold fill-gray-400 tracking-widest uppercase">Safety Score</text>
+          <text y={15} textAnchor="middle" className="text-lg font-black fill-gray-800">{overallScore}</text>
+        </g> */}
 
-          // 현재 로컬 시간 강조 상태
-          const isCurrentAm = amData.hour === activeHour;
-          const isCurrentPm = pmData && pmData.hour === activeHour;
+        {/* 4. 시계 바늘 (Braun 스타일 - 심플 & 모던) */}
+        {/* 시침 */}
+        <motion.g
+          transform={`translate(${cx}, ${cy}) rotate(${currentLocalHour % 12 * 30 + currentTime.getMinutes() * 0.5 - 90})`}
+          filter="url(#hand-shadow)"
+        >
+          <rect x={-10} y={-3} width={60} height={6} rx={3} fill="#1f2937" />
+        </motion.g>
 
-          // 최종 크기 결정 (호버 또는 현재 시간이면 확대)
-          const currentAmWidth = isAmHovered || isCurrentAm ? hoveredWidth : baseWidth;
-          const currentAmHeight = isAmHovered || isCurrentAm ? hoveredHeight : baseHeight;
-          const currentPmWidth = isPmHovered || isCurrentPm ? hoveredWidth : baseWidth;
-          const currentPmHeight = isPmHovered || isCurrentPm ? hoveredHeight : baseHeight;
+        {/* 분침 */}
+        <motion.g
+          transform={`translate(${cx}, ${cy}) rotate(${currentTime.getMinutes() * 6 - 90})`}
+          filter="url(#hand-shadow)"
+        >
+          <rect x={-10} y={-2.5} width={90} height={5} rx={2.5} fill="#374151" />
+        </motion.g>
 
+        {/* 초침 (노란색 포인트) */}
+        <motion.g
+          transform={`translate(${cx}, ${cy}) rotate(${currentTime.getSeconds() * 6 - 90})`}
+          filter="url(#hand-shadow)"
+        >
+          <rect x={-15} y={-1} width={100} height={2} fill="#f59e0b" /> {/* Amber-500 */}
+          <circle cx={0} cy={0} r={3} fill="#f59e0b" />
+        </motion.g>
 
-          // 라벨 표시 여부 (0, 3, 6, 9 시 위치에만)
-          const isLabelHour = index % 3 === 0;
+        {/* 중앙 캡 (검은색) */}
+        <circle cx={cx} cy={cy} r={4} fill="#1f2937" />
 
-          // 라벨 위치 조정
-          const labelRadius = radius - 30;
-          const x_label = cx + labelRadius * Math.cos(radian);
-          const y_label = cy + labelRadius * Math.sin(radian) + 4;
-
-          return (
-            <motion.g
-              key={index}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: index * 0.05, duration: 0.3 }}
-            >
-              {/* AM 데이터 기반의 길쭉한 직사각형 점 */}
-              <motion.rect
-                // x, y 좌표는 중앙 및 크기에 따라 애니메이션 됨
-                width={currentAmWidth}
-                height={currentAmHeight}
-                rx={currentAmHeight / 2}
-                fill={amData.color}
-                filter={(amData.safetyLevel === 'warning' || amData.safetyLevel === 'danger') ? 'url(#neon-glow)' : undefined}
-                className="cursor-pointer"
-                style={{ transformOrigin: `${xCenter}px ${yCenter}px` }}
-                animate={{
-                  rotate: angle, // 각도에 따라 회전
-                  width: currentAmWidth,
-                  height: currentAmHeight,
-                  x: xCenter - currentAmWidth / 2,
-                  y: yCenter - currentAmHeight / 2,
-                }}
-                transition={{ duration: 0.2 }}
-                onMouseEnter={(e) => handleMouseEnter(e, amData, index, 'am')}
-                onMouseLeave={handleMouseLeave}
-              />
-
-              {/* PM 데이터 기반의 길쭉한 직사각형 점 */}
-              {pmData && (
-                <motion.rect
-                  // x, y 좌표는 중앙 및 크기에 따라 애니메이션 됨
-                  width={currentPmWidth}
-                  height={currentPmHeight}
-                  rx={currentPmHeight / 2}
-                  fill={pmData.color}
-                  filter={(pmData.safetyLevel === 'warning' || pmData.safetyLevel === 'danger') ? 'url(#neon-glow)' : undefined}
-                  className="cursor-pointer"
-                  style={{ transformOrigin: `${xCenter}px ${yCenter}px` }}
-                  animate={{
-                    rotate: angle,
-                    width: currentPmWidth,
-                    height: currentPmHeight,
-                    x: xCenter - currentPmWidth / 2,
-                    y: yCenter - currentPmHeight / 2,
-                  }}
-                  transition={{ duration: 0.2 }}
-                  onMouseEnter={(e) => handleMouseEnter(e, pmData, index, 'pm')}
-                  onMouseLeave={handleMouseLeave}
-                />
-              )}
-
-              {/* 3시간 단위 라벨 (12, 3, 6, 9 시만 표시) */}
-              {isLabelHour && (
-                <text
-                  x={x_label}
-                  y={y_label}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="text-xs font-bold"
-                  fill="#9ca3af"
-                >
-                  {formatClockHour(amData.hour, true)}
-                </text>
-              )}
-            </motion.g>
-          );
-        })}
-
-        {/* 2. 중앙 정보 디스플레이 (스마트 워치 스타일) */}
-        <motion.circle
-          cx={cx}
-          cy={cy}
-          r={centerRadius}
-          fill="#064e3b" // 🟢 Emerald-900 (어두운 녹색 배경)
-          className="shadow-xl"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.5 }}
-        />
-
-        {/* 중앙 하이라이트/링 (선택된 시간의 테마색상 반영) */}
-        <motion.circle
-          cx={cx}
-          cy={cy}
-          r={centerRadius * 0.9}
-          fill="none"
-          stroke={overallColor || '#374151'}
-          strokeWidth="3"
-          strokeDasharray="40 10"
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
-        />
-
-        {/* 중앙 텍스트: 종합 점수 표시 */}
-        <>
-          {/* 상단 라벨 */}
-          <motion.text
-            x={cx}
-            y={cy - centerRadius * 0.4}
-            textAnchor="middle"
-            className="text-sm font-bold"
-            fill={overallColor}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-          >
-            종합 점수
-          </motion.text>
-
-          {/* 안전 점수 (텍스트 크기 text-5xl) */}
-          <motion.text
-            x={cx}
-            y={cy + 10}
-            textAnchor="middle"
-            className="text-5xl font-extrabold"
-            fill={overallColor}
-            filter="url(#neon-glow)"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.9, type: 'spring', stiffness: 200 }}
-          >
-            {overallScore}
-          </motion.text>
-
-          {/* 안전 상태 설명 */}
-          <motion.text
-            x={cx}
-            y={cy + centerRadius * 0.35 + 20} // Y좌표 조정
-            textAnchor="middle"
-            className="text-sm font-medium"
-            fill={overallColor}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.0 }}
-          >
-            {getScoreDescription(overallLevel)}
-          </motion.text>
-        </>
       </svg>
 
-      {/* 커스텀 툴팁 렌더링 (SVG 위에 HTML로 띄움) */}
-      <CustomTooltip tooltip={tooltip} svgOffset={{ top: 0, left: 0 }} />
+      {/* 커스텀 툴팁 */}
+      <CustomTooltip tooltip={tooltip} />
     </div>
   );
 };
@@ -764,11 +635,12 @@ export default function SafetyReport() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="card p-8 border-0 h-full flex flex-col min-h-[600px] bg-white">
+          <div className="card p-4 border-0 h-full flex flex-col min-h-[600px] bg-white">
             <div className="flex items-center justify-between mb-6 h-8">
               <h3 className="flex items-center gap-2 text-lg font-semibold">
                 <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
                 24시간 안전 현황
+
               </h3>
               <Clock className="w-5 h-5 text-primary-500" />
             </div>
@@ -793,7 +665,9 @@ export default function SafetyReport() {
           </div>
         </motion.div>
 
-        {/* 안전사고 유형 원그래프 (기존 유지) */}
+
+
+        {/* 안전사고 유형 원그래프 (크기 재확대 및 고정) */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -805,34 +679,34 @@ export default function SafetyReport() {
               안전사고 유형
             </h3>
 
-            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
-              <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Pie
-                    data={incidentTypeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="count"
-                    label={({ percent }) => percent > 0 ? `${(percent * 100).toFixed(0)}%` : ''}
-                  >
-                    {incidentTypeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    }}
-                    formatter={(value: number) => `${value}건`}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            {/* 🚩 수정: 차트 컨테이너의 높이를 h-[500px]로 확장 */}
+            <div className="flex items-center justify-center flex-1 min-h-0 py-4 h-[500px]">
+              {/* 🚩 수정: PieChart의 width와 height를 500으로 확장 */}
+              <PieChart width={500} height={500}>
+                <Pie
+                  data={incidentTypeData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={180} /* Pie의 반지름도 180으로 대폭 확대 */
+                  fill="#8884d8"
+                  dataKey="count"
+                  label={({ percent }) => percent > 0 ? `${(percent * 100).toFixed(0)}%` : ''}
+                >
+                  {incidentTypeData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  }}
+                  formatter={(value: number) => `${value}건`}
+                />
+              </PieChart>
             </div >
 
             <div className="flex flex-wrap items-center justify-center gap-3 mt-4">

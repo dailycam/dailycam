@@ -195,25 +195,9 @@ def get_dashboard_summary(
         )
         
         for event in safety_events:
-            # timestamp_range에서 시간 추출 (예: "14:15 - 14:45" 또는 "00:01:20-00:01:25" -> "14:15" 또는 "01:20")
-            time_str = None
+            # 발달 이벤트와 동일하게 처리: log.created_at 사용
+            time_str = log.created_at.strftime("%H:%M")
             hour = log.created_at.hour
-            
-            if event.timestamp_range:
-                # "14:15 - 14:45" 형식 또는 "00:01:20-00:01:25" 형식 처리
-                time_part = event.timestamp_range.split('-')[0].strip()
-                if ':' in time_part:
-                    parts = time_part.split(':')
-                    if len(parts) >= 2:
-                        hour = int(parts[0])
-                        minute = parts[1]
-                        time_str = f"{hour:02d}:{minute}"
-                    else:
-                        time_str = log.created_at.strftime("%H:%M")
-                else:
-                    time_str = log.created_at.strftime("%H:%M")
-            else:
-                time_str = log.created_at.strftime("%H:%M")
             
             # severity를 severity level로 매핑
             severity_map = {

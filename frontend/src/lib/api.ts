@@ -490,7 +490,7 @@ export interface RecommendationItem {
   description: string
 }
 
-export interface TimelineEvent {
+export interface DashboardTimelineEvent {
   time: string
   hour: number
   type: 'development' | 'safety'
@@ -515,7 +515,7 @@ export interface DashboardData {
   weeklyTrend: DashboardWeeklyTrendItem[]
   risks: RiskItem[]
   recommendations: RecommendationItem[]
-  timelineEvents?: TimelineEvent[]
+  timelineEvents?: DashboardTimelineEvent[]
 }
 
 /**
