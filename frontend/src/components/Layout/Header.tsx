@@ -1,10 +1,8 @@
 import { Bell, User, LogOut, ChevronDown, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-<<<<<<< HEAD
-=======
-import { getAuthToken, removeAuthToken } from '../../lib/auth'
->>>>>>> 0d709d7c101ce5910de438595aa0955865579d9b
+import { getAuthToken, removeAuthToken } from '../../lib/auth' // 이 줄만 남깁니다.
+
 
 interface UserInfo {
   id: number
