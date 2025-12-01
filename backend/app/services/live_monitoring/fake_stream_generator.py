@@ -1,6 +1,7 @@
 """가짜 라이브 스트림 생성기"""
 
 import cv2
+import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -15,7 +16,7 @@ class FakeLiveStreamGenerator:
     1시간마다 자동으로 잘라서 저장
     """
     
-    def __init__(self, camera_id: str, video_dir: Path, buffer_dir: Path, enable_realtime_detection: bool = True):
+    def __init__(self, camera_id: str, video_dir: Path, buffer_dir: Path, enable_realtime_detection: bool = True, age_months: Optional[int] = None, event_loop: Optional[asyncio.AbstractEventLoop] = None):
         self.camera_id = camera_id
         self.video_queue = VideoQueue(camera_id, video_dir)
         self.buffer_dir = buffer_dir
@@ -31,10 +32,14 @@ class FakeLiveStreamGenerator:
         self.target_height = 480
         self.target_fps = 1.0  # 분석용 1fps
         
-        # 실시간 이벤트 탐지기
+        # 실시간 이벤트 탐지기 (하이브리드)
         self.enable_realtime_detection = enable_realtime_detection
-        self.detector = RealtimeEventDetector(camera_id) if enable_realtime_detection else None
-        self.detection_frame_interval = 30  # 30프레임마다 탐지 (약 1초마다)
+        self.detector = RealtimeEventDetector(camera_id, age_months=age_months) if enable_realtime_detection else None
+        self.detection_frame_interval = 30  # 30프레임마다 경량 탐지 (약 1초마다)
+        
+        # 이벤트 루프 저장 (스레드에서 비동기 작업 실행용)
+        self.event_loop = event_loop
+        self.gemini_future = None  # Future 객체 저장
         
     async def start_streaming(self):
         """스트리밍 시작 (비동기)"""
@@ -105,12 +110,23 @@ class FakeLiveStreamGenerator:
             if not ret:
                 break
             
-            # 실시간 이벤트 탐지 (일정 간격마다)
+            # 실시간 이벤트 탐지 (하이브리드)
             if self.enable_realtime_detection and self.detector and frame_count % self.detection_frame_interval == 0:
                 try:
+                    # 1. 경량 탐지 (즉시)
                     events = self.detector.process_frame(frame)
                     if events:
                         self.detector.save_events(events)
+                    
+                    # 2. Gemini 분석 (45초마다, 비동기)
+                    if self.detector.should_run_gemini_analysis() and self.event_loop:
+                        # 기존 Future가 없거나 완료되었으면 새로 실행
+                        if self.gemini_future is None or self.gemini_future.done():
+                            # 메인 이벤트 루프에서 코루틴 실행
+                            self.gemini_future = asyncio.run_coroutine_threadsafe(
+                                self._run_gemini_analysis(frame.copy()),
+                                self.event_loop
+                            )
                 except Exception as e:
                     print(f"[실시간 탐지] 오류: {e}")
             
@@ -191,9 +207,24 @@ class FakeLiveStreamGenerator:
             else:
                 print(f"[스트림 생성기] 경고: 파일이 생성되지 않았습니다")
     
+    async def _run_gemini_analysis(self, frame: np.ndarray):
+        """Gemini 분석 실행 (비동기)"""
+        try:
+            if self.detector:
+                gemini_event = await self.detector.analyze_with_gemini(frame)
+                if gemini_event:
+                    self.detector.save_events([gemini_event])
+        except Exception as e:
+            print(f"[Gemini 분석 태스크] 오류: {e}")
+    
     def stop_streaming(self):
         """스트리밍 중지"""
         print(f"[스트림 생성기] 중지 요청: {self.camera_id}")
         self.is_running = False
+        
+        # Gemini 분석 Future 취소
+        if self.gemini_future and not self.gemini_future.done():
+            self.gemini_future.cancel()
+        
         self._finalize_current_hour()
 

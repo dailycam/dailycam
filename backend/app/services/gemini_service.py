@@ -65,6 +65,109 @@ class GeminiService:
         self.prompt_cache: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
+    # 실시간 모니터링 분석
+    # ------------------------------------------------------------------
+    async def analyze_realtime_snapshot(
+        self,
+        frame_or_video: bytes,
+        content_type: str = "image/jpeg",
+        age_months: Optional[int] = None,
+    ) -> dict:
+        """
+        실시간 스냅샷 분석 (프레임 또는 짧은 클립)
+        
+        Args:
+            frame_or_video: 프레임(JPEG) 또는 짧은 비디오 바이트
+            content_type: "image/jpeg" 또는 "video/mp4"
+            age_months: 아이의 개월 수 (선택)
+        
+        Returns:
+            실시간 이벤트 분석 결과 (JSON)
+        """
+        try:
+            # 1. 프롬프트 로드
+            prompt_path = Path(__file__).parent.parent / "prompts" / "live_monitoring" / "realtime_snapshot.ko.txt"
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                prompt = f.read()
+            
+            # 2. 메타데이터 추가
+            if age_months:
+                prompt += f"\n\n[아이 정보]\n- 개월 수: {age_months}개월\n"
+            
+            # 3. Gemini 호출
+            if content_type.startswith("image"):
+                # 이미지 분석
+                import google.generativeai as genai
+                image_part = {
+                    "mime_type": content_type,
+                    "data": base64.b64encode(frame_or_video).decode('utf-8')
+                }
+                response = self.model.generate_content([prompt, image_part])
+            else:
+                # 비디오 분석
+                video_file = genai.upload_file(
+                    path=self._save_temp_file(frame_or_video, ".mp4"),
+                    mime_type=content_type
+                )
+                response = self.model.generate_content([prompt, video_file])
+            
+            # 4. JSON 파싱
+            result_text = response.text.strip()
+            
+            # JSON 추출 (```json ... ``` 형식 처리)
+            if "```json" in result_text:
+                start = result_text.find("```json") + 7
+                end = result_text.find("```", start)
+                result_text = result_text[start:end].strip()
+            elif "```" in result_text:
+                start = result_text.find("```") + 3
+                end = result_text.find("```", start)
+                result_text = result_text[start:end].strip()
+            
+            result = json.loads(result_text)
+            
+            print(f"[실시간 분석 완료] severity: {result.get('event_summary', {}).get('severity')}")
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            print(f"[실시간 분석] JSON 파싱 실패: {e}")
+            print(f"원본 응답: {result_text[:500]}")
+            # 기본 응답 반환
+            return {
+                "current_activity": {
+                    "description": "분석 중 오류가 발생했습니다.",
+                    "location": "알 수 없음",
+                    "confidence": "low"
+                },
+                "safety_status": {
+                    "level": "info",
+                    "summary": "분석을 완료할 수 없습니다.",
+                    "concerns": []
+                },
+                "developmental_observation": {
+                    "notable": False,
+                    "description": None,
+                    "category": None
+                },
+                "event_summary": {
+                    "title": "분석 오류",
+                    "description": "일시적인 오류로 분석을 완료할 수 없습니다.",
+                    "severity": "info",
+                    "action_needed": None
+                }
+            }
+        except Exception as e:
+            print(f"[실시간 분석] 오류: {e}")
+            raise
+
+    def _save_temp_file(self, data: bytes, suffix: str) -> str:
+        """임시 파일 저장"""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(data)
+            return f.name
+
+    # ------------------------------------------------------------------
     # 공통 유틸
     # ------------------------------------------------------------------
     def _load_prompt(self, filename: str) -> str:

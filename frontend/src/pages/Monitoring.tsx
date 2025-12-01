@@ -14,6 +14,7 @@ import {
   X,
   MonitorPlay,
   Eye,
+  Info,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { 
@@ -23,6 +24,7 @@ import {
   startStream,
   getLatestEvents,
   getMonitoringStats,
+  resetMonitoringData,
   RealtimeEvent,
   MonitoringStats
 } from '../lib/api'
@@ -45,6 +47,8 @@ export default function Monitoring() {
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([])
   const [monitoringStats, setMonitoringStats] = useState<MonitoringStats | null>(null)
   const [isLoadingData, setIsLoadingData] = useState(false)
+  const [isResettingData, setIsResettingData] = useState(false)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamImgRef = useRef<HTMLImageElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -234,15 +238,17 @@ export default function Monitoring() {
     })
   }
 
-  // 가짜 라이브 스트림 시작
+  // 가짜 라이브 스트림 시작 (하이브리드)
   const handleStartFakeStream = async () => {
     setIsStartingStream(true)
     setStreamError(null)
 
     try {
-      console.log('가짜 라이브 스트림 시작:', selectedCamera)
-      const result = await startStream(selectedCamera, true)
-      console.log('스트림 시작 성공:', result)
+      console.log('하이브리드 스트림 시작:', selectedCamera)
+      // 아이의 개월 수 (예: 12개월, 실제로는 사용자 입력 또는 설정에서 가져와야 함)
+      const ageMonths = 12 // TODO: 사용자 설정에서 가져오기
+      const result = await startStream(selectedCamera, true, ageMonths)
+      console.log('하이브리드 스트림 시작 성공:', result)
 
       // 스트림 URL 설정 (MJPEG 스트리밍)
       const timestamp = Date.now()
@@ -268,6 +274,27 @@ export default function Monitoring() {
       setStreamError(error.message || '스트림 시작 중 오류가 발생했습니다.')
     } finally {
       setIsStartingStream(false)
+    }
+  }
+
+  // 모니터링 데이터 초기화
+  const handleResetMonitoringData = async () => {
+    if (!window.confirm('현재 카메라의 모니터링 데이터를 모두 삭제할까요?')) {
+      return
+    }
+    setIsResettingData(true)
+    setResetMessage(null)
+    try {
+      const result = await resetMonitoringData(selectedCamera)
+      setResetMessage(
+        `삭제 완료 (실시간 이벤트 ${result.realtime_events_deleted}건, 1시간 분석 ${result.hourly_analyses_deleted}건)`
+      )
+      await loadRealtimeData()
+    } catch (error: any) {
+      console.error('모니터링 데이터 초기화 실패:', error)
+      setResetMessage(error.message || '모니터링 데이터 초기화 중 오류가 발생했습니다.')
+    } finally {
+      setIsResettingData(false)
     }
   }
 
@@ -391,7 +418,7 @@ export default function Monitoring() {
               모니터링
             </h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap justify-end">
             {!streamUrl ? (
               <>
                 <button
@@ -419,6 +446,15 @@ export default function Monitoring() {
                 스트림 중지
               </button>
             )}
+
+            <button
+              onClick={handleResetMonitoringData}
+              disabled={isResettingData}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              {isResettingData ? '데이터 초기화 중...' : '데이터 초기화'}
+            </button>
           </div>
         </div>
         <p className="text-gray-600">AI가 아이의 행동을 분석합니다</p>
@@ -432,6 +468,21 @@ export default function Monitoring() {
               <button
                 onClick={() => setStreamError(null)}
                 className="ml-auto text-red-500 hover:text-red-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {resetMessage && (
+          <div className="mt-3 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              <span>{resetMessage}</span>
+              <button
+                onClick={() => setResetMessage(null)}
+                className="ml-auto text-blue-500 hover:text-blue-700"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -512,28 +563,24 @@ export default function Monitoring() {
                 </div>
               </div>
 
-              {/* Detection Box (Example) */}
-              {streamUrl && (
-                <div className="absolute top-1/3 left-1/3 w-32 h-48 border-4 border-safe rounded-lg">
-                  <div className="absolute -top-7 left-0 bg-safe text-white text-xs px-2 py-1 rounded">
-                    아이 감지됨
+              {/* 실시간 위험 알림 (최신 danger 이벤트만 표시) */}
+              {streamUrl && realtimeEvents.length > 0 && (() => {
+                const latestDangerEvent = realtimeEvents.find(e => e.severity === 'danger')
+                if (!latestDangerEvent) return null
+                
+                return (
+                  <div className="absolute bottom-20 left-4 right-4 space-y-2">
+                    <motion.div 
+                      initial={{ opacity: 0, x: -20 }} 
+                      animate={{ opacity: 1, x: 0 }}
+                      className="bg-red-600/90 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg"
+                    >
+                      <AlertTriangle className="w-5 h-5" />
+                      <span className="text-sm">{latestDangerEvent.title}</span>
+                    </motion.div>
                   </div>
-                </div>
-              )}
-
-              {/* Zone Warnings */}
-              {streamUrl && (
-                <div className="absolute bottom-20 left-4 right-4 space-y-2">
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }} 
-                    animate={{ opacity: 1, x: 0 }}
-                    className="bg-warning/90 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg"
-                  >
-                    <AlertTriangle className="w-5 h-5" />
-                    <span className="text-sm">데드존 근처 접근 감지</span>
-                  </motion.div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Video Controls */}
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
@@ -551,7 +598,9 @@ export default function Monitoring() {
                     >
                       {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                     </button>
-                    <span className="text-white text-sm ml-2">오후 3:45:22</span>
+                    <span className="text-white text-sm ml-2">
+                      {new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     {!streamUrl ? (
@@ -608,38 +657,55 @@ export default function Monitoring() {
             />
           </motion.div>
 
-          {/* AI Analysis Summary */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-100"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
-              <h3 className="text-lg font-semibold text-gray-900">AI 분석</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <AnalysisStat
-                label="현재 활동"
-                value="놀이 중"
-                icon={Activity}
-                color="safe"
-              />
-              <AnalysisStat
-                label="위험도"
-                value="낮음"
-                icon={AlertTriangle}
-                color="safe"
-              />
-              <AnalysisStat
-                label="위치"
-                value="세이프존"
-                icon={MapPin}
-                color="primary"
-              />
-            </div>
-          </motion.div>
+          {/* AI Analysis Summary - 최신 Gemini 이벤트 기반 */}
+          {realtimeEvents.length > 0 && realtimeEvents.find(e => e.metadata?.gemini_analysis) && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-100"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
+                <h3 className="text-lg font-semibold text-gray-900">AI 분석</h3>
+              </div>
+              {(() => {
+                const latestGeminiEvent = realtimeEvents.find(e => e.metadata?.gemini_analysis)
+                const currentActivity = latestGeminiEvent?.metadata?.current_activity
+                const safetyStatus = latestGeminiEvent?.metadata?.safety_status
+                
+                return (
+                  <div className="grid grid-cols-3 gap-4">
+                    <AnalysisStat
+                      label="현재 활동"
+                      value={currentActivity?.description?.split('.')[0] || '분석 중'}
+                      icon={Activity}
+                      color={latestGeminiEvent?.severity === 'safe' ? 'safe' : 'warning'}
+                    />
+                    <AnalysisStat
+                      label="안전 상태"
+                      value={
+                        safetyStatus?.level === 'safe' ? '안전' :
+                        safetyStatus?.level === 'warning' ? '주의' :
+                        safetyStatus?.level === 'danger' ? '위험' : '확인 중'
+                      }
+                      icon={AlertTriangle}
+                      color={
+                        safetyStatus?.level === 'safe' ? 'safe' :
+                        safetyStatus?.level === 'warning' ? 'warning' : 'danger'
+                      }
+                    />
+                    <AnalysisStat
+                      label="위치"
+                      value={latestGeminiEvent?.location || '알 수 없음'}
+                      icon={MapPin}
+                      color="primary"
+                    />
+                  </div>
+                )
+              })()}
+            </motion.div>
+          )}
         </div>
 
         {/* Right Sidebar - Activity Log & Alerts */}

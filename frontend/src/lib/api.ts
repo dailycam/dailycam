@@ -129,14 +129,21 @@ export function getStreamUrl(
 }
 
 /**
- * 가짜 라이브 스트림을 시작합니다.
+ * 가짜 라이브 스트림을 시작합니다 (하이브리드 실시간 탐지).
  */
 export async function startStream(
   cameraId: string,
-  enableAnalysis: boolean = true
-): Promise<{ message: string; camera_id: string; status: string; analysis_enabled: boolean }> {
+  enableAnalysis: boolean = true,
+  ageMonths?: number
+): Promise<{ message: string; camera_id: string; status: string; analysis_enabled: boolean; detection_mode: string }> {
+  const params = new URLSearchParams()
+  params.append('enable_analysis', enableAnalysis.toString())
+  if (ageMonths) {
+    params.append('age_months', ageMonths.toString())
+  }
+  
   const response = await fetch(
-    `${API_BASE_URL}/api/live-monitoring/start-stream/${cameraId}?enable_analysis=${enableAnalysis}`,
+    `${API_BASE_URL}/api/live-monitoring/start-stream/${cameraId}?${params}`,
     {
       method: 'POST',
     }
@@ -145,6 +152,27 @@ export async function startStream(
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || '스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
+ * 모니터링 데이터를 초기화합니다.
+ */
+export async function resetMonitoringData(
+  cameraId: string
+): Promise<{ message: string; realtime_events_deleted: number; hourly_analyses_deleted: number }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/reset/${cameraId}`,
+    {
+      method: 'DELETE',
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || '모니터링 데이터 초기화 중 오류가 발생했습니다.')
   }
 
   return await response.json()

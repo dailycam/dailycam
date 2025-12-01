@@ -68,11 +68,13 @@ async def upload_video_for_streaming(
 async def start_stream(
     camera_id: str,
     enable_analysis: bool = Query(True, description="1시간 단위 분석 활성화"),
-    enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화")
+    enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
+    age_months: int = Query(None, description="아이의 개월 수 (실시간 분석 정확도 향상)")
 ):
     """
     가짜 라이브 스트림 시작
     영상 큐를 로드하고 1시간 단위로 버퍼링 시작
+    실시간 이벤트 탐지 (하이브리드: 경량 + Gemini)
     """
     if camera_id in active_streams:
         raise HTTPException(status_code=400, detail="이미 스트림이 실행 중입니다")
@@ -87,12 +89,17 @@ async def start_stream(
             detail=f"영상 디렉토리가 없습니다: {video_dir}"
         )
     
-    # 스트림 생성기 생성 (실시간 탐지 활성화)
+    # 현재 이벤트 루프 가져오기
+    loop = asyncio.get_running_loop()
+    
+    # 스트림 생성기 생성 (하이브리드 실시간 탐지)
     generator = FakeLiveStreamGenerator(
         camera_id, 
         video_dir, 
         buffer_dir, 
-        enable_realtime_detection=enable_realtime_detection
+        enable_realtime_detection=enable_realtime_detection,
+        age_months=age_months,
+        event_loop=loop  # 이벤트 루프 전달
     )
     active_streams[camera_id] = generator
     
@@ -104,7 +111,7 @@ async def start_stream(
     if enable_analysis:
         await start_hourly_analysis_for_camera(camera_id)
     
-    print(f"[API] 스트림 시작: {camera_id} (분석: {enable_analysis}, 실시간 탐지: {enable_realtime_detection})")
+    print(f"[API] 스트림 시작: {camera_id} (분석: {enable_analysis}, 실시간 탐지: {enable_realtime_detection}, 개월수: {age_months})")
     
     return {
         "message": f"스트림 시작: {camera_id}",
@@ -112,6 +119,9 @@ async def start_stream(
         "status": "running",
         "analysis_enabled": enable_analysis,
         "realtime_detection_enabled": enable_realtime_detection,
+        "age_months": age_months,
+        "detection_mode": "hybrid (lightweight + gemini)",
+        "gemini_interval": "45 seconds",
         "stream_url": f"/api/live-monitoring/stream/{camera_id}"
     }
 
@@ -311,6 +321,35 @@ async def list_hourly_files(camera_id: str):
         "camera_id": camera_id,
         "total_files": len(files_info),
         "files": files_info
+    }
+
+
+@router.delete("/reset/{camera_id}")
+async def reset_monitoring_data(
+    camera_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    모니터링 데이터 초기화
+    - 실시간 이벤트, 시간별 분석 결과 삭제
+    """
+    realtime_deleted = db.query(RealtimeEvent).filter(
+        RealtimeEvent.camera_id == camera_id
+    ).delete(synchronize_session=False)
+    
+    hourly_deleted = db.query(HourlyAnalysis).filter(
+        HourlyAnalysis.camera_id == camera_id
+    ).delete(synchronize_session=False)
+    
+    db.commit()
+    
+    print(f"[모니터링 초기화] {camera_id}: realtime={realtime_deleted}, hourly={hourly_deleted}")
+    
+    return {
+        "camera_id": camera_id,
+        "realtime_events_deleted": realtime_deleted,
+        "hourly_analyses_deleted": hourly_deleted,
+        "message": "모니터링 데이터가 초기화되었습니다."
     }
 
 
