@@ -55,14 +55,15 @@ export default function DevelopmentReport() {
     ? Object.entries(developmentData.developmentRadarScores).map(([category, score]) => ({
       category,
       score,
+      average: Math.max(50, Math.min(90, score + Math.random() * 20 - 10)), // 또래 평균 (모의 데이터)
       fullMark: 100,
     }))
     : [
-      { category: '언어', score: 0, fullMark: 100 },
-      { category: '운동', score: 0, fullMark: 100 },
-      { category: '인지', score: 0, fullMark: 100 },
-      { category: '사회성', score: 0, fullMark: 100 },
-      { category: '정서', score: 0, fullMark: 100 },
+      { category: '언어', score: 0, average: 70, fullMark: 100 },
+      { category: '운동', score: 0, average: 75, fullMark: 100 },
+      { category: '인지', score: 0, average: 72, fullMark: 100 },
+      { category: '사회성', score: 0, average: 68, fullMark: 100 },
+      { category: '정서', score: 0, average: 73, fullMark: 100 },
     ]
 
   // 최고점수를 가진 영역 찾기
@@ -70,11 +71,11 @@ export default function DevelopmentReport() {
   const strongestArea = radarData.find(item => item.score === maxScore)
 
   const dailyDevelopmentFrequency = developmentData?.dailyDevelopmentFrequency || [
-    { category: '언어', count: 0, color: '#0284c7' },
-    { category: '운동', count: 0, color: '#22c55e' },
-    { category: '인지', count: 0, color: '#f59e0b' },
-    { category: '사회성', count: 0, color: '#0ea5e9' },
-    { category: '정서', count: 0, color: '#06b6d4' },
+    { category: '언어', count: 0, color: '#14b8a6' },
+    { category: '운동', count: 0, color: '#86d5a8' },
+    { category: '인지', count: 0, color: '#ffdb8b' },
+    { category: '사회성', count: 0, color: '#5fe9d0' },
+    { category: '정서', count: 0, color: '#99f6e0' },
   ]
 
   const recommendedActivities = [
@@ -85,7 +86,8 @@ export default function DevelopmentReport() {
       description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
       duration: '10-15분',
       benefit: '인지 능력 향상',
-      gradient: 'from-warning-50 to-orange-50',
+      gradient: 'from-warning-light/30 to-orange-50',
+      score: 85, // AI 추천 점수
     },
     {
       title: '배밀이 연습',
@@ -94,7 +96,8 @@ export default function DevelopmentReport() {
       description: '좋아하는 장난감을 앞에 두고 손을 뻗게 유도하세요.',
       duration: '15-20분',
       benefit: '대근육 발달',
-      gradient: 'from-safe-50 to-green-50',
+      gradient: 'from-safe-light/30 to-green-50',
+      score: 92, // AI 추천 점수 - 높음 (glow effect)
     },
     {
       title: '노래 부르기',
@@ -103,7 +106,8 @@ export default function DevelopmentReport() {
       description: '다양한 동요와 자장가를 들려주세요.',
       duration: '5-10분',
       benefit: '언어 자극',
-      gradient: 'from-primary-50 to-blue-50',
+      gradient: 'from-primary-100/40 to-primary-50',
+      score: 78,
     },
     {
       title: '촉각 놀이',
@@ -112,7 +116,8 @@ export default function DevelopmentReport() {
       description: '다양한 질감의 천이나 장난감을 만지게 해주세요.',
       duration: '10분',
       benefit: '감각 발달',
-      gradient: 'from-primary-50 to-cyan-50',
+      gradient: 'from-primary-100/40 to-cyan-50',
+      score: 70,
     },
   ]
 
@@ -155,7 +160,7 @@ export default function DevelopmentReport() {
           transition={{ duration: 0.6, delay: 0.1 }}
           className="lg:col-span-2"
         >
-          <div className="card p-8 bg-gradient-to-br from-primary-50 via-blue-50 to-cyan-50 border-0 shadow-xl relative overflow-hidden">
+          <div className="card p-8 bg-gradient-to-br from-primary-100/40 via-primary-50/30 to-cyan-50/30 border-0 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary-200/30 to-blue-200/30 rounded-full blur-3xl" />
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-cyan-200/30 to-primary-200/30 rounded-full blur-3xl" />
 
@@ -208,14 +213,14 @@ export default function DevelopmentReport() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          <div className="card p-6 bg-gradient-to-br from-primary-50 to-cyan-50 border-0 shadow-xl h-full">
+          <div className="card p-6 bg-gradient-to-br from-primary-100/40 to-cyan-50/30 border-0 h-full">
             <div className="text-center h-full flex flex-col justify-center">
               <motion.div
                 initial={{ scale: 0.8 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.8, delay: 0.4 }}
               >
-                <div className="bg-gradient-to-br from-primary-500 to-primary-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <div className="bg-gradient-to-br from-primary-500 to-primary-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Baby className="w-10 h-10 text-white" />
                 </div>
               </motion.div>
@@ -245,7 +250,7 @@ export default function DevelopmentReport() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+          <div className="card p-8 border-0 h-full flex flex-col min-h-[600px]">
             <div className="mb-6 h-8">
               <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold">
                 <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
@@ -267,20 +272,40 @@ export default function DevelopmentReport() {
                   <PolarAngleAxis dataKey="category" tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }} />
                   <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} tickCount={6} />
                   <Radar
+                    name="내 아이"
                     dataKey="score"
-                    stroke="#0284c7"
-                    fill="url(#radarGradient)"
-                    fillOpacity={0.7}
+                    stroke="#14b8a6"
+                    fill="#14b8a6"
+                    fillOpacity={0.35}
                     strokeWidth={2.5}
-                    dot={{ fill: '#0284c7', strokeWidth: 2, r: 4, stroke: '#fff' }}
+                    dot={{ fill: '#14b8a6', strokeWidth: 2, r: 5, stroke: '#fff' }}
+                  />
+                  <Radar
+                    name="또래 평균"
+                    dataKey="average"
+                    stroke="#9ca3af"
+                    fill="none"
+                    strokeDasharray="5 5"
+                    strokeWidth={2}
+                    dot={{ fill: '#9ca3af', strokeWidth: 2, r: 4, stroke: '#fff' }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
 
+            {/* 긴정적 메시지 박스 */}
+            <div className="mt-2 p-4 bg-primary-50/50 rounded-2xl border border-primary-200/50">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                <span className="font-semibold text-primary-700">🌟 긍정적인 발달을 보이고 있어요!</span>
+                {radarData.some(item => item.score < item.average) && (
+                  <span> 지금은 조금 느리지만, 아래 추천 활동을 함께하면 금방 자라나요! 🚀</span>
+                )}
+              </p>
+            </div>
+
             <div className="mt-4 grid grid-cols-5 gap-2">
               {radarData.map((item, index) => (
-                <div key={index} className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-lg p-2.5 text-center">
+                <div key={index} className="bg-gradient-to-br from-primary-100/50 to-primary-50/30 rounded-2xl p-2.5 text-center">
                   <p className="text-xs text-gray-600 mb-1">{item.category}</p>
                   <p className="text-lg text-primary-600 font-semibold">{item.score}</p>
                 </div>
@@ -294,42 +319,77 @@ export default function DevelopmentReport() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
         >
-          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px]">
+          <div className="card p-8 border-0 h-full flex flex-col min-h-[600px]">
             <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
               <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-cyan-400 rounded-full" />
               금일 발달 행동 빈도
             </h3>
-            <div className="flex items-center justify-center flex-1 min-h-0 py-4">
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={dailyDevelopmentFrequency}>
-                  <defs>
-                    {dailyDevelopmentFrequency.map((item, index) => (
-                      <linearGradient key={index} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={item.color} stopOpacity={0.9} />
-                        <stop offset="95%" stopColor={item.color} stopOpacity={0.5} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="category" stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                  <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    }}
-                  />
-                  <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
-                    {dailyDevelopmentFrequency.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+
+            {/* 2단 컬럼 레이아웃 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+              {/* 왼쪽: 막대 그래프 */}
+              <div className="flex items-center justify-center">
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={dailyDevelopmentFrequency}>
+                    <defs>
+                      {dailyDevelopmentFrequency.map((item, index) => (
+                        <linearGradient key={index} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={item.color} stopOpacity={0.9} />
+                          <stop offset="95%" stopColor={item.color} stopOpacity={0.5} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="category" stroke="#9ca3af" style={{ fontSize: '12px' }} />
+                    <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      }}
+                    />
+                    <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
+                      {dailyDevelopmentFrequency.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* 오른쪽: 텍스트 분석 및 팁 */}
+              <div className="space-y-4">
+                <h4 className="text-base font-semibold text-gray-800 mb-4">발달 영역별 분석</h4>
+                {dailyDevelopmentFrequency.slice(0, 3).map((item, index) => (
+                  <div key={index} className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-2xl p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                      <h5 className="font-semibold text-gray-800">{item.category} 발달</h5>
+                      <span className="ml-auto text-sm font-bold" style={{ color: item.color }}>{item.count}회</span>
+                    </div>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      {index === 0 && `오늘 ${item.category} 발달 활동이 ${item.count}회 관찰되었어요. 다양한 소리와 대화로 계속 자극해주세요.`}
+                      {index === 1 && `${item.category} 능력이 활발하게 발달 중이에요. 안전한 환경에서 자유롭게 움직일 기회를 주세요.`}
+                      {index === 2 && `${item.category} 발달에 좋은 텐포를 보이고 있어요. 호기심을 자극하는 놀이를 추천해요.`}
+                    </p>
+                  </div>
+                ))}
+
+                <div className="bg-gradient-to-br from-primary-50/50 to-cyan-50/30 rounded-2xl p-4 border border-primary-200/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Lightbulb className="w-4 h-4 text-primary-600" />
+                    <h5 className="font-semibold text-primary-800">오늘의 팁</h5>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    규칙적인 활동과 충분한 수면이 모든 발달 영역에 긍정적인 영향을 줘요. 계속 이렇게 유지해주세요!
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 grid grid-cols-5 gap-2">
+
+            <div className="mt-6 grid grid-cols-5 gap-2">
               {dailyDevelopmentFrequency.map((item, index) => (
                 <div key={index} className="text-center">
                   <div className="w-full h-2 rounded-full mb-1" style={{ backgroundColor: item.color }} />
@@ -350,7 +410,7 @@ export default function DevelopmentReport() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.5 }}
       >
-        <div className="card p-6 mb-8 border-0 shadow-lg">
+        <div className="card p-6 mb-8 border-0">
           <div className="flex items-center gap-2 mb-6">
             <Lightbulb className="w-6 h-6 text-warning" />
             <h3 className="text-lg font-semibold">AI 추천 발달 촉진 놀이</h3>
@@ -377,7 +437,9 @@ export default function DevelopmentReport() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.6 + index * 0.1 }}
-                  className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1`}
+                  whileHover={{ y: -4 }}
+                  className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-3xl border-0 transition-all ${activity.score >= 85 ? 'ring-2 ring-primary-300 shadow-glow-mint' : 'shadow-soft hover:shadow-soft-lg'
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">

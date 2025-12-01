@@ -461,14 +461,14 @@ export default function SafetyReport() {
   const [loading, setLoading] = useState(true);
   const [date] = useState<Date>(new Date());
 
-  // 안전/안심 테마 팔레트 정의
+  // 안전/안심 테마 팔레트 정의 (파스텔 민트)
   const COLOR_PALETTE = {
-    PRIMARY: '#059669',
-    PRIMARY_LIGHT: '#10b981',
-    PRIMARY_DARK: '#047857',
-    HEADER_GRADIENT: 'from-emerald-500 via-green-600 to-green-700',
-    SUMMARY_BG_GRADIENT: 'from-emerald-50 via-green-50 to-teal-50',
-    LINE_STROKE: '#059669',
+    PRIMARY: '#14b8a6',
+    PRIMARY_LIGHT: '#2dd4bf',
+    PRIMARY_DARK: '#0d9488',
+    HEADER_GRADIENT: 'from-primary-500 via-primary-600 to-primary-700',
+    SUMMARY_BG_GRADIENT: 'from-primary-100/40 via-primary-50/30 to-cyan-50/30',
+    LINE_STROKE: '#14b8a6',
     HOUR_LINE_INACTIVE: '#e5e7eb',
   };
 
@@ -562,9 +562,9 @@ export default function SafetyReport() {
     {
       title: '모서리 가드 설치',
       icon: 'Shield',
-      description: '아이가 가구를 잡고 서기 시작했습니다. 뾰족한 모서리에 가드를 설치해주세요.',
+      description: '아이가 가구를 잡고 서기 시작했습니다. 뽰족한 모서리에 가드를 설치해주세요.',
       priority: 'high',
-      gradient: 'from-red-50 to-pink-50',
+      gradient: 'from-danger-light/30 to-pink-50',
       checked: false,
     },
     {
@@ -572,7 +572,7 @@ export default function SafetyReport() {
       icon: 'Zap',
       description: '전기 콘센트에 안전 장치가 설치돼있는지 확인해주세요.',
       priority: 'high',
-      gradient: 'from-amber-50 to-orange-50',
+      gradient: 'from-warning-light/30 to-orange-50',
       checked: true,
     },
     {
@@ -580,7 +580,7 @@ export default function SafetyReport() {
       icon: 'Bed',
       description: '침대 가장자리 안전 패드가 제대로 고정되어 있는지 확인하세요.',
       priority: 'medium',
-      gradient: 'from-emerald-50 to-green-50',
+      gradient: 'from-primary-100/40 to-primary-50',
       checked: false,
     },
     {
@@ -588,7 +588,7 @@ export default function SafetyReport() {
       icon: 'Blocks',
       description: '아이가 삼킬 수 있는 작은 물건들을 손이 닿지 않는 곳에 보관하세요.',
       priority: 'medium',
-      gradient: 'from-green-50 to-teal-50',
+      gradient: 'from-safe-light/30 to-cyan-50',
       checked: true,
     },
   ];
@@ -631,7 +631,7 @@ export default function SafetyReport() {
       >
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <Shield className="w-8 h-8 text-emerald-600" />
+            <Shield className="w-8 h-8 text-primary-600" />
             <h1
               className={`bg-gradient-to-r ${COLOR_PALETTE.HEADER_GRADIENT} bg-clip-text text-transparent text-3xl font-bold`}
             >
@@ -645,7 +645,7 @@ export default function SafetyReport() {
             <CalendarIcon className="w-4 h-4" />
             {date.toLocaleDateString('ko-KR')}
           </button>
-          <button className="btn-primary flex items-center gap-2 shadow-md bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors">
+          <button className="btn-primary flex items-center gap-2">
             <Download className="w-4 h-4" />
             리포트 다운로드
           </button>
@@ -662,7 +662,7 @@ export default function SafetyReport() {
           className="lg:col-span-2"
         >
           <div
-            className={`card p-8 bg-gradient-to-br ${COLOR_PALETTE.SUMMARY_BG_GRADIENT} border-0 shadow-xl relative overflow-hidden h-full flex flex-col rounded-2xl`}
+            className={`card p-8 bg-gradient-to-br ${COLOR_PALETTE.SUMMARY_BG_GRADIENT} border-0 relative overflow-hidden h-full flex flex-col`}
           >
             <div className="flex-grow relative">
               <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-emerald-200/30 to-green-200/30 rounded-full blur-3xl" />
@@ -670,13 +670,13 @@ export default function SafetyReport() {
 
               <div className="relative">
                 <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="w-6 h-6 text-emerald-600" />
+                  <Sparkles className="w-6 h-6 text-primary-600" />
                   <h2 className="text-gray-900 text-xl font-semibold">오늘의 안전 요약</h2>
                 </div>
                 <div className="space-y-3 text-sm text-gray-700 leading-relaxed mb-6">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-5 h-5 text-emerald-600" />
+                    <div className="w-8 h-8 rounded-lg bg-primary-100/60 flex items-center justify-center flex-shrink-0">
+                      <Shield className="w-5 h-5 text-primary-600" />
                     </div>
                     <span>
                       {safetyData.safetySummary}
@@ -698,8 +698,8 @@ export default function SafetyReport() {
 
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-emerald-100 mt-auto">
               <div className="flex items-center gap-2 mb-2">
-                <Lightbulb className="w-4 h-4 text-emerald-600" />
-                <p className="text-xs text-emerald-600 font-semibold">AI 안전 인사이트</p>
+                <Lightbulb className="w-4 h-4 text-primary-600" />
+                <p className="text-xs text-primary-600 font-semibold">AI 안전 인사이트</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
                 <p className="flex items-start gap-1">
@@ -722,19 +722,19 @@ export default function SafetyReport() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="lg:col-span-1"
         >
-          <div className="card p-6 bg-gradient-to-br from-emerald-100 to-green-100 border-0 shadow-xl h-full rounded-2xl">
+          <div className="card p-6 bg-gradient-to-br from-primary-100/40 to-cyan-50/30 border-0 h-full">
             <div className="text-center h-full flex flex-col justify-center">
               <motion.div
                 initial={{ scale: 0.8 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.8, delay: 0.4 }}
               >
-                <div className="bg-gradient-to-br from-emerald-500 to-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <div className="bg-gradient-to-br from-primary-500 to-primary-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Shield className="w-10 h-10 text-white" />
                 </div>
               </motion.div>
               <p className="text-sm text-gray-600 mb-2">오늘의 종합 안전 점수</p>
-              <p className="text-emerald-600 mb-4 text-4xl font-bold">{currentSafetyScore}점</p>
+              <p className="text-primary-600 mb-4 text-4xl font-bold">{currentSafetyScore}점</p>
 
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center justify-center gap-2 mb-2">
@@ -742,7 +742,7 @@ export default function SafetyReport() {
                   <p className="text-sm text-gray-700 font-medium">안전 상태</p>
                 </div>
                 <p className="text-base text-gray-800 leading-relaxed">
-                  <span className="text-emerald-600 font-semibold">
+                  <span className="text-primary-600 font-semibold">
                     {currentSafetyScore >= 90 ? '매우 우수' : currentSafetyScore >= 70 ? '양호' : '주의'}
                   </span>합니다.
                 </p>
@@ -764,13 +764,13 @@ export default function SafetyReport() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="card p-8 border-0 shadow-lg h-full flex flex-col min-h-[600px] bg-white rounded-2xl">
+          <div className="card p-8 border-0 h-full flex flex-col min-h-[600px] bg-white">
             <div className="flex items-center justify-between mb-6 h-8">
               <h3 className="flex items-center gap-2 text-lg font-semibold">
-                <div className="w-1 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full" />
+                <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
                 24시간 안전 현황
               </h3>
-              <Clock className="w-5 h-5 text-emerald-500" />
+              <Clock className="w-5 h-5 text-primary-500" />
             </div>
 
             {/* 변경된 시계 컴포넌트 삽입 */}
@@ -799,9 +799,9 @@ export default function SafetyReport() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
         >
-          <div className="card p-8 h-full border-0 shadow-lg bg-white flex flex-col min-h-[600px] rounded-2xl">
+          <div className="card p-8 h-full border-0 bg-white flex flex-col min-h-[600px]">
             <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
-              <div className="w-1 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full" />
+              <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
               안전사고 유형
             </h3>
 
@@ -833,7 +833,7 @@ export default function SafetyReport() {
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
+            </div >
 
             <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
               {incidentTypeData.map((item, index) => (
@@ -849,21 +849,22 @@ export default function SafetyReport() {
                 </motion.div>
               ))}
             </div>
-          </div>
-        </motion.div>
-      </div>
+          </div >
+        </motion.div >
+      </div >
 
       {/* 3. Safety Checklist Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
+      < motion.div
+        initial={{ opacity: 0, y: 20 }
+        }
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.5 }}
         className="mb-8"
       >
-        <div className="card p-6 border-0 shadow-lg">
+        <div className="card p-6 border-0">
           <div className="flex items-center gap-2 mb-6">
-            <CheckSquare className="w-6 h-6 text-emerald-500" />
-            <h3 className="text-lg font-semibold">오늘의 안전 체크리스트</h3>
+            <CheckSquare className="w-6 h-6 text-primary-500" />
+            <h3 className="text-lg font-semibold section-title-accent">오늘의 안전 체크리스트</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {safetyChecklist.map((item, index) => {
@@ -875,20 +876,34 @@ export default function SafetyReport() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.6 + index * 0.1 }}
-                  className={`p-5 bg-gradient-to-br ${item.gradient} rounded-2xl border-0 shadow-md hover:shadow-lg transition-all hover:-translate-y-1 relative overflow-hidden`}
+                  className={`p-5 bg-gradient-to-br ${item.gradient} rounded-3xl border-0 transition-all hover:shadow-soft-lg relative overflow-hidden ${item.priority === 'high' && !item.checked ? 'breathing-border' : ''
+                    }`}
                 >
-                  {/* 🚨 하이라이트/경고 애니메이션 */}
-                  {item.priority === 'high' && (
+                  {item.priority === 'high' && !item.checked && (
+                    <motion.div
+                      className="absolute inset-0 rounded-3xl"
+                      animate={{
+                        backgroundColor: [
+                          'rgba(252, 165, 165, 0.15)',
+                          'rgba(252, 165, 165, 0.3)',
+                          'rgba(252, 165, 165, 0.15)'
+                        ]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                  )}
+
+                  {/* 아이콘 깜박임 */}
+                  {item.priority === 'high' && !item.checked && (
                     <motion.div
                       className="absolute top-2 left-2 z-10"
                       animate={{
-                        scale: [1, 1.2, 1], // 크기 변화
-                        opacity: [0.8, 1, 0.8], // 불투명도 변화
-                        filter: [
-                          'drop-shadow(0 0px 0px rgba(255,0,0,0))',
-                          'drop-shadow(0 5px 8px rgba(255,0,0,0.5))',
-                          'drop-shadow(0 0px 0px rgba(255,0,0,0))',
-                        ],
+                        scale: [1, 1.2, 1],
+                        opacity: [0.8, 1, 0.8],
                       }}
                       transition={{
                         duration: 1.5,
@@ -896,7 +911,7 @@ export default function SafetyReport() {
                         ease: "easeInOut"
                       }}
                     >
-                      <AlertTriangle className="w-4 h-4 text-red-500/50" />
+                      <AlertTriangle className="w-4 h-4 text-danger" />
                     </motion.div>
                   )}
 
@@ -924,8 +939,8 @@ export default function SafetyReport() {
                         {item.description}
                       </p>
 
-                      <span className={`text-xs px-3 py-1 rounded-full font-bold ${item.priority === 'high'
-                        ? 'bg-red-100 text-red-700 border border-red-200'
+                      <span className={`text-xs px-3 py-1 rounded-full font-semibold ${item.priority === 'high'
+                        ? 'bg-rose-100 text-rose-700 border border-rose-200'
                         : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                         }`}>
                         {item.priority === 'high' ? '높은 우선순위' : '중간 우선순위'}
@@ -937,18 +952,18 @@ export default function SafetyReport() {
             })}
           </div>
         </div>
-      </motion.div>
+      </motion.div >
 
       {/* 4. Safety Trend Section */}
-      <motion.div
+      < motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.6 }}
-        className="card p-8 bg-white border-0 shadow-lg rounded-2xl"
+        className="card p-8 bg-white border-0"
       >
         <div className="flex items-center justify-between mb-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold">
-            <div className="w-1 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full" />
+            <div className="w-1 h-6 bg-gradient-to-b from-primary-400 to-primary-600 rounded-full" />
             안전도 추이
           </h3>
           <div className="flex gap-2">
@@ -1006,7 +1021,7 @@ export default function SafetyReport() {
             </LineChart>
           </ResponsiveContainer>
         </div>
-      </motion.div>
-    </div>
+      </motion.div >
+    </div >
   );
 }
