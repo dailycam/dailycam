@@ -215,7 +215,7 @@ export const Dashboard = () => {
             {/* 2. 중단: 통합 카드 (시계 + 통계 패널) */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6">
                 <div className="grid grid-cols-12 gap-6">
-                    {/* 왼쪽: 시계 (5칸으로 확장) */}
+                    {/* 왼쪽: 시계 (5칸 차지) */}
                     <div className="col-span-5 flex flex-col items-center justify-center relative overflow-visible">
                         <SimpleClockChart
                             fullClockData={clockData}
@@ -225,8 +225,8 @@ export const Dashboard = () => {
                         />
                     </div>
 
-                    {/* 오른쪽: 통계 패널 (7칸으로 축소) */}
-                    <div className="col-span-7">
+                    {/* 오른쪽: 통계 패널 (6칸 차지, 7번째 칸부터 시작하여 가운데 1칸 공백 확보) */}
+                    <div className="col-span-6 col-start-7">
                         <ClockGaugeSection
                             selectedHour={selectedHour}
                             hourlyStats={hourlyStats}

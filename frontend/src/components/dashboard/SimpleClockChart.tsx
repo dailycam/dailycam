@@ -378,7 +378,8 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                         style={{
                             left: mousePos.x + 20,
                             top: mousePos.y - 20,
-                            minWidth: '200px'
+                            minWidth: '220px',
+                            maxWidth: '260px'
                         }}
                     >
                         {hoveredMonitoring ? (
@@ -401,14 +402,14 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                                         <div className="text-xs text-gray-400">감지된 이벤트가 없습니다.</div>
                                     ) : (
                                         clockBars.find(b => b.hour === hoveredHour)?.events.map((ev, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 text-xs">
-                                                <span className={`w-1.5 h-1.5 rounded-full`} style={{
+                                            <div key={idx} className="flex items-center gap-2 text-xs w-full">
+                                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0`} style={{
                                                     backgroundColor:
                                                         ev.type === 'development' ? COLORS.development :
                                                             ev.severity === 'danger' ? COLORS.danger : COLORS.warning
                                                 }} />
-                                                <span className="text-gray-300">{ev.time}</span>
-                                                <span className="font-medium">
+                                                <span className="text-gray-300 flex-shrink-0">{ev.time}</span>
+                                                <span className="font-medium truncate flex-1 block min-w-0">
                                                     {ev.title || (ev.type === 'development' ? '발달 행동 감지' : '안전 이벤트')}
                                                 </span>
                                             </div>

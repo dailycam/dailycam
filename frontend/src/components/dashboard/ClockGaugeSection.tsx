@@ -39,7 +39,7 @@ export function ClockGaugeSection({ selectedHour, hourlyStats = [] }: ClockGauge
     const actualDevelopmentScore = hasCurrentData ? selectedStat!.developmentScore : 0;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-lg">
             {/* 헤더 */}
             <div>
                 <div className="flex items-center gap-2 mb-2">
