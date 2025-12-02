@@ -257,6 +257,33 @@ def get_dashboard_summary(
     # 시간순으로 정렬 (최신순)
     timeline_events.sort(key=lambda x: x["hour"], reverse=True)
     
+    # 9. 시간대별 통계 (hourly_stats) 생성
+    hourly_stats: List[Dict[str, Any]] = []
+    
+    # 0-23시 각각의 통계 초기화 (데이터 없는 시간은 0/0)
+    hourly_data = {i: {"hour": i, "safetyScore": 0, "developmentScore": 0, "eventCount": 0} for i in range(24)}
+    
+    # 각 분석 로그를 시간대별로 집계
+    for log in today_logs:
+        hour = log.created_at.hour
+        
+        # 해당 시간대에 이벤트가 있으면 점수 업데이트
+        if log.safety_score is not None:
+            # 여러 영상이 같은 시간대에 있을 경우 평균 사용
+            if hourly_data[hour]["eventCount"] == 0:
+                hourly_data[hour]["safetyScore"] = log.safety_score
+                hourly_data[hour]["developmentScore"] = log.development_score or 0
+            else:
+                # 평균 계산
+                count = hourly_data[hour]["eventCount"]
+                hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * count + log.safety_score) / (count + 1))
+                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * count + (log.development_score or 0)) / (count + 1))
+        
+        hourly_data[hour]["eventCount"] += 1
+    
+    # 리스트로 변환
+    hourly_stats = list(hourly_data.values())
+    
     
     # 기본 응답 구조 (프론트엔드 DashboardData 인터페이스와 일치)
     return {
@@ -270,6 +297,7 @@ def get_dashboard_summary(
         "weeklyTrend": weekly_trend,
         "risks": risks,
         "recommendations": recommendations,
-        "timelineEvents": timeline_events  # 오늘 분석된 모든 이벤트
+        "timelineEvents": timeline_events,  # 오늘 분석된 모든 이벤트
+        "hourly_stats": hourly_stats  # 시간대별 통계 추가
     }
 
