@@ -11,6 +11,10 @@ from .api.homecam import router as homecam_router
 from .api.live_monitoring import router as live_monitoring_router
 from .api.auth.router import router as auth_router
 from .api.payments.router import router as payments_router, process_due_subscriptions
+from .api.dashboard.router import router as dashboard_router
+from .api.safety.router import router as safety_router
+from .api.development.router import router as development_router
+from .api.clips.router import router as clips_router
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -141,6 +145,38 @@ def create_app() -> FastAPI:
 
     # 결제 / 구독
     app.include_router(payments_router)
+<<<<<<< HEAD
+=======
+
+    # 대시보드
+    app.include_router(
+        dashboard_router,
+        prefix="/api/dashboard",
+        tags=["dashboard"]
+    )
+
+    # 안전 리포트
+    app.include_router(
+        safety_router,
+        prefix="/api/safety",
+        tags=["safety"]
+    )
+
+    # 발달 리포트
+    app.include_router(
+        development_router,
+        prefix="/api/development",
+        tags=["development"]
+    )
+
+    # 클립 하이라이트
+    app.include_router(
+        clips_router,
+        prefix="/api/clips",
+        tags=["clips"]
+    )
+
+>>>>>>> origin/dev
     return app
 
 
