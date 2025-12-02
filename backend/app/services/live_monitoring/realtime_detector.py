@@ -23,14 +23,15 @@ class RealtimeEventDetector:
         self.camera_id = camera_id
         self.age_months = age_months
         self.prev_frame = None
-        self.motion_threshold = 30  # 움직임 감지 임계값
-        self.min_contour_area = 500  # 최소 윤곽 면적
+        # OpenCV 경량 탐지 비활성화 (Gemini만 사용)
+        # 이유: 하드코딩된 위험 구역이 부정확하고, Gemini가 더 정확함
+        self.enable_opencv_detection = False
         
-        # 위험 구역 정의 (화면 좌표 비율, 0.0~1.0)
-        self.danger_zones = [
-            {"name": "주방", "coords": [(0.7, 0.0), (1.0, 0.5)], "severity": "danger"},
-            {"name": "계단", "coords": [(0.0, 0.7), (0.3, 1.0)], "severity": "danger"},
-        ]
+        self.motion_threshold = 30  # 움직임 감지 임계값 (사용 안 함)
+        self.min_contour_area = 500  # 최소 윤곽 면적 (사용 안 함)
+        
+        # 위험 구역 정의 - 비활성화됨
+        self.danger_zones = []
         
         # 이벤트 중복 방지 (같은 이벤트 연속 발생 방지)
         self.last_event_time: Dict[str, datetime] = {}
@@ -223,14 +224,22 @@ class RealtimeEventDetector:
         """
         프레임 처리 및 이벤트 생성 (동기 버전)
         
+        OpenCV 경량 탐지는 비활성화됨 - Gemini만 사용
+        
         Returns:
-            생성된 이벤트 리스트
+            생성된 이벤트 리스트 (항상 빈 리스트)
         """
         events = []
         
         # 프레임 저장 (Gemini 분석용)
         self.last_analyzed_frame = frame.copy()
         
+        # OpenCV 경량 탐지 비활성화
+        # 이유: 하드코딩된 위험 구역이 부정확하고, Gemini가 더 정확함
+        if not self.enable_opencv_detection:
+            return events
+        
+        # 아래 코드는 실행되지 않음 (enable_opencv_detection = False)
         # 1. 움직임 감지 (경량, 즉시)
         motion_detected, motion_intensity, bbox = self.detect_motion(frame)
         

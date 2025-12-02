@@ -14,10 +14,15 @@ from app.services.live_monitoring.hourly_analyzer import (
     start_hourly_analysis_for_camera,
     stop_hourly_analysis_for_camera
 )
-from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis
+from app.services.live_monitoring.segment_analyzer import (
+    start_segment_analysis_for_camera,
+    stop_segment_analysis_for_camera
+)
+from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport
 from app.database.session import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from app.services.daily_report.report_generator import DailyReportGenerator
 
 router = APIRouter()
 
@@ -107,11 +112,11 @@ async def start_stream(
     task = asyncio.create_task(generator.start_streaming())
     stream_tasks[camera_id] = task
     
-    # 1시간 단위 분석 스케줄러 시작
+    # 5분 단위 분석 스케줄러 시작 (새로운 방식)
     if enable_analysis:
-        await start_hourly_analysis_for_camera(camera_id)
+        await start_segment_analysis_for_camera(camera_id)
     
-    print(f"[API] 스트림 시작: {camera_id} (분석: {enable_analysis}, 실시간 탐지: {enable_realtime_detection}, 개월수: {age_months})")
+    print(f"[API] 스트림 시작: {camera_id} (10분 단위 분석: {enable_analysis}, 실시간 탐지: {enable_realtime_detection}, 개월수: {age_months})")
     
     return {
         "message": f"스트림 시작: {camera_id}",
@@ -120,7 +125,7 @@ async def start_stream(
         "analysis_enabled": enable_analysis,
         "realtime_detection_enabled": enable_realtime_detection,
         "age_months": age_months,
-        "detection_mode": "hybrid (lightweight + gemini)",
+        "detection_mode": "gemini only (opencv disabled)",
         "gemini_interval": "45 seconds",
         "stream_url": f"/api/live-monitoring/stream/{camera_id}"
     }
@@ -149,10 +154,10 @@ async def stop_stream(camera_id: str):
     
     del active_streams[camera_id]
     
-    # 분석 스케줄러 중지
-    stop_hourly_analysis_for_camera(camera_id)
+    # 분석 스케줄러 중지 (10분 단위)
+    stop_segment_analysis_for_camera(camera_id)
     
-    print(f"[API] 스트림 및 분석 중지: {camera_id}")
+    print(f"[API] 스트림 및 10분 단위 분석 중지: {camera_id}")
     
     return {
         "message": f"스트림 및 분석 중지: {camera_id}",
@@ -287,19 +292,22 @@ async def get_stream_status(camera_id: str):
     is_running = camera_id in active_streams
     
     buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
-    hourly_files = list(buffer_dir.glob("hourly_*.mp4"))
+    segment_files = list(buffer_dir.glob("segment_*.mp4"))
+    hourly_files = list(buffer_dir.glob("hourly_*.mp4"))  # 레거시
     
     return {
         "camera_id": camera_id,
         "is_running": is_running,
-        "hourly_files_count": len(hourly_files),
-        "hourly_files": [f.name for f in sorted(hourly_files)[-5:]]  # 최근 5개
+        "segment_files_count": len(segment_files),
+        "segment_files": [f.name for f in sorted(segment_files)[-10:]],  # 최근 10개 (5분 단위)
+        "hourly_files_count": len(hourly_files),  # 레거시
+        "hourly_files": [f.name for f in sorted(hourly_files)[-5:]]  # 레거시
     }
 
 
 @router.get("/list-hourly-files/{camera_id}")
 async def list_hourly_files(camera_id: str):
-    """1시간 단위 버퍼 파일 목록 조회"""
+    """1시간 단위 버퍼 파일 목록 조회 (레거시)"""
     buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
     
     if not buffer_dir.exists():
@@ -324,6 +332,33 @@ async def list_hourly_files(camera_id: str):
     }
 
 
+@router.get("/list-segment-files/{camera_id}")
+async def list_segment_files(camera_id: str):
+    """5분 단위 버퍼 파일 목록 조회"""
+    buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
+    
+    if not buffer_dir.exists():
+        return {"camera_id": camera_id, "files": []}
+    
+    segment_files = sorted(buffer_dir.glob("segment_*.mp4"))
+    
+    files_info = []
+    for file_path in segment_files:
+        stat = file_path.stat()
+        files_info.append({
+            "filename": file_path.name,
+            "path": str(file_path),
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat()
+        })
+    
+    return {
+        "camera_id": camera_id,
+        "total_files": len(files_info),
+        "files": files_info
+    }
+
+
 @router.delete("/reset/{camera_id}")
 async def reset_monitoring_data(
     camera_id: str,
@@ -331,10 +366,14 @@ async def reset_monitoring_data(
 ):
     """
     모니터링 데이터 초기화
-    - 실시간 이벤트, 시간별 분석 결과 삭제
+    - 실시간 이벤트, 5분 단위 분석 결과, 1시간 단위 분석 결과 삭제
     """
     realtime_deleted = db.query(RealtimeEvent).filter(
         RealtimeEvent.camera_id == camera_id
+    ).delete(synchronize_session=False)
+    
+    segment_deleted = db.query(SegmentAnalysis).filter(
+        SegmentAnalysis.camera_id == camera_id
     ).delete(synchronize_session=False)
     
     hourly_deleted = db.query(HourlyAnalysis).filter(
@@ -343,11 +382,12 @@ async def reset_monitoring_data(
     
     db.commit()
     
-    print(f"[모니터링 초기화] {camera_id}: realtime={realtime_deleted}, hourly={hourly_deleted}")
+    print(f"[모니터링 초기화] {camera_id}: realtime={realtime_deleted}, segment={segment_deleted}, hourly={hourly_deleted}")
     
     return {
         "camera_id": camera_id,
         "realtime_events_deleted": realtime_deleted,
+        "segment_analyses_deleted": segment_deleted,
         "hourly_analyses_deleted": hourly_deleted,
         "message": "모니터링 데이터가 초기화되었습니다."
     }
@@ -472,4 +512,131 @@ async def get_monitoring_stats(
         "warning_events": warning_events,
         "recent_hour_events": recent_events,
         "is_active": camera_id in active_streams
+    }
+
+
+@router.get("/daily-report/{camera_id}")
+async def get_daily_report(
+    camera_id: str,
+    date: str = Query(..., description="리포트 날짜 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    일일 리포트 조회
+    - 해당 날짜의 리포트가 없으면 자동 생성
+    """
+    from datetime import datetime
+    
+    try:
+        report_date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)")
+    
+    # 기존 리포트 조회
+    report = db.query(DailyReport).filter(
+        DailyReport.camera_id == camera_id,
+        DailyReport.report_date == report_date
+    ).first()
+    
+    # 리포트가 없으면 생성
+    if not report:
+        generator = DailyReportGenerator(camera_id, report_date)
+        report = await generator.generate_report()
+        
+        if not report:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"{date} 날짜의 분석 데이터가 없어 리포트를 생성할 수 없습니다"
+            )
+    
+    return {
+        "camera_id": report.camera_id,
+        "report_date": report.report_date.date().isoformat(),
+        "total_hours_analyzed": report.total_hours_analyzed,
+        "average_safety_score": report.average_safety_score,
+        "total_incidents": report.total_incidents,
+        "safety_summary": report.safety_summary,
+        "development_summary": report.development_summary,
+        "hourly_summary": report.hourly_summary,
+        "timeline_events": report.timeline_events,
+        "created_at": report.created_at.isoformat(),
+        "updated_at": report.updated_at.isoformat()
+    }
+
+
+@router.get("/daily-reports/{camera_id}/list")
+async def list_daily_reports(
+    camera_id: str,
+    limit: int = Query(30, description="최대 리포트 수"),
+    db: Session = Depends(get_db)
+):
+    """
+    일일 리포트 목록 조회 (최근 N일)
+    """
+    reports = db.query(DailyReport).filter(
+        DailyReport.camera_id == camera_id
+    ).order_by(desc(DailyReport.report_date)).limit(limit).all()
+    
+    return {
+        "camera_id": camera_id,
+        "total": len(reports),
+        "reports": [
+            {
+                "report_date": r.report_date.date().isoformat(),
+                "total_hours_analyzed": r.total_hours_analyzed,
+                "average_safety_score": r.average_safety_score,
+                "total_incidents": r.total_incidents,
+                "created_at": r.created_at.isoformat()
+            }
+            for r in reports
+        ]
+    }
+
+
+@router.get("/segment-analyses/{camera_id}")
+async def get_segment_analyses(
+    camera_id: str,
+    date: str = Query(None, description="특정 날짜 (YYYY-MM-DD)"),
+    limit: int = Query(50, description="최대 분석 수"),
+    db: Session = Depends(get_db)
+):
+    """
+    5분 단위 분석 결과 조회
+    """
+    query = db.query(SegmentAnalysis).filter(
+        SegmentAnalysis.camera_id == camera_id,
+        SegmentAnalysis.status == 'completed'
+    )
+    
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+            day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            
+            query = query.filter(
+                SegmentAnalysis.segment_start >= day_start,
+                SegmentAnalysis.segment_start < day_end
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)")
+    
+    analyses = query.order_by(desc(SegmentAnalysis.segment_start)).limit(limit).all()
+    
+    return {
+        "camera_id": camera_id,
+        "date": date,
+        "total": len(analyses),
+        "analyses": [
+            {
+                "id": a.id,
+                "segment_start": a.segment_start.isoformat(),
+                "segment_end": a.segment_end.isoformat(),
+                "safety_score": a.safety_score,
+                "incident_count": a.incident_count,
+                "status": a.status,
+                "completed_at": a.completed_at.isoformat() if a.completed_at else None
+            }
+            for a in analyses
+        ]
     }

@@ -25,7 +25,7 @@ class RealtimeEvent(Base):
 
 
 class HourlyAnalysis(Base):
-    """1시간 단위 상세 분석 결과"""
+    """1시간 단위 상세 분석 결과 (레거시, 하위 호환용)"""
     __tablename__ = "hourly_analyses"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -48,6 +48,30 @@ class HourlyAnalysis(Base):
         return f"<HourlyAnalysis(id={self.id}, camera={self.camera_id}, hour={self.hour_start}, status={self.status})>"
 
 
+class SegmentAnalysis(Base):
+    """5분 단위 상세 분석 결과"""
+    __tablename__ = "segment_analyses"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    camera_id = Column(String(50), nullable=False, index=True)
+    segment_start = Column(DateTime, nullable=False, index=True)  # 5분 구간 시작 (예: 2024-11-11 14:00:00)
+    segment_end = Column(DateTime, nullable=False)    # 5분 구간 종료 (예: 2024-11-11 14:05:00)
+    video_path = Column(String(500))  # 분석한 비디오 파일 경로
+    s3_url = Column(String(500))  # S3 URL (선택사항)
+    analysis_result = Column(JSON)  # GeminiService.analyze_video_vlm()의 전체 결과
+    status = Column(String(20), default='pending')  # 'pending' | 'processing' | 'completed' | 'failed'
+    error_message = Column(Text)  # 오류 메시지 (실패 시)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    
+    # 분석 결과 요약 (빠른 조회용)
+    safety_score = Column(Integer)
+    incident_count = Column(Integer)
+    
+    def __repr__(self):
+        return f"<SegmentAnalysis(id={self.id}, camera={self.camera_id}, segment={self.segment_start}, status={self.status})>"
+
+
 class DailyReport(Base):
     """일일 리포트"""
     __tablename__ = "daily_reports"
@@ -57,7 +81,7 @@ class DailyReport(Base):
     report_date = Column(DateTime, nullable=False, index=True)  # 리포트 날짜
     
     # 집계 데이터
-    total_hours_analyzed = Column(Integer)  # 분석된 시간 수
+    total_hours_analyzed = Column(Float)  # 분석된 시간 수 (5분 단위 → 시간으로 변환)
     average_safety_score = Column(Float)
     total_incidents = Column(Integer)
     
@@ -68,7 +92,7 @@ class DailyReport(Base):
     timeline_events = Column(JSON)  # 실시간 이벤트 타임라인
     
     # 메타데이터
-    hourly_analyses_ids = Column(JSON)  # 해당 일의 hourly_analyses ID 배열
+    segment_analyses_ids = Column(JSON)  # 해당 일의 segment_analyses ID 배열
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

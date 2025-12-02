@@ -1,4 +1,4 @@
-"""가짜 라이브 스트림 생성기"""
+"""가짜 라이브 스트림 생성기 (5분 단위 버퍼링)"""
 
 import cv2
 import numpy as np
@@ -13,7 +13,7 @@ from app.services.live_monitoring.realtime_detector import RealtimeEventDetector
 class FakeLiveStreamGenerator:
     """
     짧은 영상들을 연속 재생하여 "가짜 라이브 스트림" 생성
-    1시간마다 자동으로 잘라서 저장
+    5분마다 자동으로 잘라서 저장
     """
     
     def __init__(self, camera_id: str, video_dir: Path, buffer_dir: Path, enable_realtime_detection: bool = True, age_months: Optional[int] = None, event_loop: Optional[asyncio.AbstractEventLoop] = None):
@@ -23,14 +23,21 @@ class FakeLiveStreamGenerator:
         self.buffer_dir.mkdir(parents=True, exist_ok=True)
         
         self.current_writer: Optional[cv2.VideoWriter] = None
-        self.current_hour_start: Optional[datetime] = None
+        self.current_segment_start: Optional[datetime] = None
         self.current_file_path: Optional[Path] = None
         self.is_running = False
+        
+        # 10분 단위 설정
+        self.segment_duration_minutes = 10
         
         # 프레임 크기 (480p)
         self.target_width = 640
         self.target_height = 480
-        self.target_fps = 1.0  # 분석용 1fps
+        self.target_fps = 5.0  # 분석용 5fps (1fps에서 증가)
+        
+        # 프레임 카운트 기반 버퍼링
+        self.frames_per_segment = int(self.target_fps * 60 * self.segment_duration_minutes)  # 10분 * 60초 * 5fps = 3000 프레임
+        self.current_segment_frame_count = 0
         
         # 실시간 이벤트 탐지기 (하이브리드)
         self.enable_realtime_detection = enable_realtime_detection
@@ -43,7 +50,7 @@ class FakeLiveStreamGenerator:
         
     async def start_streaming(self):
         """스트리밍 시작 (비동기)"""
-        # 영상 큐 로드
+        # 영상 큐 로드 (60분 분량)
         self.video_queue.load_videos(shuffle=True, target_duration_minutes=60)
         
         if self.video_queue.get_queue_size() == 0:
@@ -52,12 +59,13 @@ class FakeLiveStreamGenerator:
         
         self.is_running = True
         
-        # 현재 시간 기준으로 첫 시간대 시작
+        # 현재 시간 기준으로 첫 10분 구간 시작
         now = datetime.now()
-        self.current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-        self._start_new_hour_file()
+        self.current_segment_start = self._get_segment_start_time(now)
+        self.current_segment_frame_count = 0
+        self._start_new_segment_file()
         
-        print(f"[스트림 생성기] 시작: {self.camera_id}")
+        print(f"[스트림 생성기] 시작: {self.camera_id} (10분 단위 버퍼링, {self.target_fps}fps)")
         
         # 영상 재생 루프
         while self.is_running:
@@ -68,16 +76,16 @@ class FakeLiveStreamGenerator:
             
             await self._play_video_async(video_path)
             
-            # 시간대가 바뀌었는지 확인
+            # 5분 구간이 바뀌었는지 확인
             now = datetime.now()
-            hour_start = now.replace(minute=0, second=0, microsecond=0)
-            if hour_start != self.current_hour_start:
-                self._finalize_current_hour()
-                self.current_hour_start = hour_start
-                self._start_new_hour_file()
+            segment_start = self._get_segment_start_time(now)
+            if segment_start != self.current_segment_start:
+                self._finalize_current_segment()
+                self.current_segment_start = segment_start
+                self._start_new_segment_file()
         
         # 종료 시 현재 파일 닫기
-        self._finalize_current_hour()
+        self._finalize_current_segment()
         print(f"[스트림 생성기] 종료: {self.camera_id}")
     
     async def _play_video_async(self, video_path: Path):
@@ -132,13 +140,14 @@ class FakeLiveStreamGenerator:
             
             # 프레임 샘플링
             if frame_count % frame_skip == 0:
-                # 시간대 확인 (1시간 지났는지)
-                now = datetime.now()
-                hour_start = now.replace(minute=0, second=0, microsecond=0)
-                if hour_start != self.current_hour_start:
-                    self._finalize_current_hour()
-                    self.current_hour_start = hour_start
-                    self._start_new_hour_file()
+                # 프레임 카운트 기반 10분 구간 확인
+                if self.current_segment_frame_count >= self.frames_per_segment:
+                    print(f"[스트림 생성기] 10분 분량 완료 ({self.current_segment_frame_count} 프레임), 새 구간 시작")
+                    self._finalize_current_segment()
+                    now = datetime.now()
+                    self.current_segment_start = self._get_segment_start_time(now)
+                    self._start_new_segment_file()
+                    self.current_segment_frame_count = 0
                 
                 # 프레임 크기 조정 (480p)
                 height, width = frame.shape[:2]
@@ -166,18 +175,27 @@ class FakeLiveStreamGenerator:
                 if self.current_writer and self.is_running:
                     self.current_writer.write(frame)
                     frames_written += 1
+                    self.current_segment_frame_count += 1
             
             frame_count += 1
         
         cap.release()
         print(f"[스트림 생성기] 영상 재생 완료: {video_path.name} ({frames_written} 프레임)")
     
-    def _start_new_hour_file(self):
-        """새로운 1시간 분량 파일 시작"""
+    def _get_segment_start_time(self, current_time: datetime) -> datetime:
+        """
+        현재 시간을 10분 단위로 내림
+        예: 14:03:45 → 14:00:00, 14:17:30 → 14:10:00
+        """
+        minutes = (current_time.minute // self.segment_duration_minutes) * self.segment_duration_minutes
+        return current_time.replace(minute=minutes, second=0, microsecond=0)
+    
+    def _start_new_segment_file(self):
+        """새로운 10분 분량 파일 시작"""
         if self.current_writer:
             self.current_writer.release()
         
-        filename = f"hourly_{self.current_hour_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        filename = f"segment_{self.current_segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
         self.current_file_path = self.buffer_dir / filename
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -192,18 +210,22 @@ class FakeLiveStreamGenerator:
             print(f"[스트림 생성기] 오류: VideoWriter 열기 실패")
             self.current_writer = None
         else:
-            print(f"[스트림 생성기] 새 시간대 파일 시작: {filename}")
-            print(f"  시간대: {self.current_hour_start} ~ {self.current_hour_start + timedelta(hours=1)}")
+            segment_end = self.current_segment_start + timedelta(minutes=self.segment_duration_minutes)
+            print(f"[스트림 생성기] 새 10분 구간 파일 시작: {filename}")
+            print(f"  구간: {self.current_segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
+            print(f"  목표 프레임 수: {self.frames_per_segment} 프레임 ({self.target_fps}fps × {self.segment_duration_minutes}분)")
     
-    def _finalize_current_hour(self):
-        """현재 시간대 파일 완료"""
+    def _finalize_current_segment(self):
+        """현재 10분 구간 파일 완료"""
         if self.current_writer:
             self.current_writer.release()
             self.current_writer = None
             
             if self.current_file_path and self.current_file_path.exists():
                 file_size = self.current_file_path.stat().st_size / (1024 * 1024)  # MB
-                print(f"[스트림 생성기] 시간대 파일 저장 완료: {self.current_file_path.name} ({file_size:.2f}MB)")
+                duration_minutes = self.current_segment_frame_count / (self.target_fps * 60)
+                print(f"[스트림 생성기] 10분 구간 파일 저장 완료: {self.current_file_path.name}")
+                print(f"  크기: {file_size:.2f}MB, 프레임 수: {self.current_segment_frame_count}, 실제 길이: {duration_minutes:.1f}분")
             else:
                 print(f"[스트림 생성기] 경고: 파일이 생성되지 않았습니다")
     
@@ -226,5 +248,5 @@ class FakeLiveStreamGenerator:
         if self.gemini_future and not self.gemini_future.done():
             self.gemini_future.cancel()
         
-        self._finalize_current_hour()
+        self._finalize_current_segment()
 

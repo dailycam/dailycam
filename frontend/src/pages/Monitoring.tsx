@@ -91,16 +91,18 @@ export default function Monitoring() {
           setStreamLoop(info.streamLoop ?? streamLoop)
           setStreamSpeed(info.streamSpeed ?? streamSpeed)
           
+          // 타임스탬프 추가하여 항상 새로운 연결 시도
+          const timestamp = Date.now()
           const url = getStreamUrl(
             selectedCamera,
             info.streamLoop ?? streamLoop,
             info.streamSpeed ?? streamSpeed,
-            undefined,
+            timestamp,
             info.videoPath
           )
           setStreamUrl(url)
           setIsStreamActive(true)
-          console.log('저장된 스트림 정보 복원 (기존 스트림 계속 사용):', info)
+          console.log('저장된 스트림 정보 복원 (새 연결):', info, 'timestamp:', timestamp)
         }
       } catch (e) {
         console.warn('스트림 정보 복원 실패:', e)
@@ -140,6 +142,55 @@ export default function Monitoring() {
       }
     }
   }, [isStreamActive, selectedCamera])
+
+  // 페이지 visibility 변경 감지 (다른 페이지 갔다가 돌아올 때 스트림 복원)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && streamUrl) {
+        console.log('페이지 재진입 감지 - 스트림 복원 중...')
+        
+        // 재연결 시도 횟수 리셋
+        setReconnectAttempts(0)
+        
+        // 스트림 URL에 타임스탬프 추가하여 강제 새로고침
+        const timestamp = Date.now()
+        
+        // 기존 URL이 있으면 파라미터 유지하면서 타임스탬프만 업데이트
+        let newUrl: string
+        try {
+          const currentUrl = new URL(streamUrl, window.location.origin)
+          currentUrl.searchParams.set('_t', timestamp.toString())
+          newUrl = currentUrl.toString()
+        } catch (e) {
+          // URL 파싱 실패 시 기본 URL 사용
+          newUrl = getStreamUrl(
+            selectedCamera,
+            streamLoop,
+            streamSpeed,
+            timestamp,
+            lastVideoPathRef.current || undefined
+          )
+        }
+        
+        // 스트림 URL 업데이트 (강제 새로고침)
+        setStreamUrl(null)
+        setTimeout(() => {
+          setStreamUrl(newUrl)
+          setIsStreamActive(true)
+          console.log('스트림 복원 완료:', newUrl)
+        }, 100)
+        
+        // 실시간 데이터도 즉시 로드
+        loadRealtimeData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [streamUrl, selectedCamera, streamLoop, streamSpeed])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
