@@ -27,72 +27,72 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="DailyCam Backend",
         version="0.1.0",
-        description="비디??분석 API - Gemini AI",
+        description="비디오 분석 API - Gemini AI",
     )
 
     # ----------------------------------------------------
-    # ?�� startup: DB 초기??+ ?�동결제 ?�커 ?�작
+    # 🔥 startup: DB 초기화 + 자동결제 워커 시작
     # ----------------------------------------------------
     @app.on_event("startup")
     async def startup_event():
-        """?�플리�??�션 ?�작 ???�업??(DB ?�인 + ?�동결제 ?�커 ?�작)"""
+        """애플리케이션 시작 시 작업들 (DB 확인 + 자동결제 워커 시작)"""
         print("\n" + "=" * 60)
-        print("?? DailyCam Backend ?�작")
+        print("🚀 DailyCam Backend 시작")
         print("=" * 60)
 
-        # ??1) ?�이?�베?�스 ?�결 �??�이�??�성
-        print("\n?�� ?�이?�베?�스 ?�결 ?�인 �?..")
+        # ✅ 1) 데이터베이스 연결 및 테이블 생성
+        print("\n📊 데이터베이스 연결 확인 중...")
         if test_db_connection():
-            print("???�이?�베?�스 ?�결 ?�공!")
+            print("✅ 데이터베이스 연결 성공!")
 
-            print("\n?�� ?�이?�베?�스 ?�이�??�인 �?..")
+            print("\n📋 데이터베이스 테이블 확인 중...")
             try:
                 Base.metadata.create_all(bind=engine)
-                print("???�이?�베?�스 ?�이�?준�??�료!")
+                print("✅ 데이터베이스 테이블 준비 완료!")
 
                 if Base.metadata.tables:
-                    print("\n?�� ?�용 가?�한 ?�이�?")
+                    print("\n📌 사용 가능한 테이블:")
                     for table_name in Base.metadata.tables.keys():
                         print(f"   - {table_name}")
                 else:
-                    print("   (모델???�의?��? ?�아 ?�이블이 ?�습?�다)")
+                    print("   (모델이 정의되지 않아 테이블이 없습니다)")
             except Exception as e:
-                print(f"?�️  ?�이�??�성 �??�류: {e}")
+                print(f"⚠️  테이블 생성 중 오류: {e}")
         else:
-            print("?�️  ?�이?�베?�스 ?�결 ?�패 - ?��? 기능???�한?????�습?�다")
+            print("⚠️  데이터베이스 연결 실패 - 일부 기능이 제한될 수 있습니다")
 
-        # ??2) ?�동결제 ?�커 ?�작
+        # ✅ 2) 자동결제 워커 시작
         async def billing_worker():
             while True:
                 db = SessionLocal()
                 try:
                     result = await process_due_subscriptions(db)
                     if result["processed"]:
-                        print("[BillingJob] ?�동결제 처리 결과:", result)
+                        print("[BillingJob] 자동결제 처리 결과:", result)
                     else:
-                        print("[BillingJob] �?�� ?�???�음")
+                        print("[BillingJob] 청구 대상 없음")
                 except Exception as e:
-                    print("[BillingJob] ?�류:", e)
+                    print("[BillingJob] 오류:", e)
                 finally:
                     db.close()
 
-                # ??지금�? 1?�간마다 ?�행 (?�스?�할 ??10�?60초로 줄여????
+                # ⏰ 지금은 1시간마다 실행 (테스트할 땐 10초/60초로 줄여도 됨)
                 await asyncio.sleep(60 * 60)
 
         asyncio.create_task(billing_worker())
 
         print("\n" + "=" * 60)
-        print("???�버가 준비되?�습?�다!")
+        print("✨ 서버가 준비되었습니다!")
         print("   API 문서: http://localhost:8000/docs")
         print("=" * 60 + "\n")
 
     @app.on_event("shutdown")
     async def shutdown_event():
-        """?�플리�??�션 종료 ??""
-        print("\n?�� DailyCam Backend 종료 �?..")
+        """애플리케이션 종료 시"""
+        print("\n👋 DailyCam Backend 종료 중...")
 
     # ----------------------------------------------------
-    # 루트 ?�드?�인??
+    # 루트 엔드포인트
     # ----------------------------------------------------
     @app.get("/")
     async def root():
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         }
 
     # ----------------------------------------------------
-    # CORS ?�정 (?�론?�엔?�에???�근 가?�하?�록)
+    # CORS 설정 (프론트엔드에서 접근 가능하도록)
     # ----------------------------------------------------
     app.add_middleware(
         CORSMiddleware,
@@ -121,22 +121,22 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ?�션 미들?�어 추�? (OAuth???�요)
+    # 세션 미들웨어 추가 (OAuth에 필요)
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
     )
 
     # ----------------------------------------------------
-    # ?�우???�록
+    # 라우터 등록
     # ----------------------------------------------------
-    # ?�증
+    # 인증
     app.include_router(auth_router)
 
-    # 비디??분석
+    # 비디오 분석
     app.include_router(homecam_router, prefix="/api/homecam", tags=["homecam"])
 
-    # ?�이�?모니?�링
+    # 라이브 모니터링
     app.include_router(
         live_monitoring_router,
         prefix="/api/live-monitoring",
@@ -146,28 +146,28 @@ def create_app() -> FastAPI:
     # 결제 / 구독
     app.include_router(payments_router)
 
-    # ?�?�보??
+    # 대시보드
     app.include_router(
         dashboard_router,
         prefix="/api/dashboard",
         tags=["dashboard"]
     )
 
-    # ?�전 리포??
+    # 안전 리포트
     app.include_router(
         safety_router,
         prefix="/api/safety",
         tags=["safety"]
     )
 
-    # 발달 리포??
+    # 발달 리포트
     app.include_router(
         development_router,
         prefix="/api/development",
         tags=["development"]
     )
 
-    # ?�립 ?�이?�이??
+    # 클립 하이라이트
     app.include_router(
         clips_router,
         prefix="/api/clips",
