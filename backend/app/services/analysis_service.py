@@ -63,11 +63,13 @@ class AnalysisService:
             safety_score=safety_analysis.get("safety_score"),
             overall_safety_level=safety_analysis.get("overall_safety_level"),
             safety_summary=safety_analysis.get("safety_summary"),
+            safety_insights=safety_analysis.get("safety_insights"), # 추가
             development_score=dev_score,
             main_activity=development_analysis.get("main_activity"),
             development_summary=development_analysis.get("summary"),
             development_radar_scores=development_analysis.get("development_radar_scores"),
             recommendations=analysis_result.get("recommendations", []),
+            development_insights=development_analysis.get("development_insights", []), # 추가
         )
         
         db.add(analysis_log)
