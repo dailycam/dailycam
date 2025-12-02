@@ -2,7 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import HomeLayout from './components/Layout/HomeLayout'
 import Layout from './components/Layout/Layout'
 import Home from './pages/Home'
-import Dashboard from './pages/Dashboard'
+import Analytics from './pages/Analytics'
 import Monitoring from './pages/Monitoring'
 import DevelopmentReport from './pages/DevelopmentReport'
 import SafetyReport from './pages/SafetyReport'
@@ -27,7 +27,8 @@ function App() {
 
       {/* 앱 (대시보드 및 기능들) */}
       <Route element={<Layout />}>
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dashboard" element={<Analytics />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="monitoring" element={<Monitoring />} />
         <Route path="development-report" element={<DevelopmentReport />} />
         <Route path="safety-report" element={<SafetyReport />} />

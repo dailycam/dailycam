@@ -25,7 +25,7 @@ import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
 import { generateWeeklySafetyData } from '../utils/mockData'
 import { SafetyBannerCarousel } from '../components/SafetyBannerCarousel'
-import DashboardPage from './Dashboard'
+import AnalyticsPage from './Analytics'
 import ClipHighlightsPage from './ClipHighlights'
 import LiveMonitoringPage from './LiveMonitoring'
 import DevelopmentReportPage from './DevelopmentReport'
@@ -159,7 +159,7 @@ const previewNavItems: {
   ]
 
 const previewComponents: Record<PreviewKey, ComponentType> = {
-  dashboard: DashboardPage,
+  dashboard: AnalyticsPage,
   live: LiveMonitoringPage,
   development: DevelopmentReportPage,
   safety: SafetyReportPage,
