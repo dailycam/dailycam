@@ -1,0 +1,267 @@
+import { Activity, Baby, Shield } from 'lucide-react'
+
+interface TimelineEvent {
+    time: string
+    hour: number
+    type: 'development' | 'safety'
+    severity?: 'danger' | 'warning' | 'info'
+    title: string
+    description: string
+    category?: string
+    hasClip?: boolean
+}
+
+interface TimeRange {
+    start: number
+    end: number
+    label: string
+}
+
+interface ActivityTableProps {
+    timelineEvents: TimelineEvent[]
+    timeRanges: TimeRange[]
+    onEventClick: (events: any[], timeRange: string, category: string) => void
+}
+
+export const ActivityTable: React.FC<ActivityTableProps> = ({
+    timelineEvents,
+    timeRanges,
+    onEventClick
+}) => {
+    // Helper: 우선순위 기반 이벤트 렌더링 (1개만 표시, 클릭 가능)
+    const renderCellContent = (events: TimelineEvent[], timeRange: string, category: string) => {
+        if (!events || events.length === 0) {
+            return <div className="text-[10px] text-gray-300 h-full w-full flex items-center justify-center py-6">-</div>
+        }
+
+        // 중요도 점수 매핑
+        const severityScore: Record<string, number> = {
+            danger: 3,
+            warning: 2,
+            info: 1
+        }
+
+        // 1. 중요도 순으로 정렬, 2. 같으면 시간 빠른 순
+        const sortedEvents = [...events].sort((a, b) => {
+            const scoreA = severityScore[a.severity || ''] || 0
+            const scoreB = severityScore[b.severity || ''] || 0
+            if (scoreB !== scoreA) return scoreB - scoreA
+
+            // 시간 비교
+            const [aHour, aMin] = a.time.split(':').map(Number)
+            const [bHour, bMin] = b.time.split(':').map(Number)
+            return (aHour * 60 + aMin) - (bHour * 60 + bMin)
+        })
+
+        const topEvent = sortedEvents[0]
+        const moreCount = sortedEvents.length - 1
+
+        const textColor = topEvent.severity === 'danger'
+            ? 'text-danger-600 font-semibold'
+            : topEvent.severity === 'warning'
+                ? 'text-warning-600'
+                : 'text-gray-700'
+
+        const [hours, minutes] = topEvent.time.split(':')
+        const timeStr = `${hours}:${minutes}`
+
+        return (
+            <div
+                className="relative h-full w-full flex flex-col items-center justify-center p-3 cursor-pointer hover:bg-gray-100/50 transition-all group"
+                onClick={() => onEventClick(sortedEvents, timeRange, category)}
+            >
+                <div className="flex flex-col items-center gap-0.5 w-full">
+                    <div className={`text-[11px] ${textColor} truncate w-full text-center leading-tight`}>
+                        {topEvent.title}
+                    </div>
+                    <span className="text-[9px] text-gray-400">{timeStr}</span>
+                </div>
+
+                {moreCount > 0 && (
+                    <span className="absolute top-1 right-1 bg-primary-100 text-primary-700 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
+                        +{moreCount}
+                    </span>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-xl font-semibold flex items-center gap-2 text-gray-900 mb-4 section-title-accent">
+                <Activity className="w-5 h-5 text-primary-500" />
+                활동 상세 내역
+            </h3>
+
+            {/* 데스크톱 테이블 */}
+            <div className="hidden lg:block overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full table-fixed border-collapse bg-white">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="w-28 py-3 px-2 text-center text-[11px] font-bold text-gray-600 uppercase tracking-wider border-r border-b border-gray-200 sticky left-0 z-10 bg-gray-50">
+                                카테고리
+                            </th>
+                            {timeRanges.map((range) => (
+                                <th
+                                    key={`${range.start}-${range.end}`}
+                                    className="py-3 px-2 text-center text-[11px] font-semibold text-gray-600 border-r border-b border-gray-200 w-48"
+                                >
+                                    {range.label}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-200">
+                        {/* 1. 발달 행 */}
+                        <tr>
+                            <td className="h-20 py-2 bg-white border-r border-gray-200 sticky left-0 z-10">
+                                <div className="flex flex-col items-center justify-center h-full gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-primary-500"></div>
+                                    <span className="text-[11px] font-bold text-gray-700">발달</span>
+                                </div>
+                            </td>
+                            {timeRanges.map((range) => (
+                                <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                                    {renderCellContent(
+                                        timelineEvents.filter(e => e.type === 'development' && e.hour >= range.start && e.hour <= range.end),
+                                        range.label,
+                                        '발달'
+                                    )}
+                                </td>
+                            ))}
+                        </tr>
+
+                        {/* 2. 안전 위험 행 */}
+                        <tr className="bg-red-50/20">
+                            <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                                <div className="flex flex-col items-center justify-center h-full gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-danger animate-pulse"></div>
+                                    <span className="text-[11px] font-bold text-danger">위험</span>
+                                </div>
+                            </td>
+                            {timeRanges.map((range) => (
+                                <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                                    {renderCellContent(
+                                        timelineEvents.filter(e => e.type === 'safety' && e.severity === 'danger' && e.hour >= range.start && e.hour <= range.end),
+                                        range.label,
+                                        '위험'
+                                    )}
+                                </td>
+                            ))}
+                        </tr>
+
+                        {/* 3. 안전 주의 행 */}
+                        <tr>
+                            <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                                <div className="flex flex-col items-center justify-center h-full gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-warning"></div>
+                                    <span className="text-[11px] font-bold text-gray-700">주의</span>
+                                </div>
+                            </td>
+                            {timeRanges.map((range) => (
+                                <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                                    {renderCellContent(
+                                        timelineEvents.filter(e => e.type === 'safety' && e.severity === 'warning' && e.hour >= range.start && e.hour <= range.end),
+                                        range.label,
+                                        '주의'
+                                    )}
+                                </td>
+                            ))}
+                        </tr>
+
+                        {/* 4. 안전 권장 행 */}
+                        <tr>
+                            <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                                <div className="flex flex-col items-center justify-center h-full gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span className="text-[11px] font-bold text-gray-700">권장</span>
+                                </div>
+                            </td>
+                            {timeRanges.map((range) => (
+                                <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                                    {renderCellContent(
+                                        timelineEvents.filter(e =>
+                                            e.type === 'safety' &&
+                                            e.severity === 'info' &&
+                                            (e.category === '안전 권장' || e.category === '권장' || e.title.includes('권장')) &&
+                                            e.hour >= range.start && e.hour <= range.end
+                                        ),
+                                        range.label,
+                                        '권장'
+                                    )}
+                                </td>
+                            ))}
+                        </tr>
+
+                        {/* 5. 안전 확인 행 */}
+                        <tr>
+                            <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                                <div className="flex flex-col items-center justify-center h-full gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-safe"></div>
+                                    <span className="text-[11px] font-bold text-gray-700">확인</span>
+                                </div>
+                            </td>
+                            {timeRanges.map((range) => (
+                                <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                                    {renderCellContent(
+                                        timelineEvents.filter(e =>
+                                            e.type === 'safety' &&
+                                            e.severity === 'info' &&
+                                            (e.category === '안전 확인' || e.category === '확인' || (!e.category?.includes('권장') && !e.title.includes('권장'))) &&
+                                            e.hour >= range.start && e.hour <= range.end
+                                        ),
+                                        range.label,
+                                        '확인'
+                                    )}
+                                </td>
+                            ))}
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {/* 모바일 카드 리스트 */}
+            <div className="block lg:hidden space-y-4">
+                {timeRanges.map((range) => {
+                    const eventsInRange = timelineEvents.filter(e =>
+                        e.hour >= range.start && e.hour <= range.end
+                    );
+
+                    if (eventsInRange.length === 0) {
+                        return null
+                    }
+
+                    return (
+                        <div key={range.label} className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+                            <h4 className="font-bold text-primary-600 mb-3 pb-2 border-b">{range.label}</h4>
+                            <div className="space-y-3">
+                                {eventsInRange.map((event, idx) => {
+                                    const Icon = event.type === 'development' ? Baby : Shield;
+                                    const iconColor = event.type === 'development'
+                                        ? 'text-blue-500'
+                                        : event.severity === 'warning'
+                                            ? 'text-yellow-500'
+                                            : 'text-green-500';
+
+                                    return (
+                                        <div key={idx}>
+                                            <div className="flex items-start gap-3">
+                                                <Icon className={`w-4 h-4 mt-1 ${iconColor}`} />
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-sm text-gray-800">{event.title}</p>
+                                                    <p className="text-xs text-gray-600">{event.description}</p>
+                                                    <p className="text-xs text-gray-400 mt-1">{event.time}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    )
+}
