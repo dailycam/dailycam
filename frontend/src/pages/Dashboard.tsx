@@ -19,14 +19,6 @@ import { mockDashboardData } from '../utils/mockData'
 
 type TimeRangeType = 'day' | 'week' | 'month' | 'year'
 
-// 화면 너비를 감지하는 커스텀 훅
-function useWindowWidth() {
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-
-  useEffect(() => {
-    function handleResize() {
-      setWindowWidth(window.innerWidth);
-    }
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -42,10 +34,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [timeRange, setTimeRange] = useState<TimeRangeType>('day')
-
-  // 모달 상태
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth < 768;
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth < 768;
   const [selectedTimeRange, setSelectedTimeRange] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [modalEvents, setModalEvents] = useState<any[]>([])
@@ -90,14 +82,8 @@ export default function Dashboard() {
 
 
   // 데이터 정규화: severity 및 category만 보정 (시간은 백엔드에서 이미 올바르게 전송됨)
-  const normalizedTimelineEvents = rawTimelineEvents.map(event => {
-    let { severity, category } = event;
 
     // 1. Severity 보정 (API 불일치 대응)
-    if (severity === 'low' as any) {
-      severity = 'info';
-    }
-
     // 2. Category 보정 (권장사항 식별 강화)
     if (severity === 'info') {
       if (
@@ -275,8 +261,6 @@ export default function Dashboard() {
       info: 1
     }
 
-    // 1. 중요도 순으로 정렬, 2. 같으면 시간 빠른 순
-    const sortedEvents = [...events].sort((a, b) => {
       const scoreA = severityScore[a.severity] || 0
       const scoreB = severityScore[b.severity] || 0
       if (scoreB !== scoreA) return scoreB - scoreA
