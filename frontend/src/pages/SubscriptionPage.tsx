@@ -3,6 +3,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Shield } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { getAuthToken } from '../lib/auth'
 
 declare global {
     interface Window {
@@ -35,7 +36,7 @@ export default function SubscriptionPage() {
         }
 
         const fetchMe = async () => {
-            const token = localStorage.getItem('access_token')
+            const token = getAuthToken()
             if (!token) return
 
             try {

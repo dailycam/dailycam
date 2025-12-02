@@ -44,6 +44,12 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [timeRange, setTimeRange] = useState<TimeRangeType>('day')
 
+  // 모달 상태
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [modalEvents, setModalEvents] = useState<any[]>([])
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -79,99 +85,38 @@ export default function Dashboard() {
   }
 
   // 통합 타임라인 데이터 (발달 + 안전 이벤트)
-  const rawTimelineEvents = [
-    {
-      time: '15:00',
-      hour: 15,
-      type: 'development',
-      title: '배밀이 연습 (15분)',
-      description: '대근육 발달 촉진',
-      hasClip: true,
-      category: '운동 발달'
-    },
-    {
-      time: '13:45',
-      hour: 13,
-      type: 'safety',
-      severity: 'warning',
-      title: '침대 가장자리 접근',
-      description: '아기가 침대 가장자리에 접근했습니다. 안전 패드 확인을 권장합니다.',
-      resolved: true,
-      hasClip: true,
-      category: '안전 주의'
-    },
-    {
-      time: '13:00',
-      hour: 13,
-      type: 'development',
-      title: '점심 수유 및 놀이',
-      description: '손 운동 능력 발달',
-      hasClip: false,
-      category: '신체 발달'
-    },
-    {
-      time: '11:20',
-      hour: 11,
-      type: 'safety',
-      severity: 'warning',
-      title: '비정상적인 움직임',
-      description: '평소보다 활발한 움직임이 감지되었습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 주의'
-    },
-    {
-      time: '10:30',
-      hour: 10,
-      type: 'development',
-      title: '낮잠 (1시간)',
-      description: '안정적인 수면 패턴',
-      hasClip: false,
-      category: '생활 리듬',
-      isSleep: true
-    },
-    {
-      time: '09:00',
-      hour: 9,
-      type: 'development',
-      title: '놀이 시간 (20분)',
-      description: '시각 추적 능력 향상',
-      hasClip: true,
-      category: '인지 발달'
-    },
-    {
-      time: '08:30',
-      hour: 8,
-      type: 'safety',
-      severity: 'info',
-      title: '안전한 수면 자세',
-      description: '바른 자세로 수면 중입니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인',
-      isSleep: true
-    },
-    {
-      time: '07:30',
-      hour: 7,
-      type: 'development',
-      title: '기상 및 아침 수유',
-      description: '규칙적인 생활 리듬',
-      hasClip: false,
-      category: '생활 리듬'
-    },
-    {
-      time: '06:00',
-      hour: 6,
-      type: 'safety',
-      severity: 'info',
-      title: '기상',
-      description: '정상적으로 기상했습니다.',
-      resolved: true,
-      hasClip: false,
-      category: '안전 확인'
-    },
-  ]
+  // 실제 데이터베이스에서 가져온 데이터 사용, 없으면 빈 배열
+  const rawTimelineEvents = dashboardData?.timelineEvents || []
+
+
+  // 데이터 정규화: severity 및 category만 보정 (시간은 백엔드에서 이미 올바르게 전송됨)
+  const normalizedTimelineEvents = rawTimelineEvents.map(event => {
+    let { severity, category } = event;
+
+    // 1. Severity 보정 (API 불일치 대응)
+    if (severity === 'low' as any) {
+      severity = 'info';
+    }
+
+    // 2. Category 보정 (권장사항 식별 강화)
+    if (severity === 'info') {
+      if (
+        category === '권장' ||
+        event.title.includes('권장') ||
+        event.title.includes('위험') ||
+        (event.description && event.description.includes('권장'))
+      ) {
+        category = '안전 권장';
+      } else if (!category || category === '확인') {
+        category = '안전 확인';
+      }
+    }
+
+    // 백엔드에서 받은 time, hour 값을 그대로 사용
+    return { ...event, severity, category };
+  });
+
+
 
   // 수면 이벤트 그룹화 함수
   const groupSleepEvents = (events: any[]) => {
@@ -297,65 +242,148 @@ export default function Dashboard() {
     })
   }
 
-  const timelineEvents = groupSleepEvents(rawTimelineEvents)
+  const timelineEvents = groupSleepEvents(normalizedTimelineEvents)
 
-  const dayTimeRanges = [
-    { start: 4, end: 7, label: '04시~07시' },
-    { start: 8, end: 11, label: '08시~11시' },
-    { start: 12, end: 15, label: '12시~15시' },
-    { start: 16, end: 19, label: '16시~19시' },
-    { start: 20, end: 23, label: '20시~23시' },
-    { start: 0, end: 3, label: '00시~03시' },
-  ]
+  // 모달 열기 함수
+  const openModal = (events: any[], timeRange: string, category: string) => {
+    if (events && events.length > 0) {
+      setModalEvents(events)
+      setSelectedTimeRange(timeRange)
+      setSelectedCategory(category)
+      setIsModalOpen(true)
+    }
+  }
+
+  // 모달 닫기 함수
+  const closeModal = () => {
+    setIsModalOpen(false)
+    setModalEvents([])
+    setSelectedTimeRange(null)
+    setSelectedCategory(null)
+  }
+
+  // Helper: 우선순위 기반 이벤트 렌더링 (1개만 표시, 클릭 가능)
+  const renderCellContent = (events: any[], timeRange: string, category: string) => {
+    if (!events || events.length === 0) {
+      return <div className="text-[10px] text-gray-300 h-full w-full flex items-center justify-center py-6">-</div>
+    }
+
+    // 중요도 점수 매핑
+    const severityScore: Record<string, number> = {
+      danger: 3,
+      warning: 2,
+      info: 1
+    }
+
+    // 1. 중요도 순으로 정렬, 2. 같으면 시간 빠른 순
+    const sortedEvents = [...events].sort((a, b) => {
+      const scoreA = severityScore[a.severity] || 0
+      const scoreB = severityScore[b.severity] || 0
+      if (scoreB !== scoreA) return scoreB - scoreA
+
+      // 시간 비교
+      const [aHour, aMin] = a.time.split(':').map(Number)
+      const [bHour, bMin] = b.time.split(':').map(Number)
+      return (aHour * 60 + aMin) - (bHour * 60 + bMin)
+    })
+
+    const topEvent = sortedEvents[0]
+    const moreCount = sortedEvents.length - 1
+
+    const textColor = topEvent.severity === 'danger'
+      ? 'text-danger-600 font-semibold'
+      : topEvent.severity === 'warning'
+        ? 'text-warning-600'
+        : 'text-gray-700'
+
+    const [hours, minutes] = topEvent.time.split(':')
+    const timeStr = `${hours}:${minutes}`
+
+    return (
+      <div
+        className="relative h-full w-full flex flex-col items-center justify-center p-3 cursor-pointer hover:bg-gray-100/50 transition-all group"
+        onClick={() => openModal(sortedEvents, timeRange, category)}
+      >
+        <div className="flex flex-col items-center gap-0.5 w-full">
+          <div className={`text-[11px] ${textColor} truncate w-full text-center leading-tight`}>
+            {topEvent.title}
+          </div>
+          <span className="text-[9px] text-gray-400">{timeStr}</span>
+        </div>
+
+        {moreCount > 0 && (
+          <span className="absolute top-1 right-1 bg-primary-100 text-primary-700 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
+            +{moreCount}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // 1시간 단위 시간 범위 (24시간)
+  const dayTimeRanges = Array.from({ length: 24 }, (_, i) => ({
+    start: i,
+    end: i,
+    label: `${i.toString().padStart(2, '0')}시`
+  }))
 
   // 기간별 데이터 생성 함수
   const generateChartData = () => {
     if (timeRange === 'day') {
-      const baseSafetyScore = dashboardData.safetyScore
-      const baseDevelopmentScore = 92
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
+      const baseDevelopmentScore = dashboardData?.developmentScore ?? 88
 
-      return dayTimeRanges.map(range => {
-        const eventsInRange = timelineEvents.filter(e => {
-          const eventHour = e.hour
-          return eventHour >= range.start && eventHour <= range.end
-        })
+      // 이벤트가 있는 시간대만 필터링
+      const dataPoints = dayTimeRanges
+        .map(range => {
+          const eventsInRange = timelineEvents.filter(e => {
+            const eventHour = e.hour
+            return eventHour >= range.start && eventHour <= range.end
+          })
 
-        const developmentEvents = eventsInRange.filter(e => e.type === 'development')
-        const safetyEvents = eventsInRange.filter(e => e.type === 'safety')
+          // 이벤트가 없으면 null 반환 (그래프에서 제외)
+          if (eventsInRange.length === 0) {
+            return null
+          }
 
-        let developmentScore = baseDevelopmentScore
-        developmentEvents.forEach(() => {
-          developmentScore += 2
-        })
-        safetyEvents.forEach(event => {
-          if (event.severity === 'warning') {
-            developmentScore -= 1
+          const developmentEvents = eventsInRange.filter(e => e.type === 'development')
+          const safetyEvents = eventsInRange.filter(e => e.type === 'safety')
+          const dangerEvents = safetyEvents.filter(e => e.severity === 'danger')
+          const warningEvents = safetyEvents.filter(e => e.severity === 'warning')
+          const infoEvents = safetyEvents.filter(e => e.severity === 'info')
+
+          // 기본 점수에서 시작
+          let developmentScore = baseDevelopmentScore
+          let safetyScore = baseSafetyScore
+
+          // 발달 이벤트: 큰 폭으로 점수 상승
+          developmentScore += developmentEvents.length * 3
+
+          // 위험 이벤트: 큰 폭으로 점수 하락
+          safetyScore -= dangerEvents.length * 15
+          safetyScore -= warningEvents.length * 8
+
+          // 정보성 이벤트: 약간 상승
+          safetyScore += infoEvents.length * 2
+
+          // 범위 제한
+          developmentScore = Math.max(70, Math.min(100, developmentScore))
+          safetyScore = Math.max(70, Math.min(100, safetyScore))
+
+          return {
+            time: range.label,
+            startHour: range.start,
+            endHour: range.end,
+            safety: Math.round(safetyScore),
+            development: Math.round(developmentScore),
           }
         })
+        .filter(point => point !== null) // null 제거
 
-        let safetyScore = baseSafetyScore
-        safetyEvents.forEach(event => {
-          if (event.severity === 'info') {
-            safetyScore += 1
-          } else if (event.severity === 'warning') {
-            safetyScore -= 3
-          }
-        })
-
-        developmentScore = Math.max(70, Math.min(100, developmentScore))
-        safetyScore = Math.max(70, Math.min(100, safetyScore))
-
-        return {
-          time: range.label,
-          startHour: range.start,
-          endHour: range.end,
-          safety: safetyScore,
-          development: developmentScore,
-        }
-      })
+      return dataPoints
     } else if (timeRange === 'week') {
       // 7일: 일자별 평균
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
 
       return Array.from({ length: 7 }, (_, i) => {
@@ -374,7 +402,7 @@ export default function Dashboard() {
       })
     } else if (timeRange === 'month') {
       // 한달: 5일 단위로 묶어서 표시 (1~5일, 6~10일, 11~15일, 16~20일, 21~25일, 26~30일)
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
 
       const ranges = [
@@ -402,7 +430,7 @@ export default function Dashboard() {
       })
     } else {
       // 1년: 달별
-      const baseSafetyScore = dashboardData.safetyScore
+      const baseSafetyScore = dashboardData?.safetyScore ?? 90
       const baseDevelopmentScore = 92
       const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
@@ -432,7 +460,7 @@ export default function Dashboard() {
   const stats = [
     {
       label: '안전 점수',
-      value: dashboardData.safetyScore.toString(),
+      value: (dashboardData?.safetyScore ?? 0).toString(),
       unit: '점',
       change: '+3',
       changeLabel: '지난주 대비',
@@ -443,7 +471,7 @@ export default function Dashboard() {
     },
     {
       label: '발달 점수',
-      value: '92',
+      value: (dashboardData?.developmentScore ?? 0).toString(),
       unit: '점',
       change: '+7',
       changeLabel: '지난주 대비',
@@ -454,7 +482,7 @@ export default function Dashboard() {
     },
     {
       label: '모니터링 시간',
-      value: dashboardData.monitoringHours.toString(),
+      value: (dashboardData?.monitoringHours ?? 0).toFixed(1),
       unit: '시간',
       change: '오늘',
       changeLabel: '누적',
@@ -465,7 +493,7 @@ export default function Dashboard() {
     },
     {
       label: '이벤트 감지',
-      value: dashboardData.incidentCount.toString(),
+      value: (dashboardData?.incidentCount ?? 0).toString(),
       unit: '건',
       change: '2건 주의',
       changeLabel: '모두 해결됨',
@@ -497,7 +525,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         {stats.map((stat, index) => {
           const Icon = stat.icon
           return (
@@ -507,7 +535,7 @@ export default function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.1 + index * 0.05 }}
             >
-              <div className={`card p-5 border-0 shadow-sm hover:shadow-md transition-shadow ${stat.bgColor}`}>
+              <div className={`card p-5 border-0 hover:shadow-soft-lg transition-all ${stat.bgColor}`}>
                 <div className="flex items-start justify-between mb-3">
                   <Icon className={`w-5 h-5 ${stat.color}`} />
                   {stat.trend === 'up' && (
@@ -546,41 +574,51 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-4 mb-4">
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">배밀이 2미터 성공!</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              오후 3시, 좋아하는 장난감을 향해 2미터나 배밀이로 이동했어요. 대근육 발달의 중요한 순간이에요!
-            </p>
-          </div>
+        <div className="grid lg:grid-cols-3 gap-5 mb-5">
+          {dashboardData.recommendations && dashboardData.recommendations.length > 0 ? (
+            dashboardData.recommendations.map((rec, index) => {
+              // priority에 따른 배경색 설정
+              const bgColorMap: Record<string, string> = {
+                high: 'bg-danger-light/30',      // 부드러운 핑크
+                medium: 'bg-primary-100/50',     // 파스텔 민트
+                low: 'bg-safe-light/30',         // 부드러운 그린
+              }
+              const bgColor = bgColorMap[rec.priority] || 'bg-[#E6F2FF]'
 
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">옹알이 20% 증가</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              다양한 음절의 옹알이가 지난주보다 20% 늘었어요. 언어 발달이 빠르게 진행되고 있어요!
-            </p>
-          </div>
-
-          <div className="card p-6 border-0 shadow-sm bg-[#E6F2FF]">
-            <h3 className="text-lg font-semibold mb-2">안전한 하루</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              오늘 하루 2건의 주의 알림이 있었지만 모두 빠르게 해결되어 안전한 하루를 보냈어요.
-            </p>
-          </div>
+              return (
+                <div key={index} className={`card p-6 border-0 shadow-sm ${bgColor}`}>
+                  <h3 className="text-lg font-semibold mb-2">{rec.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {rec.description}
+                  </p>
+                </div>
+              )
+            })
+          ) : (
+            // 데이터가 없을 때 기본 메시지
+            <>
+              <div className="card p-6 border-0 bg-primary-100/50">
+                <h3 className="text-lg font-semibold mb-2">분석을 시작해보세요</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  영상을 업로드하면 AI가 분석 결과를 제공합니다.
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* CTA 버튼 */}
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-5">
           <a
             href="/development-report"
-            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 text-white h-14 rounded-lg flex items-center justify-center font-medium transition-colors hover:from-primary-600 hover:to-primary-700"
+            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 text-white h-14 rounded-2xl flex items-center justify-center font-medium transition-all hover:from-primary-600 hover:to-primary-700 hover:shadow-md"
           >
             발달 리포트 자세히 보기
             <ChevronRight className="w-5 h-5 ml-1" />
           </a>
           <a
             href="/safety-report"
-            className="w-full bg-gradient-to-r from-safe to-safe-dark text-white h-14 rounded-lg flex items-center justify-center font-medium transition-colors hover:from-safe-dark hover:to-green-700"
+            className="w-full bg-gradient-to-r from-safe to-safe-dark text-white h-14 rounded-2xl flex items-center justify-center font-medium transition-all hover:from-safe-dark hover:to-safe-dark hover:shadow-md"
           >
             안전 리포트 자세히 보기
             <ChevronRight className="w-5 h-5 ml-1" />
@@ -595,7 +633,7 @@ export default function Dashboard() {
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mb-8"
       >
-        <div className="card p-6 border-0 shadow-sm">
+        <div className="card p-6 border-0">
           {/* 헤더 */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
@@ -769,340 +807,134 @@ export default function Dashboard() {
           {/* 활동 타임라인 테이블 (하루일 때만 표시) */}
           {timeRange === 'day' && (
             <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className={`${sectionTitleClass} flex items-center gap-2 text-gray-900 mb-4`}>
+              <h3 className={`${sectionTitleClass} flex items-center gap-2 text-gray-900 mb-4 section-title-accent`}>
                 <Activity className="w-5 h-5 text-primary-500" />
                 활동 상세 내역
               </h3>
 
-              {/* --- 기존 테이블: 데스크톱 화면용 --- */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 sticky left-0 bg-white z-10">
+              {/* --- 수정된 테이블: 고정 그리드 레이아웃 --- */}
+              <div className="hidden lg:block overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full table-fixed border-collapse bg-white">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="w-28 py-3 px-2 text-center text-[11px] font-bold text-gray-600 uppercase tracking-wider border-r border-b border-gray-200 sticky left-0 z-10 bg-gray-50">
                         카테고리
                       </th>
                       {timeRanges.map((range) => (
                         <th
                           key={`${range.start}-${range.end}`}
-                          className="text-center py-3 px-3 text-xs font-semibold text-gray-700 min-w-[120px]"
+                          className="py-3 px-2 text-center text-[11px] font-semibold text-gray-600 border-r border-b border-gray-200 w-48"
                         >
                           {range.label}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {/* 발달 행 */}
-                    <tr className="border-b border-gray-100">
-                      <td className="py-4 px-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-primary-500"></div>
-                          발달
-                        </div>
-                      </td>
-                      {timeRanges.map((range) => {
-                        const eventsInRange = timelineEvents.filter(e =>
-                          e.type === 'development' &&
-                          e.hour >= range.start &&
-                          e.hour <= range.end
-                        )
-                        return (
-                          <td
-                            key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
-                          >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
-                                    return (
-                                      <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
-                                        </div>
-                                        {event.hasClip && (
-                                          <button className="mt-1 text-primary-600 hover:text-primary-700">
-                                            <Video className="w-3 h-3 mx-auto" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    )
-                                  }
 
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-primary-600">{event.description}</div>
-                                      )}
-                                      {event.hasClip && (
-                                        <button className="mt-1 text-primary-600 hover:text-primary-700">
-                                          <Video className="w-3 h-3 mx-auto" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-
-                    {/* 안전 주의 행 */}
-                    <tr className="border-b border-gray-100">
-                      <td className="py-4 px-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-warning"></div>
-                          안전 주의
-                        </div>
-                      </td>
-                      {timeRanges.map((range) => {
-                        const eventsInRange = timelineEvents.filter(e =>
-                          e.type === 'safety' &&
-                          e.severity === 'warning' &&
-                          e.hour >= range.start &&
-                          e.hour <= range.end
-                        )
-                        return (
-                          <td
-                            key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
-                          >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
-                                    return (
-                                      <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
-                                        </div>
-                                        {event.hasClip && (
-                                          <button className="mt-1 text-primary-600 hover:text-primary-700">
-                                            <Video className="w-3 h-3 mx-auto" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    )
-                                  }
-
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-warning">{event.description}</div>
-                                      )}
-                                      <div className="flex items-center justify-center gap-1 mt-1">
-                                        {event.resolved && (
-                                          <CheckCircle2 className="w-3 h-3 text-safe" />
-                                        )}
-                                        {event.hasClip && (
-                                          <button className="text-primary-600 hover:text-primary-700">
-                                            <Video className="w-3 h-3" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-
-                    {/* 안전 위험 행 */}
-                    <tr className="border-b border-gray-100">
-                      <td className="py-4 px-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-danger"></div>
-                          안전 위험
-                        </div>
-                      </td>
-                      {timeRanges.map((range) => {
-                        const eventsInRange = timelineEvents.filter(e =>
-                          e.type === 'safety' &&
-                          e.severity === 'danger' &&
-                          e.hour >= range.start &&
-                          e.hour <= range.end
-                        )
-                        return (
-                          <td
-                            key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
-                          >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
-                                    return (
-                                      <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
-                                        </div>
-                                      </div>
-                                    )
-                                  }
-
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-danger">{event.description}</div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-
-                    {/* 안전 권장 행 */}
-                    <tr className="border-b border-gray-100">
-                      <td className="py-4 px-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                          안전 권장
-                        </div>
-                      </td>
-                      {timeRanges.map((range) => {
-                        const eventsInRange = timelineEvents.filter(e =>
-                          e.type === 'safety' &&
-                          e.severity === 'info' &&
-                          e.category === '안전 권장' &&
-                          e.hour >= range.start &&
-                          e.hour <= range.end
-                        )
-                        return (
-                          <td
-                            key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
-                          >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
-                                    return (
-                                      <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
-                                        </div>
-                                      </div>
-                                    )
-                                  }
-
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-blue-500">{event.description}</div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-
-                    {/* 안전 확인 행 */}
+                  <tbody className="divide-y divide-gray-200">
+                    {/* 1. 발달 행 */}
                     <tr>
-                      <td className="py-4 px-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-safe"></div>
-                          안전 확인
+                      <td className="h-20 py-2 bg-white border-r border-gray-200 sticky left-0 z-10">
+                        <div className="flex flex-col items-center justify-center h-full gap-1">
+                          <div className="w-2 h-2 rounded-full bg-primary-500"></div>
+                          <span className="text-[11px] font-bold text-gray-700">발달</span>
                         </div>
                       </td>
-                      {timeRanges.map((range) => {
-                        const eventsInRange = timelineEvents.filter(e =>
-                          e.type === 'safety' &&
-                          e.severity === 'info' &&
-                          e.category === '안전 확인' &&
-                          e.hour >= range.start &&
-                          e.hour <= range.end
-                        )
-                        return (
-                          <td
-                            key={`${range.start}-${range.end}`}
-                            className="py-3 px-3 text-center align-top"
-                          >
-                            {eventsInRange.length > 0 ? (
-                              <div className="space-y-2">
-                                {eventsInRange.map((event, idx) => {
-                                  // 수면 그룹이면 시간 표시 방식 다르게
-                                  if (event.isSleepGroup) {
-                                    return (
-                                      <div key={idx} className="space-y-1">
-                                        <div className="text-xs font-medium text-gray-900">
-                                          {event.title}
-                                        </div>
-                                        {event.resolved && (
-                                          <CheckCircle2 className="w-3 h-3 text-safe mx-auto mt-1" />
-                                        )}
-                                      </div>
-                                    )
-                                  }
+                      {timeRanges.map((range) => (
+                        <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                          {renderCellContent(
+                            timelineEvents.filter(e => e.type === 'development' && e.hour >= range.start && e.hour <= range.end),
+                            range.label,
+                            '발달'
+                          )}
+                        </td>
+                      ))}
+                    </tr>
 
-                                  const [hours, minutes] = event.time.split(':')
-                                  const timeStr = `${hours}시 ${minutes}분`
-                                  return (
-                                    <div key={idx} className="space-y-1">
-                                      <div className="text-xs font-medium text-gray-900">
-                                        {event.title}({timeStr})
-                                      </div>
-                                      {event.description && (
-                                        <div className="text-xs text-safe">{event.description}</div>
-                                      )}
-                                      {event.resolved && (
-                                        <CheckCircle2 className="w-3 h-3 text-safe mx-auto mt-1" />
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-400">-</div>
-                            )}
-                          </td>
-                        )
-                      })}
+                    {/* 2. 안전 위험 행 (최우선 강조) */}
+                    <tr className="bg-red-50/20">
+                      <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                        <div className="flex flex-col items-center justify-center h-full gap-1">
+                          <div className="w-2 h-2 rounded-full bg-danger animate-pulse"></div>
+                          <span className="text-[11px] font-bold text-danger">위험</span>
+                        </div>
+                      </td>
+                      {timeRanges.map((range) => (
+                        <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                          {renderCellContent(
+                            timelineEvents.filter(e => e.type === 'safety' && e.severity === 'danger' && e.hour >= range.start && e.hour <= range.end),
+                            range.label,
+                            '위험'
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* 3. 안전 주의 행 */}
+                    <tr>
+                      <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                        <div className="flex flex-col items-center justify-center h-full gap-1">
+                          <div className="w-2 h-2 rounded-full bg-warning"></div>
+                          <span className="text-[11px] font-bold text-gray-700">주의</span>
+                        </div>
+                      </td>
+                      {timeRanges.map((range) => (
+                        <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                          {renderCellContent(
+                            timelineEvents.filter(e => e.type === 'safety' && e.severity === 'warning' && e.hour >= range.start && e.hour <= range.end),
+                            range.label,
+                            '주의'
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* 4. 안전 권장 행 */}
+                    <tr>
+                      <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                        <div className="flex flex-col items-center justify-center h-full gap-1">
+                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                          <span className="text-[11px] font-bold text-gray-700">권장</span>
+                        </div>
+                      </td>
+                      {timeRanges.map((range) => (
+                        <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                          {renderCellContent(
+                            timelineEvents.filter(e =>
+                              e.type === 'safety' &&
+                              e.severity === 'info' &&
+                              (e.category === '안전 권장' || e.category === '권장' || e.title.includes('권장')) &&
+                              e.hour >= range.start && e.hour <= range.end
+                            ),
+                            range.label,
+                            '권장'
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {/* 5. 안전 확인 행 */}
+                    <tr>
+                      <td className="h-20 py-2 border-r border-gray-200 sticky left-0 z-10 bg-white">
+                        <div className="flex flex-col items-center justify-center h-full gap-1">
+                          <div className="w-2 h-2 rounded-full bg-safe"></div>
+                          <span className="text-[11px] font-bold text-gray-700">확인</span>
+                        </div>
+                      </td>
+                      {timeRanges.map((range) => (
+                        <td key={range.label} className="h-20 p-0 border-r border-gray-200 align-middle w-48">
+                          {renderCellContent(
+                            timelineEvents.filter(e =>
+                              e.type === 'safety' &&
+                              e.severity === 'info' &&
+                              (e.category === '안전 확인' || e.category === '확인' || (!e.category?.includes('권장') && !e.title.includes('권장'))) &&
+                              e.hour >= range.start && e.hour <= range.end
+                            ),
+                            range.label,
+                            '확인'
+                          )}
+                        </td>
+                      ))}
                     </tr>
                   </tbody>
                 </table>
@@ -1148,6 +980,96 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* 상세보기 모달 */}
+          {isModalOpen && modalEvents.length > 0 && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+              onClick={closeModal}
+            >
+              <div
+                className="bg-white w-full max-w-lg max-h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col m-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* 모달 헤더 */}
+                <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-cyan-50">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-lg text-gray-800">상세 활동 내역</h3>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        {selectedTimeRange} · {selectedCategory} · {modalEvents.length}건
+                      </p>
+                    </div>
+                    <button
+                      onClick={closeModal}
+                      className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* 리스트 (스크롤) */}
+                <div className="p-5 overflow-y-auto flex-1 space-y-3">
+                  {modalEvents.map((event, i) => {
+                    const bgColor = event.severity === 'danger'
+                      ? 'bg-red-50 border-red-200'
+                      : event.severity === 'warning'
+                        ? 'bg-amber-50 border-amber-200'
+                        : 'bg-gray-50 border-gray-200'
+
+                    const textColor = event.severity === 'danger'
+                      ? 'text-danger-600'
+                      : event.severity === 'warning'
+                        ? 'text-warning-600'
+                        : 'text-gray-700'
+
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className={`border rounded-xl p-4 ${bgColor}`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className={`font-semibold text-base ${textColor}`}>
+                            {event.title}
+                          </span>
+                          <span className="text-sm font-medium text-gray-500 ml-2">
+                            {event.time}
+                          </span>
+                        </div>
+                        {event.description && (
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            {event.description}
+                          </p>
+                        )}
+                        {event.hasClip && (
+                          <div className="mt-3 pt-3 border-t border-gray-300/50">
+                            <button className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium">
+                              <Video className="w-4 h-4" />
+                              영상 보기
+                            </button>
+                          </div>
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
+
+                {/* 푸터 */}
+                <div className="p-4 border-t border-gray-200 bg-gray-50">
+                  <button
+                    onClick={closeModal}
+                    className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-3 px-6 rounded-xl transition-all"
+                  >
+                    닫기
+                  </button>
+                </div>
               </div>
             </div>
           )}
