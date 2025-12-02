@@ -26,7 +26,8 @@ class AnalysisLog(Base):
     safety_score = Column(Integer, nullable=True)  # 안전 점수 (92점)
     overall_safety_level = Column(String(20), nullable=True)  # "주의", "안전", "위험"
     safety_summary = Column(Text, nullable=True)  # 안전 요약
-    
+    safety_insights = Column(JSON, nullable=True) # 안전 인사이트 (추가)
+
     # 발달 관련
     development_score = Column(Integer, nullable=True)  # 발달 점수 (88점)
     main_activity = Column(String(255), nullable=True)  # 주요 활동 ("블록 쌓기", "낮잠")
@@ -36,6 +37,9 @@ class AnalysisLog(Base):
     # 추천 활동
     recommendations = Column(JSON, nullable=True)  # [{"title": "까꿍 놀이", "benefit": "인지"}]
     
+    # 발달 인사이트 (추가)
+    development_insights = Column(JSON, nullable=True) # ["인사이트 1", "인사이트 2"]
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 관계

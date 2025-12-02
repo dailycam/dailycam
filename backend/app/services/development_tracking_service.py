@@ -38,62 +38,26 @@ class DevelopmentTrackingService:
         # 1. 사용자의 현재 점수 조회 (없으면 생성)
         tracking = DevelopmentTrackingService.get_or_create_tracking(db, user_id)
         
-        # 2. VLM에서 관찰된 발달 행동 분석
-        development_events = analysis_result.get("development_analysis", {}).get("development_events", [])
+        # 2. VLM에서 계산된 development_radar_scores 사용
+        vlm_radar_scores = analysis_result.get("development_analysis", {}).get("development_radar_scores", {})
         
-        if not development_events:
-            print(f"[DevelopmentTracking] User {user_id}: 발달 이벤트 없음")
+        if not vlm_radar_scores:
+            print(f"[DevelopmentTracking] User {user_id}: VLM 레이더 점수 없음. 업데이트 건너뜀.")
             return
-        
-        # 3. 카테고리별 이벤트 수 집계
-        category_counts = {
-            "언어": 0,
-            "운동": 0,
-            "인지": 0,
-            "사회성": 0,
-            "정서": 0,
-        }
-        
-        for event in development_events:
-            category = event.get("category", "")
-            # 카테고리 매핑 (운동/언어/인지/사회성 → 한글)
-            if category in ["운동", "대근육운동", "소근육운동"]:
-                category_counts["운동"] += 1
-            elif category in ["언어", "LANGUAGE"]:
-                category_counts["언어"] += 1
-            elif category in ["인지", "COGNITIVE"]:
-                category_counts["인지"] += 1
-            elif category in ["사회성", "SOCIAL"]:
-                category_counts["사회성"] += 1
-            elif category in ["정서", "EMOTIONAL"]:
-                category_counts["정서"] += 1
-        
-        # 4. 카테고리별 가점 적용 (각 이벤트당 +1점, 최대 +10점)
+
         updates = {}
-        if category_counts["언어"] > 0:
-            points = min(10, category_counts["언어"])
-            tracking.language_score = min(100, tracking.language_score + points)
-            updates["언어"] = f"+{points}"
-        
-        if category_counts["운동"] > 0:
-            points = min(10, category_counts["운동"])
-            tracking.motor_score = min(100, tracking.motor_score + points)
-            updates["운동"] = f"+{points}"
-        
-        if category_counts["인지"] > 0:
-            points = min(10, category_counts["인지"])
-            tracking.cognitive_score = min(100, tracking.cognitive_score + points)
-            updates["인지"] = f"+{points}"
-        
-        if category_counts["사회성"] > 0:
-            points = min(10, category_counts["사회성"])
-            tracking.social_score = min(100, tracking.social_score + points)
-            updates["사회성"] = f"+{points}"
-        
-        if category_counts["정서"] > 0:
-            points = min(10, category_counts["정서"])
-            tracking.emotional_score = min(100, tracking.emotional_score + points)
-            updates["정서"] = f"+{points}"
+        for category, score in vlm_radar_scores.items():
+            if category == "언어":
+                tracking.language_score = score
+            elif category == "운동":
+                tracking.motor_score = score
+            elif category == "인지":
+                tracking.cognitive_score = score
+            elif category == "사회성":
+                tracking.social_score = score
+            elif category == "정서":
+                tracking.emotional_score = score
+            updates[category] = score
         
         db.commit()
         
@@ -115,13 +79,13 @@ class DevelopmentTrackingService:
                 "정서": tracking.emotional_score,
             }
         else:
-            # 초기값 (모두 50점)
+            # 초기값 (모두 70점)
             return {
-                "언어": 50,
-                "운동": 50,
-                "인지": 50,
-                "사회성": 50,
-                "정서": 50,
+                "언어": 70,
+                "운동": 70,
+                "인지": 70,
+                "사회성": 70,
+                "정서": 70,
             }
     
     @staticmethod

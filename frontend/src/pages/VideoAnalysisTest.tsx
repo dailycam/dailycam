@@ -9,14 +9,16 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { analyzeVideoWithBackend, VideoAnalysisResult } from '../lib/api'
+import { useAnalysis } from '../context/AnalysisContext'
 
 export default function CameraSetup() {
-  // 비디오 분석 상태
+  // 비디오 분석 상태 (전역 상태로 관리)
+  const { analysisResult, setAnalysisResult } = useAnalysis()
+  
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [analysisResult, setAnalysisResult] = useState<VideoAnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [ageMonths, setAgeMonths] = useState<number | undefined>(undefined)
 

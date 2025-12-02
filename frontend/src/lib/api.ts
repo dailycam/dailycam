@@ -664,6 +664,7 @@ export interface DevelopmentData {
   strongestArea: string
   dailyDevelopmentFrequency: DevelopmentFrequencyItem[]
   recommendedActivities: RecommendedActivity[]
+  developmentInsights: string[] // Added
 }
 
 /**
@@ -699,6 +700,7 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
       strongestArea: data.strongest_area || '운동',
       dailyDevelopmentFrequency: data.daily_development_frequency || [],
       recommendedActivities: data.recommended_activities || [],
+      developmentInsights: data.development_insights || [], // Added
     }
   } catch (error) {
     console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
@@ -716,11 +718,11 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
       },
       strongestArea: '운동',
       dailyDevelopmentFrequency: [
-        { category: '언어', count: 18, color: '#0284c7' },
-        { category: '운동', count: 25, color: '#22c55e' },
-        { category: '인지', count: 12, color: '#f59e0b' },
-        { category: '사회성', count: 15, color: '#0ea5e9' },
-        { category: '정서', count: 9, color: '#06b6d4' },
+        { category: '언어', count: 18, color: '#a2d2ff' }, // Light Blue
+        { category: '운동', count: 25, color: '#b0f2c2' }, // Light Green
+        { category: '인지', count: 12, color: '#ffc77d' }, // Light Orange
+        { category: '사회성', count: 15, color: '#d4a2ff' }, // Light Purple
+        { category: '정서', count: 9, color: '#ffb0bb' }, // Light Pink
       ],
       recommendedActivities: [
         {

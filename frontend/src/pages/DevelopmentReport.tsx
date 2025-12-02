@@ -3,15 +3,10 @@ import { motion } from 'motion/react'
 import {
   Baby,
   Lightbulb,
-  Video,
   Sparkles,
   TrendingUp,
   Download,
   Calendar as CalendarIcon,
-  Eye,
-  Activity,
-  Music,
-  Hand,
   Target,
 } from 'lucide-react'
 import {
@@ -32,9 +27,8 @@ import {
 import { getDevelopmentData, DevelopmentData } from '../lib/api'
 
 export default function DevelopmentReport() {
-  const [date, setDate] = useState<Date>(new Date())
+  const [date] = useState<Date>(new Date())
   const [developmentData, setDevelopmentData] = useState<DevelopmentData | null>(null)
-  // const [loading, setLoading] = useState(true) // 로딩 UI 필요시 사용
 
   // API에서 데이터 로드
   useEffect(() => {
@@ -55,7 +49,7 @@ export default function DevelopmentReport() {
     ? Object.entries(developmentData.developmentRadarScores).map(([category, score]) => ({
       category,
       score,
-      average: Math.max(50, Math.min(90, score + Math.random() * 20 - 10)), // 또래 평균 (모의 데이터)
+      average: 70, // 또래 평균을 70점으로 고정
       fullMark: 100,
     }))
     : [
@@ -78,48 +72,7 @@ export default function DevelopmentReport() {
     { category: '정서', count: 0, color: '#99f6e0' },
   ]
 
-  const recommendedActivities = [
-    {
-      title: '까꿍 놀이',
-      category: '인지 발달',
-      icon: 'Eye',
-      description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
-      duration: '10-15분',
-      benefit: '인지 능력 향상',
-      gradient: 'from-warning-light/30 to-orange-50',
-      score: 85, // AI 추천 점수
-    },
-    {
-      title: '배밀이 연습',
-      category: '운동 발달',
-      icon: 'Activity',
-      description: '좋아하는 장난감을 앞에 두고 손을 뻗게 유도하세요.',
-      duration: '15-20분',
-      benefit: '대근육 발달',
-      gradient: 'from-safe-light/30 to-green-50',
-      score: 92, // AI 추천 점수 - 높음 (glow effect)
-    },
-    {
-      title: '노래 부르기',
-      category: '언어 발달',
-      icon: 'Music',
-      description: '다양한 동요와 자장가를 들려주세요.',
-      duration: '5-10분',
-      benefit: '언어 자극',
-      gradient: 'from-primary-100/40 to-primary-50',
-      score: 78,
-    },
-    {
-      title: '촉각 놀이',
-      category: '감각 발달',
-      icon: 'Hand',
-      description: '다양한 질감의 천이나 장난감을 만지게 해주세요.',
-      duration: '10분',
-      benefit: '감각 발달',
-      gradient: 'from-primary-100/40 to-cyan-50',
-      score: 70,
-    },
-  ]
+
 
 
   return (
@@ -138,7 +91,7 @@ export default function DevelopmentReport() {
               발달 리포트
             </h1>
           </div>
-          <p className="text-gray-600">AI 분석 기반 영유아 발달 현황을 확인하세요</p>
+          <p className="text-gray-600">영유아 발달 현황을 확인하세요</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="btn-secondary flex items-center gap-2 border-primary-200 hover:border-primary-300 hover:bg-primary-50">
@@ -183,27 +136,22 @@ export default function DevelopmentReport() {
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-primary-100">
                 <div className="flex items-center gap-2 mb-2">
                   <Lightbulb className="w-4 h-4 text-primary-600" />
-                  <p className="text-xs text-primary-600 font-semibold">AI 발달 인사이트</p>
+                  <p className="text-sm text-primary-600 font-semibold">발달 인사이트</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
-                  <p className="flex items-start gap-1">
-                    <span>•</span>
-                    <span>이번 주 언어 발달 영역에서 눈에 띄는 향상이 관찰되었습니다.</span>
-                  </p>
-                  <p className="flex items-start gap-1">
-                    <span>•</span>
-                    <span>운동 발달이 또래 평균보다 앞서 있습니다. 안전한 환경에서 더 많은 활동 기회를 제공해보세요.</span>
-                  </p>
-                  <p className="flex items-start gap-1">
-                    <span>•</span>
-                    <span>규칙적인 수면 패턴이 정서 발달에 긍정적인 영향을 주고 있습니다.</span>
-                  </p>
-                  <p className="flex items-start gap-1">
-                    <span>•</span>
-                    <span>추천: 다양한 소리와 음악을 들려주면 언어 발달에 도움이 됩니다.</span>
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700 leading-relaxed">
+                  {developmentData?.developmentInsights && developmentData.developmentInsights.length > 0 ? (
+                    developmentData.developmentInsights.map((insight, idx) => (
+                      <p key={idx} className="flex items-start gap-1 text-xs">
+                        <span>•</span>
+                        <span>{insight}</span>
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-gray-400 italic">분석된 인사이트가 없습니다.</p>
+                  )}
                 </div>
               </div>
+
             </div>
           </div>
         </motion.div>
@@ -296,9 +244,9 @@ export default function DevelopmentReport() {
             {/* 긴정적 메시지 박스 */}
             <div className="mt-2 p-4 bg-primary-50/50 rounded-2xl border border-primary-200/50">
               <p className="text-sm text-gray-700 leading-relaxed">
-                <span className="font-semibold text-primary-700">🌟 긍정적인 발달을 보이고 있어요!</span>
+                <span className="font-semibold text-primary-700">긍정적인 발달을 보이고 있어요!</span>
                 {radarData.some(item => item.score < item.average) && (
-                  <span> 지금은 조금 느리지만, 아래 추천 활동을 함께하면 금방 자라나요! 🚀</span>
+                  <span> 지금은 조금 느리지만, 아래 추천 활동을 함께하면 금방 자라나요!</span>
                 )}
               </p>
             </div>
@@ -404,67 +352,53 @@ export default function DevelopmentReport() {
         </motion.div>
       </div>
 
-      {/* AI Recommended Activities */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.5 }}
-      >
-        <div className="card p-6 mb-8 border-0">
-          <div className="flex items-center gap-2 mb-6">
-            <Lightbulb className="w-6 h-6 text-warning" />
-            <h3 className="text-lg font-semibold">AI 추천 발달 촉진 놀이</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {recommendedActivities.map((activity, index) => {
-              // 아이콘 이름에 따라 컴포넌트 선택
-              const IconComponent =
-                activity.icon === 'Eye' ? Eye :
-                  activity.icon === 'Activity' ? Activity :
-                    activity.icon === 'Music' ? Music :
-                      activity.icon === 'Hand' ? Hand : Eye
+      {/* Recommended Activities Section (New) */}
+      {developmentData?.recommendedActivities && developmentData.recommendedActivities.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.7 }}
+          className="mb-8"
+        >
+          <div className="card p-8 bg-white border-0">
+            <h3 className="mb-6 flex items-center gap-2 text-lg font-semibold h-8">
+              <Baby className="w-6 h-6 text-primary-500" />
+              추천 활동
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {developmentData.recommendedActivities.slice(0, 4).map((activity, index) => {
+                // Benefit에 따른 색상 매핑 (이모지 제거, 색상만 유지)
+                let bgColor = "from-blue-50 to-indigo-50";
 
-              // 배경에 맞는 아이콘 색상 선택
-              const iconColor =
-                activity.icon === 'Eye' ? 'text-orange-600' :
-                  activity.icon === 'Activity' ? 'text-green-600' :
-                    activity.icon === 'Music' ? 'text-blue-600' :
-                      activity.icon === 'Hand' ? 'text-cyan-600' : 'text-gray-700'
+                if (activity.benefit === "운동") {
+                  bgColor = "from-green-50 to-emerald-50";
+                } else if (activity.benefit === "언어") {
+                  bgColor = "from-purple-50 to-pink-50";
+                } else if (activity.benefit === "인지") {
+                  bgColor = "from-yellow-50 to-orange-50";
+                } else if (activity.benefit === "사회성") {
+                  bgColor = "from-red-50 to-rose-50";
+                } else if (activity.benefit === "정서") { 
+                  bgColor = "from-orange-50 to-red-50";
+                }
 
-              return (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 + index * 0.1 }}
-                  whileHover={{ y: -4 }}
-                  className={`p-5 bg-gradient-to-br ${activity.gradient} rounded-3xl border-0 transition-all ${activity.score >= 85 ? 'ring-2 ring-primary-300 shadow-glow-mint' : 'shadow-soft hover:shadow-soft-lg'
-                    }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
-                      <IconComponent className={`w-6 h-6 ${iconColor}`} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-gray-800 font-semibold">{activity.title}</h4>
-                        <span className="text-xs px-3 py-1 bg-white/80 text-gray-700 rounded-full shadow-sm">
-                          {activity.category}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">⏱ {activity.duration}</span>
-                        <span className="flex items-center gap-1">✨ {activity.benefit}</span>
-                      </div>
-                    </div>
+
+                return (
+                  <div
+                    key={index}
+                    className={`p-6 rounded-2xl border border-gray-100 shadow-sm bg-gradient-to-br ${bgColor} flex flex-col text-left`}
+                  >
+                    <h4 className="text-lg font-bold text-gray-900 mb-1">{activity.title}</h4>
+                    <p className="text-sm text-gray-600">{activity.benefit} 발달에 좋아요!</p>
                   </div>
-                </motion.div>
-              )
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
+
+
     </div>
   )
 }

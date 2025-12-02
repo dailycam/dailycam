@@ -77,40 +77,6 @@ export const Dashboard = () => {
         return [{ start: startTime, end: endTime }]
     }, [timelineEvents])
 
-    // 시계 데이터 생성 (12시간)
-    const clockData = useMemo(() => {
-        const data = []
-        for (let i = 0; i < 24; i++) {
-            // 해당 시간의 이벤트 찾기
-            const hourEvents = timelineEvents.filter(e => parseInt(e.time.split(':')[0]) === i)
-
-            let safetyLevel: 'safe' | 'warning' | 'danger' | null = null
-            let incident = ''
-
-            if (hourEvents.length > 0) {
-                // 가장 심각한 상태 확인
-                if (hourEvents.some(e => e.severity === 'danger')) {
-                    safetyLevel = 'danger'
-                    incident = '위험 감지'
-                } else if (hourEvents.some(e => e.severity === 'warning')) {
-                    safetyLevel = 'warning'
-                    incident = '주의 필요'
-                } else {
-                    safetyLevel = 'safe'
-                }
-            }
-
-            data.push({
-                hour: i,
-                safetyLevel,
-                safetyScore: 100, // 개별 점수는 일단 100으로 가정
-                color: '',
-                incident
-            })
-        }
-        return data
-    }, [timelineEvents])
-
     // 시간대별 통계 - 백엔드 데이터 우선 사용
     const hourlyStats = useMemo(() => {
         // 백엔드에서 hourlyStats를 받았다면 그대로 사용
@@ -119,44 +85,108 @@ export const Dashboard = () => {
             return dashboardData.hourlyStats
         }
 
-        // 백엔드 데이터가 없으면 타임라인 이벤트로 계산
+        // 백엔드 데이터가 없으면 타임라인 이벤트로 계산 (평균 점수 로직 적용)
         console.log('⚠️ [Hourly Stats] 백엔드 데이터 없음, 타임라인으로 계산')
-        const stats = Array.from({ length: 24 }, (_, i) => ({
+
+        // 중간 집계용 배열
+        const tempStats = Array.from({ length: 24 }, (_, i) => ({
             hour: i,
-            safetyScore: 100,      // 기본 100점
-            developmentScore: 50,  // 기본 50점
+            totalSafetyScore: 0,
+            totalDevScore: 0,
+            safetyCount: 0,
+            devCount: 0,
             eventCount: 0
         }))
 
         timelineEvents.forEach(event => {
             const hour = parseInt(event.time.split(':')[0])
             if (hour >= 0 && hour < 24) {
-                stats[hour].eventCount += 1
+                tempStats[hour].eventCount += 1
 
                 if (event.type === 'safety') {
-                    // 안전 점수 차감
-                    if (event.severity === 'danger') stats[hour].safetyScore -= 20
-                    else if (event.severity === 'warning') stats[hour].safetyScore -= 10
+                    tempStats[hour].safetyCount += 1
+                    // 이벤트 심각도에 따른 점수 부여
+                    if (event.severity === 'danger') tempStats[hour].totalSafetyScore += 60
+                    else if (event.severity === 'warning') tempStats[hour].totalSafetyScore += 80
+                    else tempStats[hour].totalSafetyScore += 95
                 } else if (event.type === 'development') {
-                    // 발달 점수 가산
-                    stats[hour].developmentScore += 10
+                    tempStats[hour].devCount += 1
+                    tempStats[hour].totalDevScore += 10 // 발달 이벤트는 가산점 (기본 로직 유지)
                 }
             }
         })
 
-        // 점수 보정 (0~100)
-        return stats.map(s => ({
-            ...s,
-            safetyScore: Math.max(0, Math.min(100, s.safetyScore)),
-            developmentScore: Math.max(0, Math.min(100, s.developmentScore))
+        // 최종 평균 계산
+        return tempStats.map(s => ({
+            hour: s.hour,
+            safetyScore: s.safetyCount > 0 ? Math.round(s.totalSafetyScore / s.safetyCount) : 100,
+            developmentScore: s.devCount > 0 ? Math.min(100, 50 + s.totalDevScore) : 50, // 발달 점수는 기본 50 + 가산점
+            eventCount: s.eventCount
         }))
-    }, [dashboardData, timelineEvents])
+    }, [timelineEvents, dashboardData])
+
+    // 시계 데이터 생성 (24시간)
+    const clockData = useMemo(() => {
+        // hourlyStats가 있으면 그것을 기반으로 생성 (평균 점수 반영)
+        if (hourlyStats && hourlyStats.length > 0) {
+            return hourlyStats.map((stat: any) => {
+                let safetyLevel: 'safe' | 'warning' | 'danger' | null = 'safe'
+                if (stat.safetyScore < 70) safetyLevel = 'danger'
+                else if (stat.safetyScore < 90) safetyLevel = 'warning'
+
+                // 이벤트가 없으면 safe
+                if (stat.eventCount === 0) safetyLevel = null
+
+                return {
+                    hour: stat.hour,
+                    safetyLevel,
+                    safetyScore: stat.safetyScore,
+                    color: '',
+                    incident: stat.eventCount > 0 ? `${stat.eventCount}건 감지` : ''
+                }
+            })
+        }
+
+        // 폴백 (혹시라도 hourlyStats가 없으면)
+        const data = []
+        for (let i = 0; i < 24; i++) {
+            const hourEvents = timelineEvents.filter(e => parseInt(e.time.split(':')[0]) === i)
+
+            let safetyLevel: 'safe' | 'warning' | 'danger' | null = null
+            let incident = ''
+            let score = 100
+
+            if (hourEvents.length > 0) {
+                if (hourEvents.some(e => e.severity === 'danger')) {
+                    safetyLevel = 'danger'
+                    incident = '위험 감지'
+                    score = 60
+                } else if (hourEvents.some(e => e.severity === 'warning')) {
+                    safetyLevel = 'warning'
+                    incident = '주의 필요'
+                    score = 80
+                } else {
+                    safetyLevel = 'safe'
+                    score = 95
+                }
+            }
+
+            data.push({
+                hour: i,
+                safetyLevel,
+                safetyScore: score,
+                color: '',
+                incident
+            })
+        }
+        return data
+    }, [timelineEvents, hourlyStats])
 
     // [수정] 백엔드에서 받은 실제 데이터 직접 사용
     const dailyStats = useMemo(() => {
         const currentHour = new Date().getHours()
 
-        // 22시 이후면 초기화
+        // 22시 이후면 초기화 (이 로직은 유지)
         if (currentHour >= 22) {
             return {
                 safetyScore: 100,
@@ -182,15 +212,11 @@ export const Dashboard = () => {
         }
     }, [dashboardData])
 
-
-
     // 모달 상태
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [modalEvents, setModalEvents] = useState<any[]>([])
     const [modalTimeRange, setModalTimeRange] = useState<string | null>(null)
     const [modalCategory, setModalCategory] = useState<string | null>(null)
-
-
 
     const handleEventClick = (events: any[], timeRange: string, category: string) => {
         setModalEvents(events)

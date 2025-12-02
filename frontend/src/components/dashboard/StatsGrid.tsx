@@ -64,11 +64,11 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
             label: '이벤트 감지',
             value: incidentCount.toString(),
             unit: '건',
-            change: '2건 주의',
-            changeLabel: '모두 해결됨',
+            change: incidentCount === 0 ? '안전함' : '확인 필요',
+            changeLabel: incidentCount === 0 ? '특이사항 없음' : '감지된 이벤트',
             icon: Activity,
-            color: 'text-warning',
-            bgColor: 'bg-warning-50',
+            color: incidentCount === 0 ? 'text-safe' : 'text-warning',
+            bgColor: incidentCount === 0 ? 'bg-safe-50' : 'bg-warning-50',
             trend: 'neutral'
         },
     ]

@@ -114,13 +114,13 @@ def get_development_summary(
         .all()
     )
     
-    # 카테고리별 색상 매핑
+    # 카테고리별 색상 매핑 (파스텔톤)
     category_colors = {
-        "언어": "#0284c7",
-        "운동": "#22c55e",
-        "인지": "#f59e0b",
-        "사회성": "#0ea5e9",
-        "정서": "#06b6d4",
+        "언어": "#a2d2ff", # Light Blue
+        "운동": "#b0f2c2", # Light Green
+        "인지": "#ffc77d", # Light Orange
+        "사회성": "#d4a2ff", # Light Purple
+        "정서": "#ffb0bb", # Light Pink
     }
     
     daily_frequency = [
@@ -150,4 +150,5 @@ def get_development_summary(
         "strongest_area": strongest_area,
         "daily_development_frequency": daily_frequency,  # 모든 이벤트 집계
         "recommended_activities": recommendations,
+        "development_insights": latest_log.development_insights if latest_log and latest_log.development_insights else [], # AI로부터 직접 받아옴
     }
