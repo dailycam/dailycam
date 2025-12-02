@@ -10,6 +10,9 @@ import {
     ExternalLink,
     ChevronRight,
     Search,
+    Lightbulb,
+    Baby,
+    Calendar,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { getDashboardData, type DashboardData } from '../lib/api'
@@ -34,7 +37,7 @@ const ContentCard = ({ link }: { link: RecommendedLink }) => {
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="card p-0 border-0 shadow-sm hover:shadow-md transition-all overflow-hidden group"
+            className="card p-0 border-0 shadow-sm hover:shadow-md transition-all overflow-hidden group block h-full"
         >
             {/* 썸네일 영역 */}
             {link.type === 'youtube' && (
@@ -146,6 +149,15 @@ export default function AppHome() {
             tags: ['수면', '교육', '밤잠'],
             category: '수면'
         },
+        {
+            id: 'yt3',
+            type: 'youtube',
+            title: '이유식 초기 준비물 총정리',
+            description: '이유식 시작할 때 꼭 필요한 준비물 리스트',
+            url: 'https://youtube.com/example3',
+            tags: ['이유식', '준비물', '육아템'],
+            category: '영양'
+        },
     ]
 
     // 블로그 추천
@@ -167,6 +179,15 @@ export default function AppHome() {
             url: 'https://blog.example.com/baby-food',
             tags: ['영양', '이유식', '육아'],
             category: '영양'
+        },
+        {
+            id: 'blog3',
+            type: 'blog',
+            title: '아기랑 놀아주는 방법 100가지',
+            description: '집에서 할 수 있는 다양한 놀이 방법',
+            url: 'https://blog.example.com/play-ideas',
+            tags: ['놀이', '육아', '집콕놀이'],
+            category: '놀이'
         },
     ]
 
@@ -215,6 +236,16 @@ export default function AppHome() {
                 transition={{ duration: 0.6 }}
                 className="mb-8"
             >
+                <div className="flex items-center gap-2 mb-4">
+                    <span className="px-3 py-1 rounded-full bg-primary-100/80 text-primary-700 text-xs font-bold flex items-center gap-1.5 border border-primary-200">
+                        <Baby className="w-3.5 h-3.5" />
+                        생후 7개월
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-white/80 text-gray-600 text-xs font-bold flex items-center gap-1.5 border border-gray-200 shadow-sm">
+                        <Calendar className="w-3.5 h-3.5" />
+                        D+215
+                    </span>
+                </div>
                 <p className="text-gray-500 mb-1">오늘도 함께해요</p>
                 <h1 className="text-4xl mb-2 bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent">
                     지수는 기분이 아주 좋아요!
@@ -288,6 +319,29 @@ export default function AppHome() {
                 </div>
             </motion.div>
 
+            {/* 오늘의 육아 팁 */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+                className="mb-8"
+            >
+                <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-4 flex items-start gap-4">
+                    <div className="p-2.5 bg-amber-100 rounded-lg flex-shrink-0 text-amber-600">
+                        <Lightbulb className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-gray-800 text-sm mb-1 flex items-center gap-2">
+                            오늘의 육아 팁
+                            <span className="text-[10px] bg-amber-200/50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Daily</span>
+                        </h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                            아기가 배밀이를 시작할 때는 바닥에 작은 물건이나 전선이 없는지 수시로 확인해주세요! 호기심이 왕성해지는 시기랍니다. 🌱
+                        </p>
+                    </div>
+                </div>
+            </motion.div>
+
             {/* 카테고리 필터 + 검색창 */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -304,8 +358,8 @@ export default function AppHome() {
                                 key={category}
                                 onClick={() => setSelectedCategory(category)}
                                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedCategory === category
-                                    ? 'bg-primary-500 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        ? 'bg-primary-500 text-white shadow-md'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
                             >
                                 {category}
