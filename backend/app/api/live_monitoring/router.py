@@ -10,6 +10,7 @@ import numpy as np
 from typing import Dict
 
 from app.services.live_monitoring.fake_stream_generator import FakeLiveStreamGenerator
+from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
 from app.services.live_monitoring.hourly_analyzer import (
     start_hourly_analysis_for_camera,
     stop_hourly_analysis_for_camera
@@ -23,12 +24,17 @@ from app.database.session import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from app.services.daily_report.report_generator import DailyReportGenerator
+from fastapi.responses import FileResponse
 
 router = APIRouter()
 
 # 전역 스트림 관리
 active_streams: Dict[str, FakeLiveStreamGenerator] = {}
 stream_tasks: Dict[str, asyncio.Task] = {}
+
+# HLS 스트림 관리
+active_hls_streams: Dict[str, HLSStreamGenerator] = {}
+hls_stream_tasks: Dict[str, asyncio.Task] = {}
 
 
 @router.post("/upload-video")
@@ -131,6 +137,137 @@ async def start_stream(
     }
 
 
+@router.post("/start-hls-stream/{camera_id}")
+async def start_hls_stream(
+    camera_id: str,
+    camera_url: str = Query(None, description="홈캠 RTSP/HTTP URL (실제 카메라인 경우)"),
+    enable_analysis: bool = Query(True, description="10분 단위 분석 활성화"),
+    enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
+    age_months: int = Query(None, description="아이의 개월 수")
+):
+    """
+    HLS 스트림 시작 (진짜 실시간 스트림)
+    - 백그라운드에서 계속 실행
+    - 재연결 시 자동으로 현재 시간부터 재생
+    - 가짜 영상 또는 실제 홈캠 지원
+    """
+    if camera_id in active_hls_streams:
+        raise HTTPException(status_code=400, detail="이미 HLS 스트림이 실행 중입니다")
+    
+    # 실제 카메라인지 가짜 영상인지 판단
+    is_real_camera = camera_url is not None
+    
+    if is_real_camera:
+        # 실제 홈캠
+        video_source = camera_url
+        output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+    else:
+        # 가짜 영상
+        video_dir = Path(f"videos/{camera_id}")
+        if not video_dir.exists():
+            raise HTTPException(404, f"영상 디렉토리가 없습니다: {video_dir}")
+        video_source = video_dir
+        output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+    
+    # 현재 이벤트 루프 가져오기
+    loop = asyncio.get_running_loop()
+    
+    # HLS 스트림 생성기 생성
+    generator = HLSStreamGenerator(
+        camera_id=camera_id,
+        video_source=video_source,
+        output_dir=output_dir,
+        is_real_camera=is_real_camera,
+        segment_duration=10,  # 10초 단위 HLS 세그먼트
+        enable_realtime_detection=enable_realtime_detection,
+        age_months=age_months,
+        event_loop=loop
+    )
+    active_hls_streams[camera_id] = generator
+    
+    # 백그라운드 태스크로 실행
+    task = asyncio.create_task(generator.start_streaming())
+    hls_stream_tasks[camera_id] = task
+    
+    # 10분 단위 분석 스케줄러 시작
+    if enable_analysis:
+        await start_segment_analysis_for_camera(camera_id)
+    
+    stream_type = "실제 홈캠" if is_real_camera else "가짜 영상"
+    print(f"[API] HLS 스트림 시작: {camera_id} ({stream_type}, 10분 단위 분석: {enable_analysis})")
+    
+    return {
+        "message": f"HLS 스트림 시작: {camera_id}",
+        "camera_id": camera_id,
+        "status": "running",
+        "stream_type": stream_type,
+        "analysis_enabled": enable_analysis,
+        "playlist_url": generator.get_playlist_url()
+    }
+
+
+@router.post("/stop-hls-stream/{camera_id}")
+async def stop_hls_stream(camera_id: str):
+    """HLS 스트림 중지"""
+    if camera_id not in active_hls_streams:
+        raise HTTPException(status_code=404, detail="실행 중인 HLS 스트림이 없습니다")
+    
+    # 스트림 중지
+    generator = active_hls_streams[camera_id]
+    generator.stop_streaming()
+    
+    # 태스크 취소
+    if camera_id in hls_stream_tasks:
+        task = hls_stream_tasks[camera_id]
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        del hls_stream_tasks[camera_id]
+    
+    del active_hls_streams[camera_id]
+    
+    # 분석 스케줄러 중지
+    stop_segment_analysis_for_camera(camera_id)
+    
+    print(f"[API] HLS 스트림 중지: {camera_id}")
+    
+    return {
+        "message": f"HLS 스트림 중지: {camera_id}",
+        "camera_id": camera_id,
+        "status": "stopped"
+    }
+
+
+@router.get("/hls/{camera_id}/{filename}")
+async def serve_hls_file(camera_id: str, filename: str):
+    """HLS 파일 제공 (.m3u8 플레이리스트 또는 .ts 세그먼트)"""
+    file_path = Path(f"temp_videos/hls_buffer/{camera_id}/hls/{filename}")
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+    
+    # MIME 타입 설정
+    if filename.endswith('.m3u8'):
+        media_type = "application/vnd.apple.mpegurl"
+    elif filename.endswith('.ts'):
+        media_type = "video/mp2t"
+    else:
+        media_type = "application/octet-stream"
+    
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
+
+
 @router.post("/stop-stream/{camera_id}")
 async def stop_stream(camera_id: str):
     """스트림 및 분석 스케줄러 중지"""
@@ -170,13 +307,165 @@ async def stream_video(
     camera_id: str,
     loop: bool = Query(True, description="반복 재생 여부"),
     speed: float = Query(1.0, description="재생 속도"),
-    video_path: str = Query(None, description="특정 비디오 경로")
+    video_path: str = Query(None, description="특정 비디오 경로"),
+    use_segments: bool = Query(True, description="세그먼트 파일 기반 스트리밍 사용 여부")
 ):
     """
     실시간 스트림 (MJPEG 스트리밍)
     
-    원본 영상들을 순환 재생하여 스트리밍합니다.
+    세그먼트 파일 기반 스트리밍 (권장):
+    - FakeLiveStreamGenerator가 생성한 10분 단위 세그먼트 파일을 스트리밍
+    - 재연결 시 현재 시간에 해당하는 세그먼트부터 재생 (이어서 재생 효과)
+    - 홈캠 연동 시에도 동일한 구조 사용 가능
+    
+    원본 영상 기반 스트리밍 (fallback):
+    - use_segments=False일 때 원본 영상들을 순환 재생
     """
+    # 세그먼트 파일 기반 스트리밍 (권장)
+    if use_segments:
+        buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
+        
+        # 완료된 세그먼트 파일만 필터링 (현재 작성 중인 파일 제외)
+        def is_segment_complete(seg_file: Path) -> bool:
+            """세그먼트 파일이 완료되었는지 확인"""
+            try:
+                # 파일이 최근 5초 이내에 수정되었으면 아직 작성 중일 수 있음
+                import time
+                file_mtime = seg_file.stat().st_mtime
+                current_time = time.time()
+                
+                # 5초 이내에 수정되었으면 아직 작성 중
+                if current_time - file_mtime < 5:
+                    return False
+                
+                # 파일 크기가 너무 작으면 아직 작성 중
+                if seg_file.stat().st_size < 1000:  # 1KB 미만
+                    return False
+                
+                # VideoCapture로 열어서 확인
+                cap = cv2.VideoCapture(str(seg_file))
+                if not cap.isOpened():
+                    cap.release()
+                    return False
+                
+                # 최소 1프레임이라도 읽을 수 있는지 확인
+                ret, _ = cap.read()
+                cap.release()
+                return ret
+            except Exception:
+                return False
+        
+        # 완료된 세그먼트 파일만 필터링
+        all_segment_files = sorted(buffer_dir.glob("segment_*.mp4"))
+        segment_files = [f for f in all_segment_files if is_segment_complete(f)]
+        
+        if segment_files:
+            # 현재 시간에 해당하는 세그먼트 찾기
+            now = datetime.now()
+            current_segment = None
+            current_segment_index = 0
+            
+            for i, seg_file in enumerate(segment_files):
+                # 파일명에서 시간 추출: segment_YYYYMMDD_HHMMSS.mp4
+                try:
+                    time_str = seg_file.stem.replace('segment_', '')
+                    seg_time = datetime.strptime(time_str, '%Y%m%d_%H%M%S')
+                    seg_end = seg_time + timedelta(minutes=10)
+                    
+                    if seg_time <= now < seg_end:
+                        current_segment = seg_file
+                        current_segment_index = i
+                        break
+                    elif seg_time > now:
+                        # 현재 시간보다 미래 세그먼트면 이전 세그먼트 사용
+                        if i > 0:
+                            current_segment = segment_files[i - 1]
+                            current_segment_index = i - 1
+                        else:
+                            current_segment = segment_files[0]
+                            current_segment_index = 0
+                        break
+                except ValueError:
+                    continue
+            
+            # 현재 세그먼트가 없으면 가장 최근 완료된 세그먼트 사용
+            if current_segment is None:
+                current_segment = segment_files[-1] if segment_files else None
+                current_segment_index = len(segment_files) - 1
+            
+            if current_segment:
+                print(f"[스트림] 세그먼트 파일 기반 스트리밍: {current_segment.name} (인덱스: {current_segment_index}, 완료된 세그먼트: {len(segment_files)}개)")
+                
+                async def generate_frames_from_segments():
+                    segment_index = current_segment_index
+                    last_segment_count = len(segment_files)
+                    
+                    try:
+                        while True:
+                            # 세그먼트 파일 목록이 업데이트되었는지 확인 (새로운 세그먼트가 생성되었을 수 있음)
+                            current_segment_files = sorted([f for f in buffer_dir.glob("segment_*.mp4") if is_segment_complete(f)])
+                            
+                            if segment_index >= len(current_segment_files):
+                                if loop:
+                                    segment_index = 0
+                                else:
+                                    break
+                            
+                            current_seg = current_segment_files[segment_index]
+                            print(f"[스트림] 세그먼트 재생: {current_seg.name}")
+                            
+                            cap = cv2.VideoCapture(str(current_seg))
+                            if not cap.isOpened():
+                                print(f"[스트림] 세그먼트 파일을 열 수 없습니다: {current_seg}")
+                                segment_index += 1
+                                continue
+                            
+                            fps = cap.get(cv2.CAP_PROP_FPS)
+                            if fps <= 0:
+                                fps = 5.0  # 세그먼트는 5fps로 생성됨
+                            
+                            frame_count = 0
+                            while True:
+                                ret, frame = cap.read()
+                                if not ret:
+                                    break
+                                
+                                frame_count += 1
+                                
+                                # JPEG로 인코딩
+                                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                                if not ret:
+                                    continue
+                                
+                                frame_bytes = buffer.tobytes()
+                                
+                                # MJPEG 형식으로 전송
+                                yield (b'--frame\r\n'
+                                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                                
+                                # 속도 조절
+                                if speed > 0:
+                                    await asyncio.sleep(1.0 / (fps * speed))
+                            
+                            cap.release()
+                            print(f"[스트림] 세그먼트 재생 완료: {current_seg.name} ({frame_count} 프레임)")
+                            
+                            segment_index += 1
+                            
+                    except asyncio.CancelledError:
+                        print(f"[스트림] 클라이언트 연결 끊김, 스트리밍 중지")
+                        raise
+                    finally:
+                        print(f"[스트림] 스트리밍 종료: {camera_id}")
+                
+                return StreamingResponse(
+                    generate_frames_from_segments(),
+                    media_type="multipart/x-mixed-replace; boundary=frame"
+                )
+            else:
+                print(f"[스트림] 완료된 세그먼트 파일이 없습니다. 원본 영상 기반 스트리밍으로 전환")
+    
+    # 원본 영상 기반 스트리밍 (fallback)
     video_dir = Path(f"videos/{camera_id}")
     
     # 비디오 파일 찾기
@@ -205,7 +494,7 @@ async def stream_video(
                 detail=f"스트림 파일이 없습니다. {video_dir}에 영상을 업로드하세요"
             )
     
-    print(f"[스트림] 스트리밍 시작: {camera_id}, {len(video_files)}개 파일")
+    print(f"[스트림] 원본 영상 기반 스트리밍: {camera_id}, {len(video_files)}개 파일")
     
     # MJPEG 스트리밍 생성 (여러 파일 순환 재생)
     async def generate_frames():

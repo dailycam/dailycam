@@ -113,7 +113,7 @@ class FakeLiveStreamGenerator:
         frame_count = 0
         frames_written = 0
         
-        while cap.isOpened():
+        while cap.isOpened() and self.is_running:
             ret, frame = cap.read()
             if not ret:
                 break

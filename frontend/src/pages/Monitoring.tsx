@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+import Hls from 'hls.js'
 import {
   Camera,
   Play,
@@ -22,6 +24,10 @@ import {
   getStreamUrl, 
   stopStream, 
   startStream,
+  startHLSStream,
+  stopHLSStream,
+  getHLSPlaylistUrl,
+  getStreamStatus,
   getLatestEvents,
   getMonitoringStats,
   resetMonitoringData,
@@ -30,6 +36,7 @@ import {
 } from '../lib/api'
 
 export default function Monitoring() {
+  const location = useLocation()
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(false)
   const [selectedCamera, setSelectedCamera] = useState('camera-1')
@@ -49,6 +56,13 @@ export default function Monitoring() {
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [isResettingData, setIsResettingData] = useState(false)
   const [resetMessage, setResetMessage] = useState<string | null>(null)
+  
+  // HLS 관련 상태
+  const [useHLS] = useState(true)  // HLS 사용 여부 (FFmpeg 설치 완료)
+  const [hlsPlaylistUrl, setHlsPlaylistUrl] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamImgRef = useRef<HTMLImageElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -71,9 +85,135 @@ export default function Monitoring() {
       
       console.log('실시간 데이터 로드 완료:', { events: eventsData.count, stats: statsData })
     } catch (error) {
-      console.error('실시간 데이터 로드 실패:', error)
+      // 백엔드 서버가 없거나 연결 실패 시 조용히 실패 (에러 로그만 출력)
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.warn('백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.')
+      } else {
+        console.error('실시간 데이터 로드 실패:', error)
+      }
+      // 에러 발생 시에도 기존 데이터는 유지
     } finally {
       setIsLoadingData(false)
+    }
+  }
+
+  // 스트림 복원 함수 (기존 URL 유지하여 스트림 연속성 보장)
+  const restoreStreamFromBackend = async () => {
+    try {
+      // 이미 스트림이 활성화되어 있고 URL이 있으면 복원하지 않음
+      if (isStreamActive && streamUrl) {
+        console.log('이미 스트림이 활성화되어 있음, 복원 스킵')
+        return
+      }
+      
+      const status = await getStreamStatus(selectedCamera)
+      console.log('백엔드 스트림 상태:', status.is_running)
+      
+      if (status.is_running) {
+        // 백엔드에서 스트림이 활성화되어 있으면 복원
+        const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
+        let url: string
+        let streamLoopValue = streamLoop
+        let streamSpeedValue = streamSpeed
+        
+        if (savedStreamInfo) {
+          try {
+            const info = JSON.parse(savedStreamInfo)
+            streamLoopValue = info.streamLoop ?? streamLoop
+            streamSpeedValue = info.streamSpeed ?? streamSpeed
+            
+            // 기존 URL이 있으면 그대로 사용 (타임스탬프 추가하지 않음 - 스트림 연속성 유지)
+            if (info.streamUrl) {
+              url = info.streamUrl
+              console.log('기존 스트림 URL 사용 (연속성 유지):', url)
+            } else {
+              // URL이 없으면 새로 생성 (첫 시작 시에만)
+              const timestamp = Date.now()
+              if (info.isFakeStream) {
+                url = getStreamUrl(
+                  selectedCamera,
+                  streamLoopValue,
+                  streamSpeedValue,
+                  timestamp
+                )
+                lastVideoPathRef.current = null
+              } else if (info.videoPath) {
+                lastVideoPathRef.current = info.videoPath
+                url = getStreamUrl(
+                  selectedCamera,
+                  streamLoopValue,
+                  streamSpeedValue,
+                  timestamp,
+                  info.videoPath
+                )
+              } else {
+                url = getStreamUrl(
+                  selectedCamera,
+                  streamLoopValue,
+                  streamSpeedValue,
+                  timestamp
+                )
+                lastVideoPathRef.current = null
+              }
+            }
+            
+            // videoPath 복원
+            if (info.videoPath) {
+              lastVideoPathRef.current = info.videoPath
+            } else if (info.isFakeStream) {
+              lastVideoPathRef.current = null
+            }
+          } catch (e) {
+            console.error('스트림 정보 파싱 실패, 기본값으로 복원:', e)
+            // 파싱 실패 시 기본값으로 하이브리드 스트림 복원
+            const timestamp = Date.now()
+            url = getStreamUrl(selectedCamera, streamLoop, streamSpeed, timestamp)
+            lastVideoPathRef.current = null
+          }
+        } else {
+          // localStorage에 정보가 없어도 백엔드에서 활성화되어 있으면 기본값으로 복원
+          console.log('localStorage에 정보 없음 - 기본값으로 하이브리드 스트림 복원')
+          const timestamp = Date.now()
+          url = getStreamUrl(selectedCamera, streamLoop, streamSpeed, timestamp)
+          lastVideoPathRef.current = null
+          
+          // localStorage에 저장 (다음번을 위해)
+          const streamInfo = {
+            streamUrl: url,
+            streamLoop: streamLoop,
+            streamSpeed: streamSpeed,
+            cameraId: selectedCamera,
+            isStreamActive: true,
+            isFakeStream: true,
+          }
+          localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
+          console.log('✅ localStorage에 스트림 정보 저장:', streamInfo)
+        }
+        
+        // 스트림 URL 설정 (이미 URL이 같으면 설정하지 않음)
+        if (streamUrl !== url) {
+          setStreamLoop(streamLoopValue)
+          setStreamSpeed(streamSpeedValue)
+          // URL을 null로 설정하지 않고 바로 설정 (이미지 리로드 방지)
+          setStreamUrl(url)
+          setIsStreamActive(true)
+          console.log('✅ 스트림 복원 완료 (URL 유지):', url)
+        } else {
+          // URL이 같으면 상태만 업데이트
+          setIsStreamActive(true)
+          console.log('✅ 스트림 이미 복원됨:', url)
+        }
+      } else {
+        // 백엔드에서 스트림이 비활성화되어 있으면 프론트엔드 상태 초기화
+        console.log('❌ 백엔드 스트림 비활성화 - 프론트엔드 상태 초기화')
+        localStorage.removeItem(`stream_${selectedCamera}`)
+        setIsStreamActive(false)
+        setStreamUrl(null)
+        lastVideoPathRef.current = null
+        setReconnectAttempts(0)
+      }
+    } catch (error) {
+      console.error('백엔드 스트림 상태 확인 실패:', error)
     }
   }
 
@@ -82,50 +222,84 @@ export default function Monitoring() {
     // 실시간 데이터 로드
     loadRealtimeData()
     
-    const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
-    if (savedStreamInfo) {
-      try {
-        const info = JSON.parse(savedStreamInfo)
-        if (info.videoPath) {
-          lastVideoPathRef.current = info.videoPath
-          setStreamLoop(info.streamLoop ?? streamLoop)
-          setStreamSpeed(info.streamSpeed ?? streamSpeed)
-          
-          // 타임스탬프 추가하여 항상 새로운 연결 시도
-          const timestamp = Date.now()
-          const url = getStreamUrl(
-            selectedCamera,
-            info.streamLoop ?? streamLoop,
-            info.streamSpeed ?? streamSpeed,
-            timestamp,
-            info.videoPath
-          )
-          setStreamUrl(url)
-          setIsStreamActive(true)
-          console.log('저장된 스트림 정보 복원 (새 연결):', info, 'timestamp:', timestamp)
+    // 백엔드 상태를 먼저 확인하여 스트림 복원
+    restoreStreamFromBackend()
+  }, [selectedCamera])
+
+  // 페이지 가시성 변경 감지 (백그라운드에서도 스트림 유지)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && streamUrl && streamImgRef.current) {
+        // 페이지가 다시 보일 때 스트림이 계속 로드되고 있는지 확인
+        const img = streamImgRef.current
+        // 이미지가 로드 중이 아니면 다시 로드 (하지만 URL은 변경하지 않음 - 이어서 재생)
+        if (!img.complete || img.naturalWidth === 0) {
+          console.log('페이지 복귀 - 스트림 이미지 재연결 (URL 유지)')
+          // 이미지 소스를 그대로 유지하여 이어서 재생
+          const currentSrc = img.src
+          img.src = ''
+          setTimeout(() => {
+            img.src = currentSrc
+          }, 10)
         }
-      } catch (e) {
-        console.warn('스트림 정보 복원 실패:', e)
-        localStorage.removeItem(`stream_${selectedCamera}`)
       }
     }
-  }, [selectedCamera])
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamUrl])
+
+  // React Router location 변경 감지 (다른 페이지에서 돌아올 때)
+  useEffect(() => {
+    // 모니터링 페이지로 돌아왔을 때만 실행
+    if (location.pathname === '/monitoring') {
+      console.log('🔄 모니터링 페이지 진입 - 스트림 상태 확인')
+      
+      // 이미 스트림이 활성화되어 있고 URL이 있으면 복원하지 않음 (이미지가 계속 로드되도록)
+      if (isStreamActive && streamUrl) {
+        console.log('스트림이 이미 활성화되어 있음, 복원 스킵')
+        return
+      }
+      
+      // 스트림이 없거나 비활성화되어 있으면 복원
+      const timer = setTimeout(() => {
+        restoreStreamFromBackend()
+      }, 100)
+      
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
 
   // 스트림 정보를 localStorage에 저장
   useEffect(() => {
-    if (streamUrl && lastVideoPathRef.current) {
-      const streamInfo = {
-        videoPath: lastVideoPathRef.current,
+    if (streamUrl && isStreamActive) {
+      const streamInfo: any = {
         streamUrl: streamUrl,
         streamLoop: streamLoop,
         streamSpeed: streamSpeed,
         cameraId: selectedCamera,
+        isStreamActive: isStreamActive, // 스트림 활성 상태도 저장
       }
+      
+      // videoPath가 있으면 저장 (업로드된 비디오인 경우)
+      if (lastVideoPathRef.current) {
+        streamInfo.videoPath = lastVideoPathRef.current
+      } else {
+        // videoPath가 없으면 하이브리드 스트림으로 표시
+        streamInfo.isFakeStream = true
+      }
+      
       localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
-    } else {
+      console.log('스트림 정보 저장:', streamInfo)
+    } else if (!isStreamActive && !streamUrl) {
+      // 스트림이 완전히 중지된 경우에만 localStorage에서 제거
       localStorage.removeItem(`stream_${selectedCamera}`)
     }
-  }, [streamUrl, streamLoop, streamSpeed, selectedCamera])
+  }, [streamUrl, streamLoop, streamSpeed, selectedCamera, isStreamActive])
 
   // 실시간 데이터 폴링 (스트림이 활성화되어 있을 때)
   useEffect(() => {
@@ -143,45 +317,15 @@ export default function Monitoring() {
     }
   }, [isStreamActive, selectedCamera])
 
-  // 페이지 visibility 변경 감지 (다른 페이지 갔다가 돌아올 때 스트림 복원)
+  // 페이지 visibility 변경 감지 (브라우저 탭 전환 시)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && streamUrl) {
-        console.log('페이지 재진입 감지 - 스트림 복원 중...')
-        
+      if (document.visibilityState === 'visible' && location.pathname === '/monitoring') {
+        console.log('👁️ 페이지 가시성 변경 - 스트림 상태 확인')
         // 재연결 시도 횟수 리셋
         setReconnectAttempts(0)
-        
-        // 스트림 URL에 타임스탬프 추가하여 강제 새로고침
-        const timestamp = Date.now()
-        
-        // 기존 URL이 있으면 파라미터 유지하면서 타임스탬프만 업데이트
-        let newUrl: string
-        try {
-          const currentUrl = new URL(streamUrl, window.location.origin)
-          currentUrl.searchParams.set('_t', timestamp.toString())
-          newUrl = currentUrl.toString()
-        } catch (e) {
-          // URL 파싱 실패 시 기본 URL 사용
-          newUrl = getStreamUrl(
-            selectedCamera,
-            streamLoop,
-            streamSpeed,
-            timestamp,
-            lastVideoPathRef.current || undefined
-          )
-        }
-        
-        // 스트림 URL 업데이트 (강제 새로고침)
-        setStreamUrl(null)
-        setTimeout(() => {
-          setStreamUrl(newUrl)
-          setIsStreamActive(true)
-          console.log('스트림 복원 완료:', newUrl)
-        }, 100)
-        
-        // 실시간 데이터도 즉시 로드
-        loadRealtimeData()
+        // 백엔드 상태 확인 후 복원
+        restoreStreamFromBackend()
       }
     }
 
@@ -190,7 +334,7 @@ export default function Monitoring() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [streamUrl, selectedCamera, streamLoop, streamSpeed])
+  }, [location.pathname, selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,37 +433,62 @@ export default function Monitoring() {
     })
   }
 
-  // 가짜 라이브 스트림 시작 (하이브리드)
+  // HLS 스트림 시작
+  const handleStartHLSStream = async () => {
+    setIsStartingStream(true)
+    setStreamError(null)
+
+    try {
+      console.log('HLS 스트림 시작:', selectedCamera)
+      const ageMonths = 12 // TODO: 사용자 설정에서 가져오기
+      const result = await startHLSStream(selectedCamera, undefined, true, ageMonths)
+      console.log('HLS 스트림 시작 성공:', result)
+      
+      // HLS 플레이리스트 URL 설정
+      const playlistUrl = getHLSPlaylistUrl(selectedCamera)
+      setHlsPlaylistUrl(playlistUrl)
+      setIsStreamActive(true)
+      setIsPlaying(true)
+      
+      console.log('✅ HLS 플레이리스트 URL 설정 완료:', playlistUrl)
+    } catch (error: any) {
+      console.error('HLS 스트림 시작 오류:', error)
+      setStreamError(error.message || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+    } finally {
+      setIsStartingStream(false)
+    }
+  }
+
+  // 가짜 라이브 스트림 시작 (하이브리드) - MJPEG 방식
   const handleStartFakeStream = async () => {
     setIsStartingStream(true)
     setStreamError(null)
 
     try {
       console.log('하이브리드 스트림 시작:', selectedCamera)
-      // 아이의 개월 수 (예: 12개월, 실제로는 사용자 입력 또는 설정에서 가져와야 함)
-      const ageMonths = 12 // TODO: 사용자 설정에서 가져오기
+      const ageMonths = 12
       const result = await startStream(selectedCamera, true, ageMonths)
       console.log('하이브리드 스트림 시작 성공:', result)
-
-      // 스트림 URL 설정 (MJPEG 스트리밍)
+      
       const timestamp = Date.now()
       const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed, timestamp)
+      
+      const streamInfo = {
+        streamUrl: url,
+        streamLoop: streamLoop,
+        streamSpeed: streamSpeed,
+        cameraId: selectedCamera,
+        isStreamActive: true,
+        isFakeStream: true,
+      }
+      localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
+      console.log('✅ 스트림 정보 저장 (하이브리드):', streamInfo)
+      
       setStreamUrl(url)
       setIsStreamActive(true)
       setIsPlaying(true)
       startStreamMonitoring()
-
-      // localStorage에 저장
-      localStorage.setItem(
-        `stream_${selectedCamera}`,
-        JSON.stringify({
-          streamUrl: url,
-          streamLoop: streamLoop,
-          streamSpeed: streamSpeed,
-          cameraId: selectedCamera,
-          isFakeStream: true,
-        })
-      )
+      console.log('✅ 스트림 URL 설정 완료:', url)
     } catch (error: any) {
       console.error('스트림 시작 오류:', error)
       setStreamError(error.message || '스트림 시작 중 오류가 발생했습니다.')
@@ -353,8 +522,23 @@ export default function Monitoring() {
   const handleStopStream = async () => {
     try {
       stopStreamMonitoring()
-      await stopStream(selectedCamera)
-      setStreamUrl(null)
+      
+      if (useHLS) {
+        // HLS 스트림 중지
+        await stopHLSStream(selectedCamera)
+        setHlsPlaylistUrl(null)
+        
+        // HLS 인스턴스 정리
+        if (hlsRef.current) {
+          hlsRef.current.destroy()
+          hlsRef.current = null
+        }
+      } else {
+        // MJPEG 스트림 중지
+        await stopStream(selectedCamera)
+        setStreamUrl(null)
+      }
+      
       setIsPlaying(false)
       setIsStreamActive(false)
       setReconnectAttempts(0)
@@ -365,44 +549,57 @@ export default function Monitoring() {
     }
   }
 
-  // 카메라 변경 시 스트림 URL 업데이트
+  // 카메라 변경 시에만 스트림 URL 업데이트
   useEffect(() => {
-    if (streamUrl) {
-      const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed)
-      setStreamUrl(url)
+    if (streamUrl && selectedCamera) {
+      // 카메라가 변경된 경우에만 URL 재생성
+      const currentUrl = new URL(streamUrl)
+      const currentCamera = currentUrl.pathname.split('/').pop()
+      
+      if (currentCamera !== selectedCamera) {
+        // 카메라가 변경된 경우에만 URL 재생성
+        const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed)
+        setStreamUrl(url)
+      }
+      // loop/speed 변경 시에는 URL을 변경하지 않음 (이미지 리로드 방지)
+      // 백엔드가 쿼리 파라미터를 읽어서 처리하지만, 이미 연결된 스트림은 계속 유지됨
     }
-  }, [selectedCamera, streamLoop, streamSpeed])
+  }, [selectedCamera])
 
   // 스트림 이미지 로드 오류 처리
   const handleStreamError = () => {
+    // 이미 재연결 중이면 무시
+    if (reconnectTimeoutRef.current) {
+      return
+    }
+    
     console.warn('스트림 이미지 로드 실패, 재연결 시도...')
     setIsStreamActive(false)
     
-    if (reconnectAttempts < 5 && lastVideoPathRef.current) {
+    if (reconnectAttempts < 3 && streamUrl) {
       const newAttempts = reconnectAttempts + 1
       setReconnectAttempts(newAttempts)
       
-      console.log(`재연결 시도 ${newAttempts}/5`)
+      console.log(`재연결 시도 ${newAttempts}/3`)
       
       reconnectTimeoutRef.current = setTimeout(() => {
-        const timestamp = Date.now()
-        const url = getStreamUrl(
-          selectedCamera,
-          streamLoop,
-          streamSpeed,
-          timestamp,
-          lastVideoPathRef.current || undefined
-        )
-        setStreamUrl(null)
-        setTimeout(() => {
-          setStreamUrl(url)
-          setIsStreamActive(true)
-        }, 100)
+        // URL을 변경하지 않고 이미지만 재로드
+        if (streamImgRef.current && streamUrl) {
+          const img = streamImgRef.current
+          const currentSrc = img.src
+          img.src = ''
+          setTimeout(() => {
+            img.src = currentSrc
+            setIsStreamActive(true)
+          }, 100)
+        }
+        reconnectTimeoutRef.current = null
       }, 2000)
     } else {
-      setStreamUrl(null)
-      setUploadError('스트림 연결에 실패했습니다. 비디오 파일을 다시 업로드해주세요.')
+      console.error('스트림 재연결 실패 - 최대 시도 횟수 초과')
+      setUploadError('스트림 연결에 실패했습니다. 페이지를 새로고침해주세요.')
       setIsStreamActive(false)
+      reconnectTimeoutRef.current = null
     }
   }
 
@@ -444,14 +641,89 @@ export default function Monitoring() {
     }
   }
 
-  // 스트림 URL이 변경되면 모니터링 재시작
+  // HLS 플레이어 초기화 및 관리
   useEffect(() => {
-    if (streamUrl) {
+    if (!useHLS || !hlsPlaylistUrl || !videoRef.current) {
+      return
+    }
+
+    const video = videoRef.current
+
+    // HLS 지원 확인
+    if (Hls.isSupported()) {
+      console.log('✅ HLS.js 지원됨, HLS 인스턴스 생성')
+      
+      // 기존 HLS 인스턴스 정리
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+      }
+
+      // 새 HLS 인스턴스 생성
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,  // 90초 백버퍼 유지
+      })
+      
+      hlsRef.current = hls
+      hls.loadSource(hlsPlaylistUrl)
+      hls.attachMedia(video)
+
+      // 이벤트 리스너
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log('✅ HLS 플레이리스트 파싱 완료, 재생 시작')
+        video.play().catch(err => {
+          console.warn('자동 재생 실패 (사용자 인터랙션 필요):', err)
+        })
+      })
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('❌ HLS 오류:', data)
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('네트워크 오류, 복구 시도...')
+              hls.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('미디어 오류, 복구 시도...')
+              hls.recoverMediaError()
+              break
+            default:
+              console.error('복구 불가능한 오류, HLS 인스턴스 재생성 필요')
+              setStreamError('스트림 오류가 발생했습니다.')
+              break
+          }
+        }
+      })
+
+      // 정리 함수
+      return () => {
+        console.log('🧹 HLS 인스턴스 정리')
+        hls.destroy()
+      }
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari 네이티브 HLS 지원
+      console.log('✅ Safari 네이티브 HLS 지원')
+      video.src = hlsPlaylistUrl
+      video.play().catch(err => {
+        console.warn('자동 재생 실패:', err)
+      })
+    } else {
+      console.error('❌ HLS가 지원되지 않는 브라우저입니다')
+      setStreamError('이 브라우저는 HLS를 지원하지 않습니다.')
+    }
+  }, [useHLS, hlsPlaylistUrl])
+
+  // 스트림 URL이 변경되면 모니터링 재시작 (MJPEG 방식)
+  useEffect(() => {
+    if (!useHLS && streamUrl) {
       startStreamMonitoring()
     } else {
       stopStreamMonitoring()
     }
-  }, [streamUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useHLS, streamUrl])
 
   return (
     <div className="p-8">
@@ -470,15 +742,15 @@ export default function Monitoring() {
             </h1>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
-            {!streamUrl ? (
+            {!streamUrl && !hlsPlaylistUrl ? (
               <>
                 <button
-                  onClick={handleStartFakeStream}
+                  onClick={useHLS ? handleStartHLSStream : handleStartFakeStream}
                   disabled={isStartingStream}
                   className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Play className="w-4 h-4" />
-                  {isStartingStream ? '스트림 시작 중...' : '스트림 시작'}
+                  {isStartingStream ? '스트림 시작 중...' : useHLS ? 'HLS 스트림 시작' : '스트림 시작'}
                 </button>
                 <button
                   onClick={() => setShowUploadModal(true)}
@@ -554,28 +826,46 @@ export default function Monitoring() {
             className="card p-0 overflow-hidden border-0 shadow-xl"
           >
             <div className="relative bg-gray-900 aspect-video">
-              {/* Video Stream */}
-              {streamUrl ? (
-                <>
-                  <img
-                    key={streamUrl}
-                    ref={streamImgRef}
-                    src={streamUrl}
-                    alt="Live Stream"
-                    className="w-full h-full object-contain"
-                    onError={handleStreamError}
-                    onLoad={handleStreamLoad}
-                  />
-                  {!isStreamActive && reconnectAttempts > 0 && (
-                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                        <p className="text-sm">스트림 재연결 중... ({reconnectAttempts}/5)</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
+              {/* HLS 비디오 플레이어 */}
+              {useHLS && (
+                <video
+                  ref={videoRef}
+                  className={`w-full h-full object-contain ${hlsPlaylistUrl ? 'block' : 'hidden'}`}
+                  controls
+                  muted={isMuted}
+                  autoPlay
+                  playsInline
+                  style={{ 
+                    display: hlsPlaylistUrl ? 'block' : 'none',
+                  }}
+                />
+              )}
+              
+              {/* MJPEG 이미지 스트림 (레거시) */}
+              {!useHLS && (
+                <img
+                  ref={streamImgRef}
+                  src={streamUrl || undefined}
+                  alt="Live Stream"
+                  className={`w-full h-full object-contain ${streamUrl ? 'block' : 'hidden'}`}
+                  onError={handleStreamError}
+                  onLoad={handleStreamLoad}
+                  style={{ 
+                    display: streamUrl ? 'block' : 'none',
+                    visibility: streamUrl ? 'visible' : 'hidden'
+                  }}
+                />
+              )}
+              
+              {!isStreamActive && reconnectAttempts > 0 && (
+                <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                    <p className="text-sm">스트림 재연결 중... ({reconnectAttempts}/5)</p>
+                  </div>
+                </div>
+              )}
+              {!streamUrl && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
@@ -595,7 +885,7 @@ export default function Monitoring() {
               )}
 
               {/* Live Indicator */}
-              {streamUrl && (
+              {(streamUrl || hlsPlaylistUrl) && (
                 <motion.div 
                   initial={{ scale: 0 }} 
                   animate={{ scale: 1 }} 
@@ -603,6 +893,7 @@ export default function Monitoring() {
                 >
                   <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                   <span className="text-sm font-semibold">LIVE</span>
+                  {useHLS && <span className="text-xs opacity-80">(HLS)</span>}
                 </motion.div>
               )}
 
@@ -615,7 +906,7 @@ export default function Monitoring() {
               </div>
 
               {/* 실시간 위험 알림 (최신 danger 이벤트만 표시) */}
-              {streamUrl && realtimeEvents.length > 0 && (() => {
+              {(streamUrl || hlsPlaylistUrl) && realtimeEvents.length > 0 && (() => {
                 const latestDangerEvent = realtimeEvents.find(e => e.severity === 'danger')
                 if (!latestDangerEvent) return null
                 
@@ -654,14 +945,24 @@ export default function Monitoring() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!streamUrl ? (
-                      <button
-                        onClick={() => setShowUploadModal(true)}
-                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-                      >
-                        <Upload className="w-4 h-4" />
-                        비디오 업로드
-                      </button>
+                    {!streamUrl && !hlsPlaylistUrl ? (
+                      <>
+                        <button
+                          onClick={useHLS ? handleStartHLSStream : handleStartFakeStream}
+                          disabled={isStartingStream}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
+                        >
+                          <MonitorPlay className="w-4 h-4" />
+                          {isStartingStream ? '시작 중...' : useHLS ? 'HLS 스트림 시작' : '스트림 시작'}
+                        </button>
+                        <button
+                          onClick={() => setShowUploadModal(true)}
+                          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
+                        >
+                          <Upload className="w-4 h-4" />
+                          비디오 업로드
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={handleStopStream}
@@ -743,7 +1044,7 @@ export default function Monitoring() {
                       icon={AlertTriangle}
                       color={
                         safetyStatus?.level === 'safe' ? 'safe' :
-                        safetyStatus?.level === 'warning' ? 'warning' : 'danger'
+                        safetyStatus?.level === 'warning' ? 'warning' : 'primary'
                       }
                     />
                     <AnalysisStat
@@ -980,7 +1281,6 @@ export default function Monitoring() {
 
 // Camera Thumbnail Component
 function CameraThumbnail({
-  id,
   name,
   isActive,
   onClick,

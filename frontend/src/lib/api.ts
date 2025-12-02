@@ -150,13 +150,72 @@ export async function startStream(
       method: 'POST',
     }
   )
-
+  
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || '스트림 시작 중 오류가 발생했습니다.')
   }
-
+  
   return await response.json()
+}
+
+/**
+ * HLS 스트림을 시작합니다 (진짜 실시간 스트림).
+ */
+export async function startHLSStream(
+  cameraId: string,
+  cameraUrl?: string,
+  enableAnalysis: boolean = true,
+  ageMonths?: number
+): Promise<{ message: string; camera_id: string; status: string; stream_type: string; playlist_url: string }> {
+  const params = new URLSearchParams()
+  params.append('enable_analysis', enableAnalysis.toString())
+  if (cameraUrl) {
+    params.append('camera_url', cameraUrl)
+  }
+  if (ageMonths) {
+    params.append('age_months', ageMonths.toString())
+  }
+  
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/start-hls-stream/${cameraId}?${params}`,
+    {
+      method: 'POST',
+    }
+  )
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+  }
+  
+  return await response.json()
+}
+
+/**
+ * HLS 스트림을 중지합니다.
+ */
+export async function stopHLSStream(cameraId: string): Promise<{ message: string; camera_id: string; status: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/stop-hls-stream/${cameraId}`,
+    {
+      method: 'POST',
+    }
+  )
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 중지 중 오류가 발생했습니다.')
+  }
+  
+  return await response.json()
+}
+
+/**
+ * HLS 플레이리스트 URL을 생성합니다.
+ */
+export function getHLSPlaylistUrl(cameraId: string): string {
+  return `${API_BASE_URL}/api/live-monitoring/hls/${cameraId}/${cameraId}.m3u8`
 }
 
 /**
@@ -238,6 +297,22 @@ export async function getMonitoringStats(
 
   if (!response.ok) {
     throw new Error('통계 조회 실패')
+  }
+
+  return await response.json()
+}
+
+/**
+ * 스트림 상태 조회
+ */
+export async function getStreamStatus(cameraId: string): Promise<{ is_running: boolean; camera_id: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/status/${cameraId}`,
+    { method: 'GET' }
+  )
+
+  if (!response.ok) {
+    throw new Error('스트림 상태 조회 실패')
   }
 
   return await response.json()
