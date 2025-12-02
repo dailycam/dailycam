@@ -7,6 +7,8 @@ interface Event {
     description?: string
     severity: 'danger' | 'warning' | 'info'
     hasClip?: boolean
+    thumbnailUrl?: string
+    videoUrl?: string
 }
 
 interface EventModalProps {
@@ -89,9 +91,28 @@ export const EventModal: React.FC<EventModalProps> = ({
                                         {event.description}
                                     </p>
                                 )}
-                                {event.hasClip && (
+                                {event.thumbnailUrl && (
+                                    <div className="mt-3 rounded-lg overflow-hidden border border-gray-200">
+                                        <img
+                                            src={event.thumbnailUrl}
+                                            alt={event.title}
+                                            className="w-full h-48 object-cover"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                                {(event.hasClip || event.videoUrl) && (
                                     <div className="mt-3 pt-3 border-t border-gray-300/50">
-                                        <button className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium">
+                                        <button
+                                            className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
+                                            onClick={() => {
+                                                if (event.videoUrl) {
+                                                    window.open(event.videoUrl, '_blank');
+                                                }
+                                            }}
+                                        >
                                             <Video className="w-4 h-4" />
                                             영상 보기
                                         </button>

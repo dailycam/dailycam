@@ -502,6 +502,15 @@ export interface DashboardTimelineEvent {
   category: string
   isSleep?: boolean
   timestamp_range?: string
+  thumbnailUrl?: string
+  videoUrl?: string
+}
+
+export interface HourlyStat {
+  hour: number
+  safetyScore: number
+  developmentScore: number
+  eventCount: number
 }
 
 export interface DashboardData {
@@ -516,6 +525,7 @@ export interface DashboardData {
   risks: RiskItem[]
   recommendations: RecommendationItem[]
   timelineEvents?: DashboardTimelineEvent[]
+  hourlyStats?: HourlyStat[]
 }
 
 /**
@@ -545,6 +555,12 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
 
     const data = await response.json()
 
+    // [디버깅] 백엔드 응답 확인
+    console.log('✅ [Dashboard API] 백엔드 응답 받음:', data)
+    console.log('📊 [Dashboard API] safetyScore:', data.safetyScore)
+    console.log('📊 [Dashboard API] timelineEvents:', data.timelineEvents)
+    console.log('📊 [Dashboard API] hourlyStats:', data.hourly_stats)
+
     // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
       summary: data.summary,
@@ -557,13 +573,16 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       weeklyTrend: data.weeklyTrend || [],
       risks: data.risks || [],
       recommendations: data.recommendations || [],
-      timelineEvents: data.timelineEvents || [],  // 타임라인 이벤트 추가
+      timelineEvents: data.timelineEvents || [],
+      hourlyStats: data.hourly_stats || [],
     }
   } catch (error: any) {
     // 백엔드 연결 실패 시 목 데이터 반환
     // 404 에러는 조용히 처리 (백엔드에 엔드포인트가 없는 경우)
     if (error?.message !== 'DASHBOARD_ENDPOINT_NOT_FOUND') {
-      console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+      console.error('❌ [Dashboard API] 백엔드 연결 실패:', error)
+      console.error('❌ [Dashboard API] 에러 메시지:', error?.message)
+      console.error('❌ [Dashboard API] 목 데이터 사용')
     }
     return {
       summary: "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 주방 데드존에 3회 접근했습니다.",

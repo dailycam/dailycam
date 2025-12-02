@@ -3,7 +3,7 @@ import { AnalysisProvider } from './context/AnalysisContext' // 추가
 import HomeLayout from './components/Layout/HomeLayout'
 import Layout from './components/Layout/Layout'
 import Home from './pages/Home'
-import Dashboard from './pages/Dashboard'
+import { Dashboard } from './pages/Dashboard'
 import Monitoring from './pages/Monitoring'
 import DevelopmentReport from './pages/DevelopmentReport'
 import SafetyReport from './pages/SafetyReport'
