@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getAuthHeader } from '../lib/auth';
 import { SafetyReportData, ClockData } from '../types/safety';
-import { MOCK_INCIDENT_TYPE_DATA } from '../constants/safety';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -47,7 +46,7 @@ export function useSafetyData() {
                         trendData: periodType === 'week'
                             ? Array.from({ length: 7 }, (_, i) => ({ date: ['월', '화', '수', '목', '금', '토', '일'][i], 안전도: 0 }))
                             : Array.from({ length: 4 }, (_, i) => ({ date: `${i + 1}주`, 안전도: 0 })),
-                        incidentTypeData: MOCK_INCIDENT_TYPE_DATA,
+                        incidentTypeData: [],
                         clockData: Array.from({ length: 24 }, (_, hour) => ({
                             hour,
                             safetyLevel: 'safe',
@@ -63,7 +62,7 @@ export function useSafetyData() {
                     trendData: periodType === 'week'
                         ? Array.from({ length: 7 }, (_, i) => ({ date: ['월', '화', '수', '목', '금', '토', '일'][i], 안전도: 0 }))
                         : Array.from({ length: 4 }, (_, i) => ({ date: `${i + 1}주`, 안전도: 0 })),
-                    incidentTypeData: MOCK_INCIDENT_TYPE_DATA,
+                    incidentTypeData: [],
                     clockData: Array.from({ length: 24 }, (_, hour) => ({
                         hour,
                         safetyLevel: 'safe',

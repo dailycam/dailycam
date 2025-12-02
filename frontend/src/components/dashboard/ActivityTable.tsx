@@ -1,4 +1,5 @@
 import { Activity, Baby, Shield } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 interface TimelineEvent {
     time: string
@@ -24,6 +25,30 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
     timelineEvents,
     onEventClick
 }) => {
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    // 초기 스크롤 위치 조정 (현재 시간 - 2시간)
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            const currentHour = new Date().getHours()
+            const columnWidth = 256 // w-64 = 16rem = 256px
+            const categoryWidth = 128 // w-32 = 8rem = 128px (첫 번째 컬럼)
+
+            // (현재 시간 - 2) 위치로 이동. 최소 0시.
+            const targetHour = Math.max(0, currentHour - 2)
+
+            // 스크롤 위치 계산: 카테고리 너비 + (타겟 시간 * 컬럼 너비)
+            // 카테고리 컬럼은 sticky라서 스크롤에 포함되지 않지만, 
+            // scrollLeft는 컨텐츠의 시작점 기준이므로 단순히 시간 컬럼들의 너비만 계산하면 됨.
+            // 다만 sticky 컬럼 뒤에 숨겨지지 않게 하려면 sticky 너비만큼 뺄 필요는 없음 (브라우저 동작상).
+            // 하지만 "보이게" 하려면 적절한 오프셋이 필요함.
+
+            const scrollPosition = targetHour * columnWidth
+
+            scrollContainerRef.current.scrollLeft = scrollPosition
+        }
+    }, [])
+
     // 24시간 배열 생성 (0시 ~ 23시)
     const hourlyRanges = Array.from({ length: 24 }, (_, i) => ({
         hour: i,
@@ -106,7 +131,7 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
             </h3>
 
             {/* 데스크톱 테이블 - 가로 스크롤 */}
-            <div className="hidden lg:block overflow-x-auto border border-gray-200 rounded-lg">
+            <div ref={scrollContainerRef} className="hidden lg:block overflow-x-auto border border-gray-200 rounded-lg scroll-smooth">
                 <table className="w-full border-collapse bg-white" style={{ minWidth: '6500px' }}>
                     <thead className="bg-gray-50">
                         <tr>

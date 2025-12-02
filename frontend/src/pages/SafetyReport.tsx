@@ -38,7 +38,7 @@ interface ChecklistItem {
   title: string;
   icon: string;
   description: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: 'high' | 'medium' | 'low' | '권장';
   gradient: string;
   checked: boolean;
 }
@@ -326,10 +326,10 @@ export default function SafetyReport() {
             </div>
 
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-emerald-100 mt-auto">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Lightbulb className="w-4 h-4 text-primary-600" />
-                            <p className="text-xs text-primary-600 font-semibold">안전 인사이트</p>
-                          </div>              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700 leading-relaxed">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb className="w-4 h-4 text-primary-600" />
+                <p className="text-xs text-primary-600 font-semibold">안전 인사이트</p>
+              </div>              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700 leading-relaxed">
                 {safetyData?.insights && safetyData.insights.length > 0 ? (
                   safetyData.insights.map((insight, idx) => (
                     <p key={idx} className="flex items-start gap-1">
@@ -458,18 +458,21 @@ export default function SafetyReport() {
                                 {item.description}
                               </p>
 
-                              <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                                item.priority === 'high'
+                              <span className={`text-xs px-3 py-1 rounded-full font-semibold ${item.priority === 'high'
                                   ? 'bg-rose-100 text-rose-700 border border-rose-200'
                                   : item.priority === '권장'
                                     ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    : item.priority === 'medium'
+                                      ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                      : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                                 }`}>
                                 {item.priority === 'high'
                                   ? '높은 우선순위'
                                   : item.priority === '권장'
                                     ? '권장사항'
-                                    : '중간 우선순위'
+                                    : item.priority === 'medium'
+                                      ? '중간 우선순위'
+                                      : '낮은 우선순위'
                                 }
                               </span>
                             </div>
