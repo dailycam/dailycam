@@ -9,7 +9,6 @@ import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
 import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
 import { fetchAnalyticsData, type AnalyticsData } from '../lib/api'
-import { mockAnalyticsData } from '../utils/mockData'
 
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
@@ -27,9 +26,7 @@ export default function Analytics() {
         setData(analyticsData)
       } catch (err) {
         console.error('Analytics 데이터 로드 오류:', err)
-        // API 실패 시 더미 데이터 사용 (미리보기용)
-        setData(mockAnalyticsData)
-        setError(null) // 에러를 숨기고 더미 데이터 표시
+        setError('데이터를 불러올 수 없습니다.')
       } finally {
         setLoading(false)
       }
@@ -146,11 +143,11 @@ export default function Analytics() {
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="grid grid-cols-2 gap-3">
               {data.incident_distribution.map((item) => (
-                <IncidentTypeItem 
+                <IncidentTypeItem
                   key={item.name}
-                  type={item.name} 
-                  count={item.value} 
-                  color={`bg-[${item.color}]`} 
+                  type={item.name}
+                  count={item.value}
+                  color={`bg-[${item.color}]`}
                 />
               ))}
             </div>
