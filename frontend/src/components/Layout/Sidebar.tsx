@@ -2,6 +2,7 @@
 
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import {
+  Home,
   LayoutDashboard,
   MonitorPlay,
   TrendingUp,
@@ -14,6 +15,7 @@ import { useState, useEffect } from 'react'
 import { getAuthToken } from '../../lib/auth'
 
 const navigation = [
+  { name: '홈', href: '/home', icon: Home },
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
   { name: '모니터링', href: '/monitoring', icon: MonitorPlay },
   { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
