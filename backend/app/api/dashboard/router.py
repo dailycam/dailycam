@@ -217,7 +217,8 @@ def get_dashboard_summary(
                 "resolved": event.resolved,
                 "hasClip": False,  # 추후 HighlightClip과 연결 가능
                 "category": event.location or "안전",
-                "timestamp_range": event.timestamp_range
+                "timestamp_range": event.timestamp_range,
+                "safety_score": log.safety_score  # 해당 시간대의 실제 안전 점수
             })
         
         # DevelopmentEvent 추가
@@ -249,7 +250,8 @@ def get_dashboard_summary(
                 "description": event.description or "",
                 "hasClip": False,
                 "category": category,
-                "isSleep": event.is_sleep
+                "isSleep": event.is_sleep,
+                "development_score": log.development_score  # 해당 시간대의 실제 발달 점수
             })
     
     # 시간순으로 정렬 (최신순)
