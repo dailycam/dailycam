@@ -358,8 +358,8 @@ export default function AppHome() {
                                 key={category}
                                 onClick={() => setSelectedCategory(category)}
                                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${selectedCategory === category
-                                        ? 'bg-primary-500 text-white shadow-md'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    ? 'bg-primary-500 text-white shadow-md'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
                             >
                                 {category}
@@ -394,7 +394,6 @@ export default function AppHome() {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold">추천 유튜브 영상</h2>
-                        <p className="text-sm text-gray-500">전문가가 선정한 영상</p>
                     </div>
                 </div>
 
@@ -426,7 +425,6 @@ export default function AppHome() {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold">추천 블로그 포스트</h2>
-                        <p className="text-sm text-gray-500">육아 전문 블로그</p>
                     </div>
                 </div>
 
@@ -458,7 +456,6 @@ export default function AppHome() {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold">육아 뉴스 & 정보</h2>
-                        <p className="text-sm text-gray-500">최신 육아 소식</p>
                     </div>
                 </div>
 
