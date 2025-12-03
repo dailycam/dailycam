@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: dailycam-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}
+      MYSQL_DATABASE: dailycam
+      MYSQL_USER: dailycam_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dailycam_pass_2024}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/scripts/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}"]
+      timeout: 5s
+      retries: 10
+      interval: 10s
+    networks:
+      - dailycam-network
+
+  fastapi:
+    build: ./backend
+    container_name: dailycam-fastapi
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
+      - MYSQL_DATABASE=dailycam
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Google OAuth (루트 .env에서 주입)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production-2024}
+      - PORTONE_API_SECRET=${PORTONE_API_SECRET:-your-portone-secret}
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+    command: python run.py
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+  vlm-worker-1:
+    build: ./backend
+    container_name: dailycam-worker-1
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
+      - MYSQL_DATABASE=dailycam
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_ID=worker-1
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+    command: python analysis_worker.py
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+  vlm-worker-2:
+    build: ./backend
+    container_name: dailycam-worker-2
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
+      - MYSQL_DATABASE=dailycam
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_ID=worker-2
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+    command: python analysis_worker.py
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  dailycam-network:
+    driver: bridge
+

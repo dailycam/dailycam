@@ -1,4 +1,4 @@
-"""5분 단위 분석 스케줄러"""
+"""10분 단위 분석 스케줄러 (Job 등록만 수행)"""
 
 import asyncio
 from datetime import datetime, timedelta
@@ -6,20 +6,24 @@ from pathlib import Path
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from app.services.gemini_service import GeminiService
-from app.models.live_monitoring.models import SegmentAnalysis
+from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.database.session import get_db
 
 
 class SegmentAnalysisScheduler:
     """
-    5분 단위로 비디오를 분석하는 스케줄러
+    10분 단위로 분석 Job을 등록하는 스케줄러
+    
+    실제 VLM 분석은 별도 워커 프로세스에서 수행
+    이 스케줄러는 Job 등록만 수행하여 메인 이벤트 루프를 차단하지 않음
     """
     
     def __init__(self, camera_id: str):
         self.camera_id = camera_id
-        self.gemini_service = GeminiService()
-        self.buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
+        # HLS 스트림의 archive 폴더에서 10분 단위 영상 가져오기
+        self.buffer_dir = Path(f"temp_videos/hls_buffer/{camera_id}/archive")
+        # fallback: hourly_buffer도 확인
+        self.fallback_buffer_dir = Path(f"temp_videos/hourly_buffer/{camera_id}")
         self.is_running = False
         self.segment_duration_minutes = 10
         
@@ -55,116 +59,142 @@ class SegmentAnalysisScheduler:
                 await asyncio.sleep(wait_seconds)
             
             if self.is_running:
-                await self._analyze_previous_segment()
+                # Job 등록 (비동기, 빠르게 완료)
+                await self._register_analysis_job()
         
         print(f"[10분 분석 스케줄러] 종료: {self.camera_id}")
     
-    async def _analyze_previous_segment(self):
+    async def _register_analysis_job(self):
         """
-        이전 10분 분량의 비디오를 분석
+        분석 Job을 DB에 등록 (빠르게 완료, 메인 루프 차단 없음)
+        
+        전략: 현재 시간에서 10분 전 구간을 분석 대상으로 등록
+        - 예: 11:30에 실행 → 11:10~11:20 구간 분석 Job 등록
+        - 이유: 11:20~11:30 구간은 아직 생성 중이거나 막 완료되어 불안정
         """
+        
         db = next(get_db())
         
         try:
-            # 1. 이전 10분 구간 정의
+            # 1. 분석할 구간 정의 (현재 시간 기준 10분 전 구간)
             now = datetime.now()
             
             # 현재 시간을 10분 단위로 내림
             current_minutes = (now.minute // 10) * 10
-            segment_end = now.replace(minute=current_minutes, second=0, microsecond=0)
+            current_segment_end = now.replace(minute=current_minutes, second=0, microsecond=0)
+            
+            # 10분 전 구간을 분석 대상으로 설정
+            segment_end = current_segment_end - timedelta(minutes=10)
             segment_start = segment_end - timedelta(minutes=10)
             
-            print(f"[10분 분석 스케줄러] 분석 시작: {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 📅 현재 시간: {now.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 🎯 분석 대상 구간: {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
             
             # 2. 해당 구간의 비디오 파일 찾기
             video_path = self._get_segment_video(segment_start)
+            
             if not video_path or not video_path.exists():
-                print(f"[10분 분석 스케줄러] 비디오 파일 없음: {segment_start.strftime('%H:%M:%S')}")
+                print(f"[Job 등록] ❌ 비디오 파일 없음: {segment_start.strftime('%H:%M:%S')}")
                 return
             
-            # 3. 이미 분석된 구간인지 확인
-            existing = db.query(SegmentAnalysis).filter(
-                SegmentAnalysis.camera_id == self.camera_id,
-                SegmentAnalysis.segment_start == segment_start,
-                SegmentAnalysis.status == 'completed'
+            # 3. 이미 등록된 Job이 있는지 확인
+            existing_job = db.query(AnalysisJob).filter(
+                AnalysisJob.camera_id == self.camera_id,
+                AnalysisJob.segment_start == segment_start,
+                AnalysisJob.status.in_([JobStatus.PENDING, JobStatus.PROCESSING, JobStatus.COMPLETED])
             ).first()
             
-            if existing:
-                print(f"[10분 분석 스케줄러] 이미 분석 완료: {segment_start.strftime('%H:%M:%S')}")
+            if existing_job:
+                print(f"[Job 등록] ⏭️ 이미 등록됨 (상태: {existing_job.status}): {segment_start.strftime('%H:%M:%S')}")
                 return
             
-            # 4. DB에 분석 작업 등록
-            segment_analysis = SegmentAnalysis(
+            # 4. 분석 Job 등록 (빠르게 완료)
+            analysis_job = AnalysisJob(
                 camera_id=self.camera_id,
+                video_path=str(video_path),
                 segment_start=segment_start,
                 segment_end=segment_end,
-                video_path=str(video_path),
-                status='processing'
+                status=JobStatus.PENDING
             )
-            db.add(segment_analysis)
-            db.commit()
-            db.refresh(segment_analysis)
-            
-            print(f"[10분 분석 스케줄러] 분석 중: {video_path.name}")
-            
-            # 5. Gemini로 상세 분석
-            with open(video_path, 'rb') as f:
-                video_bytes = f.read()
-            
-            analysis_result = await self.gemini_service.analyze_video_vlm(
-                video_bytes=video_bytes,
-                content_type="video/mp4",
-                stage=None,  # 자동 판단
-                age_months=None  # 설정에서 가져오기 (추후 구현)
-            )
-            
-            # 6. 결과 저장
-            safety_analysis = analysis_result.get('safety_analysis', {})
-            
-            segment_analysis.analysis_result = analysis_result
-            segment_analysis.status = 'completed'
-            segment_analysis.completed_at = datetime.now()
-            segment_analysis.safety_score = safety_analysis.get('safety_score', 100)
-            segment_analysis.incident_count = len(safety_analysis.get('incident_events', []))
-            
+            db.add(analysis_job)
             db.commit()
             
-            print(f"[10분 분석 스케줄러] 분석 완료: {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
-            print(f"  안전 점수: {segment_analysis.safety_score}")
-            print(f"  사건 수: {segment_analysis.incident_count}")
-            
-            # 7. 분석 완료 후 비디오 파일 삭제 (선택사항)
-            # video_path.unlink()
-            # print(f"[10분 분석 스케줄러] 비디오 파일 삭제: {video_path.name}")
+            print(f"[Job 등록] ✅ Job 등록 완료 (ID: {analysis_job.id}): {video_path.name}")
+            print(f"[Job 등록] 워커 프로세스가 이 Job을 처리할 예정입니다.")
             
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            print(f"[10분 분석 스케줄러] 오류: {e}")
+            print(f"[Job 등록] 오류: {e}")
             print(error_trace)
-            
-            if 'segment_analysis' in locals():
-                segment_analysis.status = 'failed'
-                segment_analysis.error_message = str(e)
-                segment_analysis.completed_at = datetime.now()
-                db.commit()
         finally:
             db.close()
     
     def _get_segment_video(self, segment_start: datetime) -> Optional[Path]:
         """해당 구간의 비디오 파일 경로 반환"""
-        filename = f"segment_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
-        video_path = self.buffer_dir / filename
+        # HLS archive 폴더에서 찾기 (archive_YYYYMMDD_HHMMSS.mp4)
+        archive_filename = f"archive_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        archive_path = self.buffer_dir / archive_filename
         
-        if video_path.exists():
-            return video_path
+        if archive_path.exists():
+            print(f"[10분 분석 스케줄러] ✅ 정확한 아카이브 파일 발견: {archive_filename}")
+            return archive_path
         
-        # 파일명이 정확히 일치하지 않을 수 있으므로 패턴 검색
-        pattern = f"segment_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
-        matching_files = list(self.buffer_dir.glob(pattern))
+        # 패턴 검색 1: 같은 날짜, 같은 시간, 같은 분 (초만 다를 수 있음)
+        archive_pattern = f"archive_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
+        matching_archives = list(self.buffer_dir.glob(archive_pattern))
         
-        if matching_files:
-            return matching_files[0]
+        if matching_archives:
+            # 가장 최근에 생성된 파일 선택
+            latest_archive = max(matching_archives, key=lambda f: f.stat().st_mtime)
+            print(f"[10분 분석 스케줄러] ✅ 패턴 매칭 아카이브 발견: {latest_archive.name}")
+            return latest_archive
+        
+        # 패턴 검색 2: 시간대가 약간 다를 수 있으므로 ±10분 범위에서 검색
+        for offset_minutes in range(-10, 11):
+            adjusted_time = segment_start + timedelta(minutes=offset_minutes)
+            adjusted_pattern = f"archive_{adjusted_time.strftime('%Y%m%d_%H%M')}*.mp4"
+            adjusted_matches = list(self.buffer_dir.glob(adjusted_pattern))
+            
+            if adjusted_matches:
+                # 파일 생성 시간이 segment_start와 가장 가까운 파일 선택
+                closest_file = min(
+                    adjusted_matches,
+                    key=lambda f: abs((datetime.fromtimestamp(f.stat().st_mtime) - segment_start).total_seconds())
+                )
+                print(f"[10분 분석 스케줄러] ✅ 시간 범위 검색으로 아카이브 발견: {closest_file.name} (offset: {offset_minutes}분)")
+                return closest_file
+        
+        # fallback: hourly_buffer에서 segment 파일 찾기
+        segment_filename = f"segment_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        fallback_path = self.fallback_buffer_dir / segment_filename
+        
+        if fallback_path.exists():
+            print(f"[10분 분석 스케줄러] ✅ Fallback 세그먼트 파일 발견: {segment_filename}")
+            return fallback_path
+        
+        # fallback 패턴 검색
+        segment_pattern = f"segment_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
+        matching_segments = list(self.fallback_buffer_dir.glob(segment_pattern))
+        
+        if matching_segments:
+            latest_segment = max(matching_segments, key=lambda f: f.stat().st_mtime)
+            print(f"[10분 분석 스케줄러] ✅ Fallback 패턴 매칭 발견: {latest_segment.name}")
+            return latest_segment
+        
+        # 디버그: 디렉토리 내용 출력
+        print(f"[10분 분석 스케줄러] ❌ 파일을 찾을 수 없음:")
+        print(f"  - 찾는 시간: {segment_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  - Archive 디렉토리: {self.buffer_dir}")
+        print(f"  - Archive 존재 여부: {self.buffer_dir.exists()}")
+        if self.buffer_dir.exists():
+            files = sorted(list(self.buffer_dir.glob("*.mp4")), key=lambda f: f.stat().st_mtime, reverse=True)
+            print(f"  - Archive 파일 목록 ({len(files)}개, 최근 5개): {[f.name for f in files[:5]]}")
+        print(f"  - Fallback 디렉토리: {self.fallback_buffer_dir}")
+        print(f"  - Fallback 존재 여부: {self.fallback_buffer_dir.exists()}")
+        if self.fallback_buffer_dir.exists():
+            files = sorted(list(self.fallback_buffer_dir.glob("*.mp4")), key=lambda f: f.stat().st_mtime, reverse=True)
+            print(f"  - Fallback 파일 목록 ({len(files)}개, 최근 5개): {[f.name for f in files[:5]]}")
         
         return None
     
@@ -193,7 +223,7 @@ async def start_segment_analysis_for_camera(camera_id: str):
     print(f"[10분 분석 스케줄러] 시작됨: {camera_id}")
 
 
-def stop_segment_analysis_for_camera(camera_id: str):
+async def stop_segment_analysis_for_camera(camera_id: str):
     """특정 카메라의 10분 분석 스케줄러 중지"""
     if camera_id not in active_segment_schedulers:
         print(f"[10분 분석 스케줄러] 실행 중이 아님: {camera_id}")

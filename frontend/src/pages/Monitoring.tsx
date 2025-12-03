@@ -18,6 +18,17 @@ import { motion } from 'motion/react'
 import Hls from 'hls.js'
 import { uploadVideoForStreaming, startHlsStream, stopHlsStream } from '../lib/api'
 
+interface RealtimeEvent {
+  id: number
+  timestamp: string
+  event_type: string
+  severity: string
+  title: string
+  description: string
+  location: string
+  metadata: any
+}
+
 export default function Monitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(false)
@@ -27,19 +38,126 @@ export default function Monitoring() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isStreamActive, setIsStreamActive] = useState(false)
+  const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([])
+  const [latestActivity, setLatestActivity] = useState({
+    activity: '대기 중',
+    risk: '알 수 없음',
+    location: '알 수 없음'
+  })
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
-  // 컴포넌트 언마운트 시 HLS 정리
+  // 시간 포맷 함수
+  const formatTimeAgo = (timestamp: string) => {
+    const now = new Date()
+    const eventTime = new Date(timestamp)
+    const diffMs = now.getTime() - eventTime.getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    const diffMin = Math.floor(diffSec / 60)
+    const diffHour = Math.floor(diffMin / 60)
+
+    if (diffSec < 60) return '방금 전'
+    if (diffMin < 60) return `${diffMin}분 전`
+    if (diffHour < 24) return `${diffHour}시간 전`
+    return eventTime.toLocaleDateString('ko-KR')
+  }
+
+  // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
   useEffect(() => {
+    const checkAndConnectStream = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/live-monitoring/stream-status/${selectedCamera}`
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          if (data.is_active && data.is_running) {
+            console.log('서버에서 스트림 실행 중 감지, 자동 연결 시작...')
+            
+            // HLS 플레이어 연결
+            const fullPlaylistUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${data.playlist_url}`
+            
+            if (Hls.isSupported() && videoRef.current) {
+              if (hlsRef.current) {
+                hlsRef.current.destroy()
+              }
+
+              const hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                startPosition: -1,  // 라이브 엣지에서 시작
+                liveSyncDuration: 3,
+                liveMaxLatencyDuration: 15,  // VLM 분석 중에도 끊기지 않도록
+                maxBufferLength: 20,
+                maxMaxBufferLength: 40,
+                backBufferLength: 0,
+                manifestLoadingTimeOut: 60000,  // 60초로 증가
+                manifestLoadingMaxRetry: 10,    // 재시도 횟수 증가
+                levelLoadingTimeOut: 60000,     // 60초로 증가
+                levelLoadingMaxRetry: 10,       // 재시도 횟수 증가
+                fragLoadingTimeOut: 60000,      // 세그먼트 로딩 타임아웃 추가
+                fragLoadingMaxRetry: 10,        // 세그먼트 로딩 재시도 추가
+              })
+
+              hls.loadSource(fullPlaylistUrl)
+              hls.attachMedia(videoRef.current)
+
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log('HLS 매니페스트 파싱 완료, 라이브 엣지로 이동')
+                if (videoRef.current) {
+                  // 라이브 스트림의 경우 끝에서 시작 (3초 버퍼)
+                  const duration = videoRef.current.duration
+                  if (duration && isFinite(duration) && duration > 3) {
+                    videoRef.current.currentTime = duration - 3
+                    console.log(`라이브 엣지 설정: ${duration - 3}초`)
+                  }
+                  videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
+                }
+              })
+
+              hls.on(Hls.Events.ERROR, (_event, data) => {
+                if (data.fatal) {
+                  console.error('HLS 치명적 오류:', data)
+                }
+              })
+
+              hlsRef.current = hls
+              setIsStreamActive(true)
+              setIsPlaying(true)
+              
+              console.log('✅ 스트림 자동 연결 완료')
+            } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+              // Safari 네이티브 HLS 지원
+              videoRef.current.src = fullPlaylistUrl
+              videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
+              setIsStreamActive(true)
+              setIsPlaying(true)
+              
+              console.log('✅ 스트림 자동 연결 완료 (네이티브 HLS)')
+            }
+          } else {
+            console.log('서버에 실행 중인 스트림 없음')
+          }
+        }
+      } catch (error) {
+        console.error('스트림 상태 확인 실패:', error)
+      }
+    }
+
+    checkAndConnectStream()
+
+    // 컴포넌트 언마운트 시 HLS 정리
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy()
       }
     }
-  }, [])
+  }, [selectedCamera])
 
   // 비디오 재생/일시정지 제어
   useEffect(() => {
@@ -58,6 +176,49 @@ export default function Monitoring() {
       videoRef.current.muted = isMuted
     }
   }, [isMuted])
+
+  // 실시간 이벤트 폴링
+  useEffect(() => {
+    if (!isStreamActive) return
+
+    const fetchRealtimeEvents = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/live-monitoring/events/${selectedCamera}/latest?limit=50`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          setRealtimeEvents(data.events || [])
+          
+          // 최신 이벤트에서 활동 정보 업데이트
+          if (data.events && data.events.length > 0) {
+            const latest = data.events[0]
+            const metadata = latest.metadata || {}
+            const currentActivity = metadata.current_activity || {}
+            const safetyStatus = metadata.safety_status || {}
+            
+            setLatestActivity({
+              activity: currentActivity.activity_type || currentActivity.description || '활동 중',
+              risk: safetyStatus.risk_level === 'safe' ? '낮음' : 
+                    safetyStatus.risk_level === 'warning' ? '중간' : 
+                    safetyStatus.risk_level === 'danger' ? '높음' : '알 수 없음',
+              location: currentActivity.location || latest.location || '알 수 없음'
+            })
+          }
+        }
+      } catch (error) {
+        console.error('실시간 이벤트 조회 실패:', error)
+      }
+    }
+
+    // 초기 로드
+    fetchRealtimeEvents()
+
+    // 10초마다 폴링
+    const interval = setInterval(fetchRealtimeEvents, 10000)
+
+    return () => clearInterval(interval)
+  }, [isStreamActive, selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,6 +271,18 @@ export default function Monitoring() {
           debug: false,
           enableWorker: true,
           lowLatencyMode: true,
+          startPosition: -1,
+          liveSyncDuration: 3,
+          liveMaxLatencyDuration: 15,
+          maxBufferLength: 20,
+          maxMaxBufferLength: 40,
+          backBufferLength: 0,
+          manifestLoadingTimeOut: 60000,
+          manifestLoadingMaxRetry: 10,
+          levelLoadingTimeOut: 60000,
+          levelLoadingMaxRetry: 10,
+          fragLoadingTimeOut: 60000,
+          fragLoadingMaxRetry: 10,
         })
 
         hls.loadSource(fullPlaylistUrl)
@@ -118,13 +291,19 @@ export default function Monitoring() {
           hls.attachMedia(videoRef.current)
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            console.log('HLS 매니페스트 로드됨, 재생 시작')
+            console.log('HLS 매니페스트 로드됨, 라이브 엣지로 이동')
+            if (videoRef.current) {
+              const duration = videoRef.current.duration
+              if (duration && isFinite(duration) && duration > 3) {
+                videoRef.current.currentTime = duration - 3
+              }
+            }
             videoRef.current?.play().catch(e => console.error('재생 오류:', e))
             setIsStreamActive(true)
             setIsPlaying(true)
           })
 
-          hls.on(Hls.Events.ERROR, (event, data) => {
+          hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
@@ -161,6 +340,131 @@ export default function Monitoring() {
     } catch (error: any) {
       console.error('스트리밍 시작 실패:', error)
       setUploadError(error.message || '스트리밍을 시작할 수 없습니다.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // HLS 스트림 시작 (비디오 업로드 없이 기존 영상 사용)
+  const handleStartHlsStream = async () => {
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      // 1. 기존 스트림 중지
+      if (isStreamActive) {
+        await handleStopStream()
+      }
+
+      // 2. HLS 스트림 시작 요청
+      console.log('HLS 스트림 시작 요청...')
+      const response = await startHlsStream(selectedCamera)
+      console.log('HLS 스트림 시작 응답:', response)
+
+      // 3. HLS 재생 시작 (플레이리스트 생성 대기)
+      const playlistUrl = response.playlist_url
+      const fullPlaylistUrl = playlistUrl.startsWith('http')
+        ? playlistUrl
+        : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${playlistUrl}`
+
+      // 플레이리스트가 생성될 때까지 최대 20초 대기
+      console.log('HLS 플레이리스트 생성 대기 중...')
+      let playlistReady = false
+      for (let i = 0; i < 20; i++) {
+        try {
+          const checkResponse = await fetch(fullPlaylistUrl, { method: 'HEAD' })
+          if (checkResponse.ok) {
+            playlistReady = true
+            console.log(`HLS 플레이리스트 준비 완료 (${i + 1}초 후)`)
+            break
+          }
+        } catch (e) {
+          // 계속 시도
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      if (!playlistReady) {
+        console.warn('플레이리스트가 준비되지 않았지만 재생을 시도합니다...')
+      }
+
+      if (Hls.isSupported()) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy()
+        }
+
+        const hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: true,
+          startPosition: -1,
+          liveSyncDuration: 3,
+          liveMaxLatencyDuration: 15,
+          maxBufferLength: 20,
+          maxMaxBufferLength: 40,
+          backBufferLength: 0,
+          manifestLoadingTimeOut: 60000,
+          manifestLoadingMaxRetry: 10,
+          levelLoadingTimeOut: 60000,
+          levelLoadingMaxRetry: 10,
+          fragLoadingTimeOut: 60000,
+          fragLoadingMaxRetry: 10,
+        })
+
+        hls.loadSource(fullPlaylistUrl)
+
+        if (videoRef.current) {
+          hls.attachMedia(videoRef.current)
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS 매니페스트 로드됨, 라이브 엣지로 이동')
+            if (videoRef.current) {
+              const duration = videoRef.current.duration
+              if (duration && isFinite(duration) && duration > 3) {
+                videoRef.current.currentTime = duration - 3
+              }
+            }
+            videoRef.current?.play().catch(e => console.error('재생 오류:', e))
+            setIsStreamActive(true)
+            setIsPlaying(true)
+          })
+
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.log('네트워크 오류, 복구 시도...')
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.log('미디어 오류, 복구 시도...')
+                  hls.recoverMediaError()
+                  break
+                default:
+                  console.error('치명적 오류, 재생 불가:', data)
+                  hls.destroy()
+                  setUploadError('스트림 재생 중 오류가 발생했습니다.')
+                  break
+              }
+            }
+          })
+        }
+
+        hlsRef.current = hls
+      } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari 등 네이티브 HLS 지원
+        videoRef.current.src = fullPlaylistUrl
+        videoRef.current.addEventListener('loadedmetadata', () => {
+          videoRef.current?.play()
+          setIsStreamActive(true)
+          setIsPlaying(true)
+        })
+      } else {
+        setUploadError('이 브라우저는 HLS 재생을 지원하지 않습니다.')
+      }
+    } catch (error: any) {
+      console.error('HLS 스트림 시작 실패:', error)
+      setUploadError(error.message || 'HLS 스트림을 시작할 수 없습니다.')
     } finally {
       setIsUploading(false)
     }
@@ -240,8 +544,13 @@ export default function Monitoring() {
                           : '주방 카메라'}
                     </p>
                     <p className="text-xs mt-2 text-gray-500">
-                      비디오 파일을 업로드하여 스트리밍을 시작하세요
+                      'HLS 스트림 시작' 버튼을 클릭하여 라이브 스트리밍을 시작하세요
                     </p>
+                    {uploadError && (
+                      <div className="mt-4 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm max-w-md mx-auto">
+                        {uploadError}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -285,13 +594,23 @@ export default function Monitoring() {
                   </div>
                   <div className="flex items-center gap-2">
                     {!isStreamActive ? (
-                      <button
-                        onClick={() => setShowUploadModal(true)}
-                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-                      >
-                        <Upload className="w-4 h-4" />
-                        비디오 업로드
-                      </button>
+                      <>
+                        <button
+                          onClick={handleStartHlsStream}
+                          disabled={isUploading}
+                          className="px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <MonitorPlay className="w-4 h-4" />
+                          {isUploading ? '시작 중...' : 'HLS 스트림 시작'}
+                        </button>
+                        <button
+                          onClick={() => setShowUploadModal(true)}
+                          className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors backdrop-blur-sm"
+                        >
+                          <Upload className="w-4 h-4" />
+                          비디오 업로드
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={handleStopStream}
@@ -352,19 +671,19 @@ export default function Monitoring() {
             <div className="grid grid-cols-3 gap-4">
               <AnalysisStat
                 label="현재 활동"
-                value="놀이 중"
+                value={latestActivity.activity}
                 icon={Activity}
                 color="safe"
               />
               <AnalysisStat
                 label="위험도"
-                value="낮음"
+                value={latestActivity.risk}
                 icon={AlertTriangle}
-                color="safe"
+                color={latestActivity.risk === '낮음' ? 'safe' : 'warning'}
               />
               <AnalysisStat
                 label="위치"
-                value="세이프존"
+                value={latestActivity.location}
                 icon={MapPin}
                 color="primary"
               />
@@ -386,26 +705,22 @@ export default function Monitoring() {
               <h3 className="text-lg font-semibold text-gray-900">알림</h3>
             </div>
             <div className="space-y-3 max-h-64 overflow-y-auto">
-              <AlertItem
-                type="warning"
-                message="데드존 근처 접근"
-                time="방금 전"
-              />
-              <AlertItem
-                type="info"
-                message="세이프존으로 이동"
-                time="2분 전"
-              />
-              <AlertItem
-                type="warning"
-                message="가구 모서리 근접"
-                time="5분 전"
-              />
-              <AlertItem
-                type="safe"
-                message="안전한 활동 중"
-                time="10분 전"
-              />
+              {realtimeEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Eye className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">실시간 이벤트가 없습니다</p>
+                  <p className="text-xs mt-1">스트림을 시작하면 AI가 분석을 시작합니다</p>
+                </div>
+              ) : (
+                realtimeEvents.map((event) => (
+                  <AlertItem
+                    key={event.id}
+                    type={event.severity === 'danger' || event.severity === 'warning' ? 'warning' : 'info'}
+                    message={event.title}
+                    time={formatTimeAgo(event.timestamp)}
+                  />
+                ))
+              )}
             </div>
           </motion.div>
 
@@ -547,7 +862,7 @@ export default function Monitoring() {
 
 // Camera Thumbnail Component
 function CameraThumbnail({
-  id,
+  id: _id,
   name,
   isActive,
   onClick,
