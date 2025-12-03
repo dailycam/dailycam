@@ -132,11 +132,39 @@ class AnalysisService:
                 category = ClipCategory.DEVELOPMENT
                 print(f"⚠️ 알 수 없는 category 값: {category_str}, '발달'으로 설정")
             
+            # timestamp_range에서 duration_seconds 계산
+            duration_seconds = None
+            timestamp_range = clip_data.get("timestamp_range")
+            if timestamp_range and "-" in timestamp_range:
+                try:
+                    start_str, end_str = timestamp_range.split("-")
+                    # HH:MM:SS 형식을 초로 변환
+                    def time_to_seconds(time_str):
+                        parts = time_str.strip().split(":")
+                        if len(parts) == 3:
+                            h, m, s = map(int, parts)
+                            return h * 3600 + m * 60 + s
+                        return 0
+                    
+                    start_sec = time_to_seconds(start_str)
+                    end_sec = time_to_seconds(end_str)
+                    duration_seconds = end_sec - start_sec
+                except Exception as e:
+                    print(f"⚠️ timestamp_range 파싱 실패: {timestamp_range}, {e}")
+            
+            # video_url: VLM이 제공하지 않으므로 분석의 video_path 사용
+            video_url = clip_data.get("video_url") or video_path
+            
             highlight_clip = HighlightClip(
                 title=clip_data.get("title", ""),
-                video_url=clip_data.get("video_url", ""),
+                description=clip_data.get("description"),
+                video_url=video_url,
                 thumbnail_url=clip_data.get("thumbnail_url"),
                 category=category,
+                sub_category=clip_data.get("sub_category"),
+                importance=clip_data.get("importance", "medium"),
+                duration_seconds=duration_seconds,
+                analysis_log_id=analysis_log.id,  # 관계 연결
             )
             db.add(highlight_clip)
         
