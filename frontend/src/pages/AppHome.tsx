@@ -16,7 +16,14 @@ import {
     Flame,
 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { getDashboardData, type DashboardData } from '../lib/api'
+import {
+    getDashboardData,
+    type DashboardData,
+    getRecommendedVideos,
+    getRecommendedBlogs,
+    getTrendingContent,
+    searchContent
+} from '../lib/api'
 import { getAuthToken } from '../lib/auth'
 
 
@@ -79,14 +86,23 @@ const ContentCard = ({ link, showViews = false }: { link: RecommendedLink; showV
         >
             {/* 썸네일 영역 */}
             <div className={`relative bg-gradient-to-br ${config.gradientFrom} ${config.gradientTo} h-40 flex items-center justify-center overflow-hidden`}>
-                <config.icon className="w-14 h-14 text-gray-300 group-hover:scale-110 transition-transform" />
-                <div className={`absolute top-3 left-3 ${config.bg} text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-md flex items-center gap-1.5`}>
+                {/* 썸네일 이미지 */}
+                {link.thumbnail ? (
+                    <img
+                        src={link.thumbnail}
+                        alt={link.title}
+                        className="absolute inset-0 w-full h-full object-cover"
+                    />
+                ) : (
+                    <config.icon className="w-14 h-14 text-gray-300 group-hover:scale-110 transition-transform" />
+                )}
+                <div className={`absolute top-3 left-3 ${config.bg} text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-md flex items-center gap-1.5 z-10`}>
                     <config.icon className="w-3.5 h-3.5" />
                     {config.label}
                 </div>
                 {/* 조회수 표시 */}
                 {showViews && link.views && (
-                    <div className="absolute top-3 right-3 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                    <div className="absolute top-3 right-3 bg-black/70 text-white text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 z-10">
                         <Flame className="w-3 h-3" />
                         {link.views}
                     </div>
@@ -131,6 +147,22 @@ export default function AppHome() {
     const [searchQuery, setSearchQuery] = useState<string>('')
     const [userInfo, setUserInfo] = useState<{ child_name?: string } | null>(null)
 
+    // AI 추천 콘텐츠 state
+    const [recommendedVideos, setRecommendedVideos] = useState<RecommendedLink[]>([])
+    const [recommendedBlogs, setRecommendedBlogs] = useState<RecommendedLink[]>([])
+    const [trendingContent, setTrendingContent] = useState<RecommendedLink[]>([])
+    const [contentLoading, setContentLoading] = useState(true)
+
+    // 검색 결과 state
+    const [searchResults, setSearchResults] = useState<RecommendedLink[]>([])
+    const [isSearching, setIsSearching] = useState(false)
+    const [searchFilter, setSearchFilter] = useState<'all' | 'youtube' | 'blog'>('all')
+
+    // 더보기 기능을 위한 표시 개수 state
+    const [visibleVideosCount, setVisibleVideosCount] = useState(5)
+    const [visibleBlogsCount, setVisibleBlogsCount] = useState(5)
+    const [visibleTrendingCount, setVisibleTrendingCount] = useState(5)
+
     // 사용자 정보 가져오기
     useEffect(() => {
         const fetchUserInfo = async () => {
@@ -168,6 +200,69 @@ export default function AppHome() {
         loadData()
     }, [])
 
+    // AI 추천 콘텐츠 가져오기
+    useEffect(() => {
+        async function loadAIContent() {
+            try {
+                setContentLoading(true)
+
+                // 병렬로 모든 콘텐츠 가져오기
+                const [videos, blogs, trending] = await Promise.all([
+                    getRecommendedVideos(),
+                    getRecommendedBlogs(),
+                    getTrendingContent()
+                ])
+
+                setRecommendedVideos(videos)
+                setRecommendedBlogs(blogs)
+                setTrendingContent(trending)
+
+                console.log('AI 추천 콘텐츠 로드 완료:', { videos, blogs, trending })
+            } catch (error) {
+                console.error('AI 콘텐츠 로드 실패:', error)
+                // 에러 시 기본 콘텐츠 사용 (fallback은 API 함수에서 처리)
+            } finally {
+                setContentLoading(false)
+            }
+        }
+
+
+        loadAIContent()
+    }, [])
+
+    // 검색 핸들러
+    const handleSearch = async (query?: string | React.FormEvent) => {
+        let targetQuery = searchQuery;
+
+        // 이벤트 객체인 경우 preventDefault
+        if (query && typeof query === 'object' && 'preventDefault' in query) {
+            query.preventDefault();
+        } else if (typeof query === 'string') {
+            // 문자열인 경우 (인기 검색어 클릭 등)
+            targetQuery = query;
+            setSearchQuery(query); // UI 업데이트를 위해 상태 변경
+        }
+
+        if (!targetQuery.trim() || targetQuery.trim().length < 2) {
+            setSearchResults([])
+            return
+        }
+
+        try {
+            setIsSearching(true)
+            setSearchFilter('all') // 검색 시 필터 초기화
+            const results = await searchContent(targetQuery.trim())
+            setSearchResults(results)
+        } catch (error) {
+            console.error('검색 실패:', error)
+            setSearchResults([])
+        } finally {
+            setIsSearching(false)
+        }
+    }
+
+
+
     // 오늘의 하이라이트 순간 (썸네일 이미지 사용)
     const highlightMoments: HighlightMoment[] = [
         {
@@ -196,111 +291,6 @@ export default function AppHome() {
     // 인기 검색어
     const popularKeywords = ['배밀이', '이유식', '수면교육', '안전사고', '발달체크', '놀이법']
 
-    // 엄마들이 가장 많이 본 콘텐츠 (유튜브 + 블로그 혼합)
-    const trendingContent: RecommendedLink[] = [
-        {
-            id: 'trend1',
-            type: 'youtube',
-            title: '6개월 아기 발달 체크리스트 완벽 정리',
-            description: '우리 아기가 정상적으로 발달하고 있는지 소아과 전문의가 알려드립니다',
-            url: 'https://youtube.com/example',
-            tags: ['발달', '체크리스트', '필수'],
-            category: '발달',
-            views: '12만'
-        },
-        {
-            id: 'trend2',
-            type: 'blog',
-            title: '이유식 초기 완벽 가이드 - 초보맘 필독',
-            description: '이유식 언제, 어떻게 시작할까? 단계별 완벽 정리',
-            url: 'https://blog.example.com/baby-food',
-            tags: ['이유식', '육아', '가이드'],
-            category: '영양',
-            views: '8.5만'
-        },
-        {
-            id: 'trend3',
-            type: 'youtube',
-            title: '아기 수면교육 완벽 가이드 - 통잠 자는 법',
-            description: '밤에 푹 자는 아기로 만드는 수면교육 방법',
-            url: 'https://youtube.com/example2',
-            tags: ['수면', '교육', '통잠'],
-            category: '수면',
-            views: '15만'
-        },
-        {
-            id: 'trend4',
-            type: 'blog',
-            title: '아기 안전사고 예방 완벽 가이드',
-            description: '집안에서 발생할 수 있는 안전사고 체크리스트',
-            url: 'https://blog.example.com/safety',
-            tags: ['안전', '예방', '체크'],
-            category: '안전',
-            views: '6.2만'
-        },
-    ]
-
-    // 유튜브 추천
-    const youtubeLinks: RecommendedLink[] = [
-        {
-            id: 'yt1',
-            type: 'youtube',
-            title: '배밀이에서 걷기까지 발달 단계',
-            description: '대근육 발달의 모든 것을 단계별로 알려드립니다',
-            url: 'https://youtube.com/example',
-            tags: ['대근육', '걷기', '배밀이'],
-            category: '발달'
-        },
-        {
-            id: 'yt2',
-            type: 'youtube',
-            title: '놀이를 통한 언어 발달 촉진법',
-            description: '말 빨리 트이는 놀이 10가지',
-            url: 'https://youtube.com/example2',
-            tags: ['언어발달', '놀이', '육아'],
-            category: '발달'
-        },
-        {
-            id: 'yt3',
-            type: 'youtube',
-            title: '이유식 거부하는 아기, 어떻게 해야 할까?',
-            description: '소아과 전문의가 알려주는 해결 방법',
-            url: 'https://youtube.com/example3',
-            tags: ['이유식', '거부', '해결법'],
-            category: '영양'
-        },
-    ]
-
-    // 블로그 추천
-    const blogLinks: RecommendedLink[] = [
-        {
-            id: 'blog1',
-            type: 'blog',
-            title: '수면 퇴행 극복하기 - 실전 꿀팁',
-            description: '4개월, 8개월 수면 퇴행 대처법',
-            url: 'https://blog.example.com/sleep',
-            tags: ['수면', '퇴행', '육아'],
-            category: '수면'
-        },
-        {
-            id: 'blog2',
-            type: 'blog',
-            title: '아기 발달에 좋은 장난감 추천',
-            description: '월령별 추천 장난감 총정리',
-            url: 'https://blog.example.com/toys',
-            tags: ['장난감', '발달', '육아템'],
-            category: '발달'
-        },
-        {
-            id: 'blog3',
-            type: 'blog',
-            title: '아기랑 놀아주는 방법 100가지',
-            description: '집에서 할 수 있는 다양한 놀이 방법',
-            url: 'https://blog.example.com/play',
-            tags: ['놀이', '육아', '집콕놀이'],
-            category: '놀이'
-        },
-    ]
 
     if (loading) {
         return (
@@ -387,6 +377,11 @@ export default function AppHome() {
                             placeholder="육아 정보 검색... (예: 모유 수유, 이유식, 수면교육)"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleSearch()
+                                }
+                            }}
                             className="w-full pl-16 pr-6 py-4 text-lg border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-white/80 hover:bg-white transition-colors shadow-sm"
                         />
                     </div>
@@ -402,7 +397,9 @@ export default function AppHome() {
                         {popularKeywords.map((keyword, index) => (
                             <button
                                 key={index}
-                                onClick={() => setSearchQuery(keyword)}
+                                onClick={() => {
+                                    handleSearch(keyword)
+                                }}
                                 className="px-4 py-2 bg-gray-100 hover:bg-primary-100 text-gray-700 hover:text-primary-700 rounded-full text-sm font-medium transition-all hover:scale-105"
                             >
                                 #{keyword}
@@ -411,6 +408,75 @@ export default function AppHome() {
                     </div>
                 </div>
             </motion.div>
+
+            {/* 검색 결과 섹션 */}
+            {searchResults.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="mb-10"
+                >
+                    <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center shadow-sm">
+                                <Search className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">검색 결과</h2>
+                                <p className="text-sm text-gray-600">'{searchQuery}' 검색 결과</p>
+                            </div>
+                        </div>
+
+                        {/* 필터 버튼 */}
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => setSearchFilter('all')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${searchFilter === 'all'
+                                    ? 'bg-white text-primary-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                전체
+                            </button>
+                            <button
+                                onClick={() => setSearchFilter('youtube')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${searchFilter === 'youtube'
+                                    ? 'bg-white text-red-500 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                유튜브
+                            </button>
+                            <button
+                                onClick={() => setSearchFilter('blog')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${searchFilter === 'blog'
+                                    ? 'bg-white text-green-500 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                블로그
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+                        {searchResults
+                            .filter(link => searchFilter === 'all' || link.type === searchFilter)
+                            .map((link) => (
+                                <ContentCard key={link.id} link={link} showViews={true} />
+                            ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* 검색 중 로딩 표시 */}
+            {isSearching && (
+                <div className="mb-10 text-center py-10">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+                    <p className="mt-4 text-gray-600">검색 중...</p>
+                </div>
+            )}
 
             {/* 3. 엄마들이 가장 많이 본 (NEW) */}
             <motion.div
@@ -429,10 +495,18 @@ export default function AppHome() {
                             <p className="text-sm text-gray-600">이번 주 가장 도움이 된 콘텐츠</p>
                         </div>
                     </div>
+                    <button
+                        onClick={() => setVisibleTrendingCount(prev => prev + 5)}
+                        className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={visibleTrendingCount >= trendingContent.length}
+                    >
+                        더보기
+                        <ArrowRight className="w-4 h-4" />
+                    </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {trendingContent.map((link) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                    {trendingContent.slice(0, visibleTrendingCount).map((link) => (
                         <ContentCard key={link.id} link={link} showViews={true} />
                     ))}
                 </div>
@@ -455,14 +529,18 @@ export default function AppHome() {
                             <p className="text-sm text-gray-600">부모들이 가장 많이 본 영상</p>
                         </div>
                     </div>
-                    <button className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1">
+                    <button
+                        onClick={() => setVisibleVideosCount(prev => prev + 5)}
+                        className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={visibleVideosCount >= recommendedVideos.length}
+                    >
                         더보기
                         <ArrowRight className="w-4 h-4" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {youtubeLinks.map((link) => (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                    {recommendedVideos.slice(0, visibleVideosCount).map((link) => (
                         <ContentCard key={link.id} link={link} />
                     ))}
                 </div>
@@ -485,14 +563,18 @@ export default function AppHome() {
                             <p className="text-sm text-gray-600">선배 부모들의 실전 노하우</p>
                         </div>
                     </div>
-                    <button className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1">
+                    <button
+                        onClick={() => setVisibleBlogsCount(prev => prev + 5)}
+                        className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={visibleBlogsCount >= recommendedBlogs.length}
+                    >
                         더보기
                         <ArrowRight className="w-4 h-4" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {blogLinks.map((link) => (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                    {recommendedBlogs.slice(0, visibleBlogsCount).map((link) => (
                         <ContentCard key={link.id} link={link} />
                     ))}
                 </div>
