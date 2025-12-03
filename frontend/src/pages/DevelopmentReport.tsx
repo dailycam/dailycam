@@ -25,10 +25,33 @@ import {
   Cell,
 } from 'recharts'
 import { getDevelopmentData, DevelopmentData } from '../lib/api'
+import { getAuthToken } from '../lib/auth'
 
 export default function DevelopmentReport() {
   const [date] = useState<Date>(new Date())
   const [developmentData, setDevelopmentData] = useState<DevelopmentData | null>(null)
+  const [userInfo, setUserInfo] = useState<{ child_name?: string; child_birthdate?: string } | null>(null)
+
+  // 사용자 정보 가져오기
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const token = getAuthToken()
+      if (!token) return
+
+      try {
+        const response = await fetch('http://localhost:8000/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setUserInfo(data)
+        }
+      } catch (error) {
+        console.error('사용자 정보 로드 실패:', error)
+      }
+    }
+    fetchUserInfo()
+  }, [])
 
   // API에서 데이터 로드
   useEffect(() => {
@@ -43,6 +66,26 @@ export default function DevelopmentReport() {
 
     loadData()
   }, [])
+
+  // 개월 수 계산 함수
+  const calculateAgeInMonths = (birthdate: string | null | undefined): number => {
+    if (!birthdate) return 0
+
+    const birth = new Date(birthdate)
+    const today = new Date()
+
+    const yearDiff = today.getFullYear() - birth.getFullYear()
+    const monthDiff = today.getMonth() - birth.getMonth()
+    const dayDiff = today.getDate() - birth.getDate()
+
+    let totalMonths = yearDiff * 12 + monthDiff
+
+    if (dayDiff < 0) {
+      totalMonths -= 1
+    }
+
+    return totalMonths < 0 ? 0 : totalMonths
+  }
 
   // 로딩 중이거나 데이터가 없으면 기본값 사용
   const radarData = developmentData
@@ -174,7 +217,7 @@ export default function DevelopmentReport() {
               </motion.div>
               <p className="text-sm text-gray-600 mb-2">현재 발달 단계</p>
               <p className="text-primary-600 mb-4 text-2xl font-bold">
-                {developmentData?.ageMonths || 0}개월
+                {calculateAgeInMonths(userInfo?.child_birthdate)}개월
               </p>
 
               <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm">
@@ -183,7 +226,7 @@ export default function DevelopmentReport() {
                   <p className="text-sm text-gray-700 font-medium">발달 강점</p>
                 </div>
                 <p className="text-base text-gray-800 leading-relaxed">
-                  지수는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요! 🌟
+                  {userInfo?.child_name || '우리 아이'}는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요! 🌟
                 </p>
               </div>
             </div>

@@ -124,7 +124,7 @@ export default function SubscriptionPage() {
                         window.dispatchEvent(new Event('subscriptionChanged'))
 
                         alert('베이직 플랜 월 정기구독이 시작되었습니다.')
-                        navigate('/dashboard')
+                        navigate('/profile-setup')
                     } catch (e) {
                         console.error(e)
                         alert(
