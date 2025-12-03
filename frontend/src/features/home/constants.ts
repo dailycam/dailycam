@@ -1,4 +1,4 @@
-import { RecommendedLink } from './types'
+import { RecommendedLink, HighlightMoment } from './types'
 
 export const YOUTUBE_LINKS: RecommendedLink[] = [
     {
@@ -82,3 +82,29 @@ export const NEWS_LINKS: RecommendedLink[] = [
 ]
 
 export const CATEGORIES = ['전체', '발달', '안전', '수면', '영양', '놀이']
+
+export const POPULAR_KEYWORDS = ['배밀이', '이유식', '수면교육', '안전사고', '발달체크', '놀이법']
+
+export const HIGHLIGHT_MOMENTS: HighlightMoment[] = [
+    {
+        id: '1',
+        title: '처음으로 웃은 순간',
+        time: '오전 10:23',
+        description: '엄마 얼굴 보고 활짝 웃었어요',
+        thumbnail: '/placeholder-baby-smile.jpg'
+    },
+    {
+        id: '2',
+        title: '배밀이 연습 중',
+        time: '오후 2:15',
+        description: '2미터 이동 성공!',
+        thumbnail: '/placeholder-baby-crawl.jpg'
+    },
+    {
+        id: '3',
+        title: '엄마를 쳐다보는 눈빛',
+        time: '오후 4:50',
+        description: '엄마 목소리에 반응해요',
+        thumbnail: '/placeholder-baby-look.jpg'
+    }
+]

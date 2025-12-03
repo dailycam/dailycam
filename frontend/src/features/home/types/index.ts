@@ -7,4 +7,13 @@ export type RecommendedLink = {
     url: string
     tags: string[]
     category: string
+    views?: string
+}
+
+export type HighlightMoment = {
+    id: string
+    title: string
+    time: string
+    description: string
+    thumbnail: string
 }
