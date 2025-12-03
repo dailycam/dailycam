@@ -8,7 +8,6 @@ import {
   Maximize,
   AlertTriangle,
   Activity,
-  Clock,
   MapPin,
   Upload,
   X,
@@ -16,71 +15,49 @@ import {
   Eye,
 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { uploadVideoForStreaming, getStreamUrl, stopStream } from '../lib/api'
+import Hls from 'hls.js'
+import { uploadVideoForStreaming, startHlsStream, stopHlsStream } from '../lib/api'
 
 export default function Monitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(false)
   const [selectedCamera, setSelectedCamera] = useState('camera-1')
-  const [streamUrl, setStreamUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [streamSpeed, setStreamSpeed] = useState(1.0)
-  const [streamLoop, setStreamLoop] = useState(true)
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [isStreamActive, setIsStreamActive] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const streamImgRef = useRef<HTMLImageElement>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const streamCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const lastVideoPathRef = useRef<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
 
-  // 페이지 로드 시 저장된 스트림 정보 복원
+  // 컴포넌트 언마운트 시 HLS 정리
   useEffect(() => {
-    const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
-    if (savedStreamInfo) {
-      try {
-        const info = JSON.parse(savedStreamInfo)
-        if (info.videoPath) {
-          lastVideoPathRef.current = info.videoPath
-          setStreamLoop(info.streamLoop ?? streamLoop)
-          setStreamSpeed(info.streamSpeed ?? streamSpeed)
-          
-          const url = getStreamUrl(
-            selectedCamera,
-            info.streamLoop ?? streamLoop,
-            info.streamSpeed ?? streamSpeed,
-            undefined,
-            info.videoPath
-          )
-          setStreamUrl(url)
-          setIsStreamActive(true)
-          console.log('저장된 스트림 정보 복원 (기존 스트림 계속 사용):', info)
-        }
-      } catch (e) {
-        console.warn('스트림 정보 복원 실패:', e)
-        localStorage.removeItem(`stream_${selectedCamera}`)
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
       }
     }
-  }, [selectedCamera])
+  }, [])
 
-  // 스트림 정보를 localStorage에 저장
+  // 비디오 재생/일시정지 제어
   useEffect(() => {
-    if (streamUrl && lastVideoPathRef.current) {
-      const streamInfo = {
-        videoPath: lastVideoPathRef.current,
-        streamUrl: streamUrl,
-        streamLoop: streamLoop,
-        streamSpeed: streamSpeed,
-        cameraId: selectedCamera,
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.play().catch(e => console.warn('재생 실패:', e))
+      } else {
+        videoRef.current.pause()
       }
-      localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
-    } else {
-      localStorage.removeItem(`stream_${selectedCamera}`)
     }
-  }, [streamUrl, streamLoop, streamSpeed, selectedCamera])
+  }, [isPlaying])
+
+  // 음소거 제어
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted
+    }
+  }, [isMuted])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,62 +72,95 @@ export default function Monitoring() {
     }
   }
 
-  // 비디오 업로드 및 스트리밍 시작
+  // 비디오 업로드 및 HLS 스트리밍 시작
   const handleUploadAndStream = async () => {
     if (!videoFile) return
 
     setIsUploading(true)
     setUploadError(null)
 
-    console.log('업로드 시작:', {
-      camera: selectedCamera,
-      file: videoFile.name,
-      size: (videoFile.size / 1024 / 1024).toFixed(2) + ' MB',
-    })
-
     try {
-      if (streamUrl) {
-        console.log('기존 스트림 중지 중...')
-        try {
-          await stopStream(selectedCamera)
-        } catch (e) {
-          console.warn('기존 스트림 중지 실패 (무시):', e)
-        }
-        setStreamUrl(null)
-        await new Promise((resolve) => setTimeout(resolve, 500))
+      // 1. 기존 스트림 중지
+      if (isStreamActive) {
+        await handleStopStream()
       }
 
-      const result = await uploadVideoForStreaming(selectedCamera, videoFile)
-      console.log('업로드 완료:', result)
+      // 2. 비디오 업로드
+      console.log('비디오 업로드 시작...')
+      await uploadVideoForStreaming(selectedCamera, videoFile)
 
-      const timestamp = Date.now()
-      lastVideoPathRef.current = result.video_path
-      const url = getStreamUrl(
-        selectedCamera,
-        streamLoop,
-        streamSpeed,
-        timestamp,
-        result.video_path
-      )
-      console.log('새 스트림 URL:', url)
+      // 3. HLS 스트림 시작 요청
+      console.log('HLS 스트림 시작 요청...')
+      const response = await startHlsStream(selectedCamera)
+      console.log('HLS 스트림 시작 응답:', response)
 
-      setStreamUrl(null)
-      setReconnectAttempts(0)
-      setIsStreamActive(true)
-      
-      setTimeout(() => {
-        setStreamUrl(url)
-        setIsPlaying(true)
-        startStreamMonitoring()
-      }, 100)
+      // 4. HLS 재생 시작
+      const playlistUrl = response.playlist_url
+      // API URL이 상대 경로인 경우 절대 경로로 변환 (필요 시)
+      const fullPlaylistUrl = playlistUrl.startsWith('http')
+        ? playlistUrl
+        : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${playlistUrl}`
+
+      if (Hls.isSupported()) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy()
+        }
+
+        const hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: true,
+        })
+
+        hls.loadSource(fullPlaylistUrl)
+
+        if (videoRef.current) {
+          hls.attachMedia(videoRef.current)
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS 매니페스트 로드됨, 재생 시작')
+            videoRef.current?.play().catch(e => console.error('재생 오류:', e))
+            setIsStreamActive(true)
+            setIsPlaying(true)
+          })
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.log('네트워크 오류, 복구 시도...')
+                  hls.startLoad()
+                  break
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.log('미디어 오류, 복구 시도...')
+                  hls.recoverMediaError()
+                  break
+                default:
+                  console.error('치명적 오류, 재생 불가:', data)
+                  hls.destroy()
+                  break
+              }
+            }
+          })
+        }
+
+        hlsRef.current = hls
+      } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari 등 네이티브 HLS 지원
+        videoRef.current.src = fullPlaylistUrl
+        videoRef.current.addEventListener('loadedmetadata', () => {
+          videoRef.current?.play()
+          setIsStreamActive(true)
+          setIsPlaying(true)
+        })
+      } else {
+        setUploadError('이 브라우저는 HLS 재생을 지원하지 않습니다.')
+      }
 
       setShowUploadModal(false)
     } catch (error: any) {
-      console.error('업로드 실패:', error)
-      const errorMessage =
-        error.message ||
-        '비디오 업로드 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.'
-      setUploadError(errorMessage)
+      console.error('스트리밍 시작 실패:', error)
+      setUploadError(error.message || '스트리밍을 시작할 수 없습니다.')
     } finally {
       setIsUploading(false)
     }
@@ -159,113 +169,31 @@ export default function Monitoring() {
   // 스트림 중지
   const handleStopStream = async () => {
     try {
-      stopStreamMonitoring()
-      await stopStream(selectedCamera)
-      setStreamUrl(null)
-      setIsPlaying(false)
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+
+      if (videoRef.current) {
+        videoRef.current.pause()
+        videoRef.current.src = ''
+        videoRef.current.load()
+      }
+
+      await stopHlsStream(selectedCamera)
       setIsStreamActive(false)
-      setReconnectAttempts(0)
-      lastVideoPathRef.current = null
-      localStorage.removeItem(`stream_${selectedCamera}`)
-    } catch (error: any) {
+      setIsPlaying(false)
+    } catch (error) {
       console.error('스트림 중지 오류:', error)
     }
   }
 
-  // 카메라 변경 시 스트림 URL 업데이트
-  useEffect(() => {
-    if (streamUrl) {
-      const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed)
-      setStreamUrl(url)
-    }
-  }, [selectedCamera, streamLoop, streamSpeed])
-
-  // 스트림 이미지 로드 오류 처리
-  const handleStreamError = () => {
-    console.warn('스트림 이미지 로드 실패, 재연결 시도...')
-    setIsStreamActive(false)
-    
-    if (reconnectAttempts < 5 && lastVideoPathRef.current) {
-      const newAttempts = reconnectAttempts + 1
-      setReconnectAttempts(newAttempts)
-      
-      console.log(`재연결 시도 ${newAttempts}/5`)
-      
-      reconnectTimeoutRef.current = setTimeout(() => {
-        const timestamp = Date.now()
-        const url = getStreamUrl(
-          selectedCamera,
-          streamLoop,
-          streamSpeed,
-          timestamp,
-          lastVideoPathRef.current || undefined
-        )
-        setStreamUrl(null)
-        setTimeout(() => {
-          setStreamUrl(url)
-          setIsStreamActive(true)
-        }, 100)
-      }, 2000)
-    } else {
-      setStreamUrl(null)
-      setUploadError('스트림 연결에 실패했습니다. 비디오 파일을 다시 업로드해주세요.')
-      setIsStreamActive(false)
-    }
-  }
-
-  // 스트림 이미지 로드 성공 처리
-  const handleStreamLoad = () => {
-    setIsStreamActive(true)
-    setReconnectAttempts(0)
-    console.log('스트림 연결 성공')
-  }
-
-  // 스트림 모니터링 시작
-  const startStreamMonitoring = () => {
-    if (streamCheckIntervalRef.current) {
-      clearInterval(streamCheckIntervalRef.current)
-    }
-
-    streamCheckIntervalRef.current = setInterval(() => {
-      if (streamUrl && streamImgRef.current) {
-        const img = streamImgRef.current
-        if (!img.complete || img.naturalWidth === 0) {
-          console.warn('스트림 이미지가 로드되지 않음, 재연결 시도...')
-          handleStreamError()
-        } else {
-          setIsStreamActive(true)
-        }
-      }
-    }, 30000)
-  }
-
-  // 스트림 모니터링 중지
-  const stopStreamMonitoring = () => {
-    if (streamCheckIntervalRef.current) {
-      clearInterval(streamCheckIntervalRef.current)
-      streamCheckIntervalRef.current = null
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-  }
-
-  // 스트림 URL이 변경되면 모니터링 재시작
-  useEffect(() => {
-    if (streamUrl) {
-      startStreamMonitoring()
-    } else {
-      stopStreamMonitoring()
-    }
-  }, [streamUrl])
-
   return (
     <div className="p-8">
       {/* Page Header */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }} 
-        animate={{ opacity: 1, y: 0 }} 
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="mb-8"
       >
@@ -283,35 +211,23 @@ export default function Monitoring() {
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
           {/* Main Camera Feed */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             className="card p-0 overflow-hidden border-0 shadow-xl"
           >
             <div className="relative bg-gray-900 aspect-video">
-              {/* Video Stream */}
-              {streamUrl ? (
-                <>
-                  <img
-                    key={streamUrl}
-                    ref={streamImgRef}
-                    src={streamUrl}
-                    alt="Live Stream"
-                    className="w-full h-full object-contain"
-                    onError={handleStreamError}
-                    onLoad={handleStreamLoad}
-                  />
-                  {!isStreamActive && reconnectAttempts > 0 && (
-                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                        <p className="text-sm">스트림 재연결 중... ({reconnectAttempts}/5)</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
+              {/* Video Player */}
+              <video
+                ref={videoRef}
+                className={`w-full h-full object-contain ${!isStreamActive ? 'hidden' : ''}`}
+                playsInline
+                muted={isMuted}
+              />
+
+              {/* Placeholder when no stream */}
+              {!isStreamActive && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
@@ -331,11 +247,11 @@ export default function Monitoring() {
               )}
 
               {/* Live Indicator */}
-              {streamUrl && (
-                <motion.div 
-                  initial={{ scale: 0 }} 
-                  animate={{ scale: 1 }} 
-                  className="absolute top-4 left-4 flex items-center gap-2 bg-gradient-to-r from-danger-500 to-danger-600 text-white px-3 py-1.5 rounded-full shadow-lg"
+              {isStreamActive && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute top-4 left-4 flex items-center gap-2 bg-gradient-to-r from-danger-500 to-danger-600 text-white px-3 py-1.5 rounded-full shadow-lg z-10"
                 >
                   <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                   <span className="text-sm font-semibold">LIVE</span>
@@ -343,38 +259,15 @@ export default function Monitoring() {
               )}
 
               {/* AI Detection Overlay */}
-              <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg border border-white/20">
+              <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg border border-white/20 z-10">
                 <div className="flex items-center gap-2 text-sm">
                   <Activity className="w-4 h-4 text-safe" />
                   <span>AI 분석 중...</span>
                 </div>
               </div>
 
-              {/* Detection Box (Example) */}
-              {streamUrl && (
-                <div className="absolute top-1/3 left-1/3 w-32 h-48 border-4 border-safe rounded-lg">
-                  <div className="absolute -top-7 left-0 bg-safe text-white text-xs px-2 py-1 rounded">
-                    아이 감지됨
-                  </div>
-                </div>
-              )}
-
-              {/* Zone Warnings */}
-              {streamUrl && (
-                <div className="absolute bottom-20 left-4 right-4 space-y-2">
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }} 
-                    animate={{ opacity: 1, x: 0 }}
-                    className="bg-warning/90 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg"
-                  >
-                    <AlertTriangle className="w-5 h-5" />
-                    <span className="text-sm">데드존 근처 접근 감지</span>
-                  </motion.div>
-                </div>
-              )}
-
               {/* Video Controls */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 z-10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
@@ -389,10 +282,9 @@ export default function Monitoring() {
                     >
                       {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                     </button>
-                    <span className="text-white text-sm ml-2">오후 3:45:22</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!streamUrl ? (
+                    {!isStreamActive ? (
                       <button
                         onClick={() => setShowUploadModal(true)}
                         className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
@@ -419,9 +311,9 @@ export default function Monitoring() {
           </motion.div>
 
           {/* Camera Selector */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
             className="grid grid-cols-3 gap-3"
           >
@@ -447,9 +339,9 @@ export default function Monitoring() {
           </motion.div>
 
           {/* AI Analysis Summary */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
             className="card bg-gradient-to-br from-primary-50 to-blue-50 border-primary-100"
           >
@@ -483,9 +375,9 @@ export default function Monitoring() {
         {/* Right Sidebar - Activity Log & Alerts */}
         <div className="space-y-4">
           {/* Real-time Alerts */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} 
-            animate={{ opacity: 1, x: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
             className="card"
           >
@@ -518,9 +410,9 @@ export default function Monitoring() {
           </motion.div>
 
           {/* Activity Timeline */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} 
-            animate={{ opacity: 1, x: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
             className="card"
           >
@@ -553,9 +445,9 @@ export default function Monitoring() {
           </motion.div>
 
           {/* Quick Stats */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} 
-            animate={{ opacity: 1, x: 0 }} 
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
             className="card bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 text-white border-0 shadow-xl overflow-hidden relative"
           >
@@ -578,8 +470,8 @@ export default function Monitoring() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} 
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl"
           >
@@ -618,42 +510,6 @@ export default function Monitoring() {
                     {videoFile ? videoFile.name : '비디오 파일 선택'}
                   </p>
                 </button>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  재생 속도: {streamSpeed}x
-                </label>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3"
-                  step="0.5"
-                  value={streamSpeed}
-                  onChange={(e) => setStreamSpeed(parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>0.5x</span>
-                  <span>1x</span>
-                  <span>1.5x</span>
-                  <span>2x</span>
-                  <span>2.5x</span>
-                  <span>3x</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="loop"
-                  checked={streamLoop}
-                  onChange={(e) => setStreamLoop(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <label htmlFor="loop" className="text-sm text-gray-700">
-                  비디오 반복 재생
-                </label>
               </div>
 
               {uploadError && (
@@ -706,11 +562,10 @@ function CameraThumbnail({
   return (
     <button
       onClick={onClick}
-      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
-        isActive
+      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${isActive
           ? 'border-primary-500 ring-2 ring-primary-200 shadow-lg'
           : 'border-gray-200 hover:border-gray-300'
-      } ${isOffline ? 'opacity-50' : ''}`}
+        } ${isOffline ? 'opacity-50' : ''}`}
     >
       <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
         <Camera className="w-8 h-8 text-gray-600" />
@@ -804,14 +659,11 @@ function TimelineItem({
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
-        <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
+        <div className={`w-2 h-2 rounded-full ${statusColors[status]}`} />
+        <div className="w-0.5 flex-1 bg-gray-200 my-1" />
       </div>
-      <div className="flex-1 pb-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Clock className="w-3 h-3 text-gray-400" />
-          <span className="text-xs text-gray-500">{time}</span>
-        </div>
+      <div className="pb-4">
+        <p className="text-xs text-gray-500">{time}</p>
         <p className="text-sm text-gray-900">{activity}</p>
       </div>
     </div>
@@ -821,10 +673,9 @@ function TimelineItem({
 // Quick Stat Component
 function QuickStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-primary-100">{label}</span>
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-white/80">{label}</span>
       <span className="text-sm font-semibold text-white">{value}</span>
     </div>
   )
 }
-
