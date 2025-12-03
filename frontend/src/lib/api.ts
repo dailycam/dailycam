@@ -107,6 +107,60 @@ export function getStreamUrl(
   return baseUrl
 }
 
+export interface StartHlsStreamResponse {
+  message: string
+  camera_id: string
+  status: string
+  stream_type: string
+  analysis_enabled: boolean
+  playlist_url: string
+}
+
+/**
+ * HLS 스트림을 시작합니다.
+ */
+export async function startHlsStream(
+  cameraId: string,
+  enableAnalysis: boolean = true,
+  enableRealtimeDetection: boolean = true
+): Promise<StartHlsStreamResponse> {
+  const params = new URLSearchParams({
+    enable_analysis: enableAnalysis.toString(),
+    enable_realtime_detection: enableRealtimeDetection.toString(),
+  })
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/start-hls-stream/${cameraId}?${params.toString()}`,
+    {
+      method: 'POST',
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
+ * HLS 스트림을 중지합니다.
+ */
+export async function stopHlsStream(cameraId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-hls-stream/${cameraId}`, {
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    // 404는 이미 중지된 것으로 간주
+    if (response.status === 404) return
+
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 중지 중 오류가 발생했습니다.')
+  }
+}
+
 /**
  * 스트림을 중지합니다.
  */
@@ -434,38 +488,8 @@ export async function fetchAnalyticsData(): Promise<AnalyticsData> {
 
     return await response.json()
   } catch (error) {
-    // 백엔드 연결 실패 시 목 데이터 반환
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    return {
-      weekly_trend: [
-        { date: '2024-11-04', safety: 90, incidents: 1, activity: 70 },
-        { date: '2024-11-05', safety: 92, incidents: 0, activity: 75 },
-        { date: '2024-11-06', safety: 88, incidents: 2, activity: 65 },
-        { date: '2024-11-07', safety: 94, incidents: 0, activity: 80 },
-        { date: '2024-11-08', safety: 91, incidents: 1, activity: 72 },
-        { date: '2024-11-09', safety: 93, incidents: 0, activity: 78 },
-        { date: '2024-11-10', safety: 92, incidents: 0, activity: 73 },
-      ],
-      incident_distribution: [
-        { name: '넘어짐', value: 2, color: '#ef4444' },
-        { name: '충돌', value: 1, color: '#f59e0b' },
-        { name: '접근', value: 3, color: '#3b82f6' },
-        { name: '이탈', value: 0, color: '#8b5cf6' },
-        { name: '기타', value: 1, color: '#6b7280' },
-      ],
-      summary: {
-        avg_safety_score: 91.4,
-        total_incidents: 4,
-        safe_zone_percentage: 92.5,
-        incident_reduction_percentage: 15.2,
-        prev_avg_safety: 88,
-        prev_total_incidents: 6,
-        safety_change: 3.4,
-        safety_change_percent: 3.9,
-        incident_change: -2,
-        incident_change_percent: -33.3,
-      },
-    }
+    console.error('Analytics 데이터 조회 실패:', error)
+    throw error
   }
 }
 
@@ -577,57 +601,8 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       hourlyStats: data.hourly_stats || [],
     }
   } catch (error: any) {
-    // 백엔드 연결 실패 시 목 데이터 반환
-    // 404 에러는 조용히 처리 (백엔드에 엔드포인트가 없는 경우)
-    if (error?.message !== 'DASHBOARD_ENDPOINT_NOT_FOUND') {
-      console.error('❌ [Dashboard API] 백엔드 연결 실패:', error)
-      console.error('❌ [Dashboard API] 에러 메시지:', error?.message)
-      console.error('❌ [Dashboard API] 목 데이터 사용')
-    }
-    return {
-      summary: "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 주방 데드존에 3회 접근했습니다.",
-      rangeDays: rangeDays,
-      safetyScore: 92,
-      developmentScore: 88,
-      incidentCount: 2,
-      monitoringHours: 8.5,
-      activityPattern: "블록 쌓기, 낮잠",
-      weeklyTrend: [
-        { day: "월", score: 88, incidents: 1, activity: 0, safety: 88 },
-        { day: "화", score: 90, incidents: 0, activity: 0, safety: 90 },
-        { day: "수", score: 85, incidents: 3, activity: 0, safety: 85 },
-        { day: "목", score: 92, incidents: 1, activity: 0, safety: 92 },
-        { day: "금", score: 89, incidents: 2, activity: 0, safety: 89 },
-        { day: "토", score: 93, incidents: 0, activity: 78, safety: 93 },
-        { day: "일", score: 92, incidents: 0, activity: 73, safety: 92 },
-      ] as DashboardWeeklyTrendItem[],
-      risks: [
-        {
-          level: 'high',
-          title: '주방 근처 반복 접근',
-          time: '오후 2:15 - 2:45',
-          count: 3,
-        },
-        {
-          level: 'medium',
-          title: '계단 입구 접근',
-          time: '오전 11:30',
-          count: 1,
-        },
-      ],
-      recommendations: [
-        {
-          priority: 'high',
-          title: '주방 안전 게이트 설치',
-          description: '아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다.',
-        },
-        {
-          priority: 'medium',
-          title: '거실 테이블 모서리 보호대 추가',
-          description: '충돌 위험이 감지되었습니다. 모서리 보호대를 추가로 설치하세요.',
-        },
-      ],
-    }
+    console.error('대시보드 데이터 조회 실패:', error)
+    throw error
   }
 }
 
@@ -703,36 +678,8 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
       developmentInsights: data.development_insights || [], // Added
     }
   } catch (error) {
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    // 목 데이터 반환
-    return {
-      ageMonths: 7,
-      developmentSummary: '오늘 아이는 총 79건의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.',
-      developmentScore: 88,
-      developmentRadarScores: {
-        언어: 88,
-        운동: 92,
-        인지: 85,
-        사회성: 90,
-        정서: 87,
-      },
-      strongestArea: '운동',
-      dailyDevelopmentFrequency: [
-        { category: '언어', count: 18, color: '#a2d2ff' }, // Light Blue
-        { category: '운동', count: 25, color: '#b0f2c2' }, // Light Green
-        { category: '인지', count: 12, color: '#ffc77d' }, // Light Orange
-        { category: '사회성', count: 15, color: '#d4a2ff' }, // Light Purple
-        { category: '정서', count: 9, color: '#ffb0bb' }, // Light Pink
-      ],
-      recommendedActivities: [
-        {
-          title: '까꿍 놀이',
-          benefit: '인지 발달',
-          description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
-          duration: '10-15분',
-        },
-      ],
-    }
+    console.error('발달 데이터 조회 실패:', error)
+    throw error
   }
 }
 
@@ -783,11 +730,7 @@ export async function getClipHighlights(
     const data = await response.json()
     return data
   } catch (error) {
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    // 목 데이터 반환
-    return {
-      clips: [],
-      total: 0,
-    }
+    console.error('클립 데이터 조회 실패:', error)
+    throw error
   }
 }

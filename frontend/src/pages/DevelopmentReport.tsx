@@ -171,7 +171,7 @@ export default function DevelopmentReport() {
                     <Target className="w-5 h-5 text-primary-600" />
                   </div>
                   <span>
-                    {developmentData?.developmentSummary || '아직 분석된 데이터가 없습니다. 영상을 업로드하면 AI가 분석합니다.'}
+                    {developmentData?.developmentSummary || '아직 분석된 데이터가 없습니다. 영상을 업로드하면 자동으로 분석됩니다.'}
                   </span>
                 </div>
               </div>
