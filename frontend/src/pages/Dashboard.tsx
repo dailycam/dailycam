@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
+import { LayoutDashboard } from 'lucide-react'
 import { SimpleClockChart } from '../components/dashboard/SimpleClockChart'
 import { ClockGaugeSection } from '../components/dashboard/ClockGaugeSection'
 import { ActivityTable } from '../components/dashboard/ActivityTable'
 import { StatsGrid } from '../components/dashboard/StatsGrid'
 import { EventModal } from '../components/dashboard/EventModal'
 import { getDashboardData } from '../lib/api'
+
 
 interface TimelineEvent {
     time: string
@@ -230,6 +232,15 @@ export const Dashboard = () => {
 
     return (
         <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+            {/* Page Header */}
+            <div className="flex items-center gap-3 mb-2">
+                <LayoutDashboard className="w-8 h-8 text-primary-600" />
+                <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
+                    대시보드
+                </h1>
+            </div>
+            <p className="text-gray-600 mb-6">오늘 하루를 한눈에 확인하세요</p>
+
             {/* 1. 상단: 카드 섹션 4개 (백엔드 실제 데이터) */}
             <StatsGrid
                 safetyScore={dailyStats.safetyScore}

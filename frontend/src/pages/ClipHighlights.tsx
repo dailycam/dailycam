@@ -138,7 +138,7 @@ export default function ClipHighlights() {
           <Film className="w-8 h-8 text-primary-600" />
           <h1 className="text-3xl font-bold text-gray-900">클립 하이라이트</h1>
         </div>
-        <p className="text-gray-600">AI가 자동으로 생성한 중요한 순간들을 확인하세요</p>
+        <p className="text-gray-600">중요한 순간들을 확인하세요</p>
       </motion.div>
 
       {/* Summary Stats */}
@@ -197,8 +197,8 @@ export default function ClipHighlights() {
           <button
             onClick={() => setActiveTab('development')}
             className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'development'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+              ? 'border-primary-500 text-primary-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
               }`}
           >
             <TrendingUp className="w-4 h-4 inline mr-2" />
@@ -219,7 +219,7 @@ export default function ClipHighlights() {
             <div className="card p-6 bg-gradient-to-br from-safe-50 to-white mb-4">
               <h3 className="mb-2 text-safe-dark font-semibold">발달 클립 하이라이트</h3>
               <p className="text-sm text-gray-700">
-                AI가 분석한 중요한 발달 이정표와 행동 패턴을 자동으로 클립으로 저장했습니다. 각 클립은 언어, 운동, 인지, 사회성 등의 발달 영역별로 분류되어 있습니다.
+                중요한 발달 이정표와 행동 패턴을 자동으로 클립으로 저장했습니다. 각 클립은 언어, 운동, 인지, 사회성 등의 발달 영역별로 분류되어 있습니다.
               </p>
             </div>
             <div className="space-y-4">
