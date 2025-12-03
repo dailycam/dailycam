@@ -1,4 +1,4 @@
-import { CheckCircle2, Activity, Shield } from 'lucide-react'
+import { CheckCircle2, Activity, Shield, AlertTriangle, Clock, Video } from 'lucide-react'
 import { VideoAnalysisResult } from '../../../lib/api'
 
 interface AnalysisResultProps {
@@ -11,20 +11,20 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
 
     // 안전도 레벨 배지
     const getSafetyLevelBadge = (level: string) => {
-        if (level === '매우높음') return { text: '매우 안전', color: 'bg-green-100 text-green-700' }
-        if (level === '높음') return { text: '안전', color: 'bg-green-100 text-green-700' }
+        if (level === '매우높음' || level === '매우안전') return { text: '매우 안전', color: 'bg-green-100 text-green-700' }
+        if (level === '높음' || level === '안전') return { text: '안전', color: 'bg-green-100 text-green-700' }
         if (level === '중간') return { text: '주의', color: 'bg-yellow-100 text-yellow-700' }
         if (level === '낮음') return { text: '위험', color: 'bg-red-100 text-red-700' }
         return { text: '매우 위험', color: 'bg-red-100 text-red-700' }
     }
 
-    // 🔹 안전 점수 색상 (점수 기반)
+    // 안전 점수 색상
     const getSafetyScoreColor = (score?: number) => {
-        if (score === undefined || score === null) return 'text-gray-100'
-        if (score >= 90) return 'text-green-300'
-        if (score >= 70) return 'text-green-200'
-        if (score >= 50) return 'text-yellow-200'
-        return 'text-red-300'
+        if (score === undefined || score === null) return 'text-gray-500'
+        if (score >= 90) return 'text-green-600'
+        if (score >= 70) return 'text-green-500'
+        if (score >= 50) return 'text-yellow-500'
+        return 'text-red-600'
     }
 
     return (
@@ -82,20 +82,7 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                                 .slice(0, 3)
                                                 .map((ev: any, idx: number) => (
                                                     <li key={idx}>
-                                                        {typeof ev === 'string' ? (
-                                                            ev
-                                                        ) : (
-                                                            <>
-                                                                {ev.comment && <span>{ev.comment}</span>}
-                                                                {!ev.comment && ev.description && (
-                                                                    <span>{ev.description}</span>
-                                                                )}
-                                                                {!ev.comment &&
-                                                                    !ev.description && (
-                                                                        <span>{JSON.stringify(ev)}</span>
-                                                                    )}
-                                                            </>
-                                                        )}
+                                                        {typeof ev === 'string' ? ev : (ev.comment || ev.description || JSON.stringify(ev))}
                                                     </li>
                                                 ))}
                                         </ul>
@@ -116,6 +103,40 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                             '분석 요약 정보가 없습니다.'}
                     </p>
                 </div>
+
+                {/* 발달 기술 (Skills) - 새로 추가 */}
+                {analysisResult.development_analysis?.skills &&
+                    Array.isArray(analysisResult.development_analysis.skills) &&
+                    analysisResult.development_analysis.skills.length > 0 && (
+                        <div className="bg-white rounded-lg p-4 border border-blue-200">
+                            <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-blue-600" />
+                                관찰된 발달 기술
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {analysisResult.development_analysis.skills.map((skill: any, idx: number) => (
+                                    <div key={idx} className="bg-blue-50 p-2 rounded border-l-4 border-blue-500">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium text-blue-900">
+                                                {skill.name || '기술'}
+                                            </span>
+                                            {skill.present && (
+                                                <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                                    관찰됨
+                                                </span>
+                                            )}
+                                        </div>
+                                        {skill.category && (
+                                            <p className="text-xs text-gray-600 mt-1">카테고리: {skill.category}</p>
+                                        )}
+                                        {skill.frequency && (
+                                            <p className="text-xs text-gray-600">빈도: {skill.frequency}회</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                 {/* 다음 단계 징후 */}
                 {analysisResult.development_analysis?.next_stage_signs &&
@@ -187,20 +208,7 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                             {analysisResult.stage_consistency.evidence.map(
                                                 (ev: any, idx: number) => (
                                                     <li key={idx}>
-                                                        {typeof ev === 'string' ? (
-                                                            ev
-                                                        ) : (
-                                                            <>
-                                                                {ev.comment && <span>{ev.comment}</span>}
-                                                                {!ev.comment && ev.description && (
-                                                                    <span>{ev.description}</span>
-                                                                )}
-                                                                {!ev.comment &&
-                                                                    !ev.description && (
-                                                                        <span>{JSON.stringify(ev)}</span>
-                                                                    )}
-                                                            </>
-                                                        )}
+                                                        {typeof ev === 'string' ? ev : (ev.comment || ev.description || JSON.stringify(ev))}
                                                     </li>
                                                 )
                                             )}
@@ -219,7 +227,7 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                             안전 분석
                         </h4>
                         <div className="space-y-3">
-                            {/* 🔹 안전 점수 및 레벨 표시 */}
+                            {/* 안전 점수 및 레벨 표시 */}
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
                                 <div className="flex items-center justify-between gap-4">
                                     {typeof analysisResult.safety_analysis.safety_score === 'number' && (
@@ -231,7 +239,7 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                                     <span
                                                         className={`text-2xl font-bold ${getSafetyScoreColor(
                                                             analysisResult.safety_analysis.safety_score
-                                                        ).replace('text-', 'text-').replace('100', '700')}`}
+                                                        )}`}
                                                     >
                                                         {analysisResult.safety_analysis.safety_score}
                                                     </span>
@@ -260,7 +268,59 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                 </div>
                             </div>
 
-                            {/* 🔹 감점 내역 표시 */}
+                            {/* 안전 인사이트 - 새로 추가 */}
+                            {(analysisResult.safety_analysis as any)?.safety_insights &&
+                                Array.isArray((analysisResult.safety_analysis as any).safety_insights) &&
+                                (analysisResult.safety_analysis as any).safety_insights.length > 0 && (
+                                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                                        <p className="text-sm font-medium text-blue-900 mb-2">💡 안전 인사이트</p>
+                                        <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
+                                            {(analysisResult.safety_analysis as any).safety_insights.map((insight: string, idx: number) => (
+                                                <li key={idx}>{insight}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                            {/* 환경 위험 요소 - 새로 추가 */}
+                            {analysisResult.safety_analysis?.environment_risks &&
+                                Array.isArray(analysisResult.safety_analysis.environment_risks) &&
+                                analysisResult.safety_analysis.environment_risks.length > 0 && (
+                                    <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                        <p className="text-sm font-medium text-orange-900 mb-2 flex items-center gap-2">
+                                            <AlertTriangle className="w-4 h-4" />
+                                            환경 위험 요소
+                                        </p>
+                                        <div className="space-y-2">
+                                            {analysisResult.safety_analysis.environment_risks.map((risk: any, idx: number) => (
+                                                <div key={idx} className="bg-white p-2 rounded border-l-4 border-orange-500">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-sm font-medium text-orange-900">
+                                                            {risk.risk_type || '위험 요소'}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded text-xs ${risk.severity === '사고' ? 'bg-red-100 text-red-700' :
+                                                            risk.severity === '위험' ? 'bg-orange-100 text-orange-700' :
+                                                                risk.severity === '주의' ? 'bg-yellow-100 text-yellow-700' :
+                                                                    'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                            {risk.severity}
+                                                        </span>
+                                                    </div>
+                                                    {risk.comment && (
+                                                        <p className="text-xs text-gray-700">{risk.comment}</p>
+                                                    )}
+                                                    {risk.has_safety_device && risk.safety_device_type && (
+                                                        <p className="text-xs text-green-600 mt-1">
+                                                            ✓ 안전 장치: {risk.safety_device_type}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                            {/* 감점 내역 표시 */}
                             {analysisResult.safety_analysis?.incident_summary &&
                                 Array.isArray(analysisResult.safety_analysis.incident_summary) &&
                                 analysisResult.safety_analysis.incident_summary.length > 0 && (
@@ -275,12 +335,6 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                                         item.occurrences > 0 || item.applied_deduction < 0
                                                 )
                                                 .map((item: any, idx: number) => {
-                                                    const severityLabels: Record<string, string> = {
-                                                        사고: '사고',
-                                                        위험: '위험',
-                                                        주의: '주의',
-                                                        권장: '권장',
-                                                    }
                                                     const severityColors: Record<string, string> = {
                                                         사고: 'bg-red-100 text-red-700 border-red-300',
                                                         위험: 'bg-orange-100 text-orange-700 border-orange-300',
@@ -288,8 +342,6 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                                         권장: 'bg-blue-100 text-blue-700 border-blue-300',
                                                     }
                                                     const severity = item.severity || '기타'
-                                                    const occurrences = item.occurrences || 0
-                                                    const deduction = item.applied_deduction || 0
 
                                                     return (
                                                         <div
@@ -300,21 +352,21 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                                                         >
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-xs font-medium">
-                                                                    {severityLabels[severity] || severity}
+                                                                    {severity}
                                                                 </span>
                                                                 <span className="text-sm font-medium">
                                                                     {item.description}
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center gap-2 text-xs">
-                                                                {occurrences > 0 && (
+                                                                {item.occurrences > 0 && (
                                                                     <span className="bg-white/50 px-1.5 py-0.5 rounded">
-                                                                        {occurrences}회
+                                                                        {item.occurrences}회
                                                                     </span>
                                                                 )}
-                                                                {deduction < 0 && (
+                                                                {item.applied_deduction < 0 && (
                                                                     <span className="font-bold text-red-600">
-                                                                        {deduction}점
+                                                                        {item.applied_deduction}점
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -327,6 +379,81 @@ export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
                         </div>
                     </div>
                 )}
+
+                {/* 타임라인 이벤트 - 새로 추가 */}
+                {analysisResult.timelineEvents &&
+                    Array.isArray(analysisResult.timelineEvents) &&
+                    analysisResult.timelineEvents.length > 0 && (
+                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-gray-600" />
+                                타임라인 ({analysisResult.timelineEvents.length}건)
+                            </h4>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {analysisResult.timelineEvents.map((event: any, idx: number) => (
+                                    <div key={idx} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
+                                        <span className="text-xs font-mono text-gray-500 min-w-[60px]">
+                                            {event.timestamp}
+                                        </span>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${event.type === 'fall' ? 'bg-red-100 text-red-700' :
+                                                    event.type === 'danger' ? 'bg-orange-100 text-orange-700' :
+                                                        event.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-green-100 text-green-700'
+                                                    }`}>
+                                                    {event.type}
+                                                </span>
+                                                <span className="text-xs text-gray-600">{event.description}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                {/* 하이라이트 클립 - 새로 추가 */}
+                {(analysisResult as any).highlight_clips &&
+                    Array.isArray((analysisResult as any).highlight_clips) &&
+                    (analysisResult as any).highlight_clips.length > 0 && (
+                        <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <Video className="w-4 h-4 text-purple-600" />
+                                하이라이트 클립 ({(analysisResult as any).highlight_clips.length}개)
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {(analysisResult as any).highlight_clips.map((clip: any, idx: number) => (
+                                    <div key={idx} className="bg-purple-50 p-3 rounded border border-purple-200">
+                                        <div className="flex items-start justify-between mb-2">
+                                            <span className="text-sm font-medium text-purple-900">
+                                                {clip.title || `클립 ${idx + 1}`}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
+                                                {clip.category}
+                                            </span>
+                                        </div>
+                                        {clip.description && (
+                                            <p className="text-xs text-gray-700 mb-2">{clip.description}</p>
+                                        )}
+                                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                                            {clip.timestamp_range && (
+                                                <span className="font-mono">{clip.timestamp_range}</span>
+                                            )}
+                                            {clip.importance && (
+                                                <span className={`px-2 py-0.5 rounded ${clip.importance === '높음' ? 'bg-red-100 text-red-700' :
+                                                    clip.importance === '중간' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-green-100 text-green-700'
+                                                    }`}>
+                                                    {clip.importance}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
             </div>
         </div>
     )

@@ -8,17 +8,21 @@ import Header from './Header'
  * 사이드바와 헤더 포함
  */
 export default function AppLayout() {
-    const [isSidebarOpen] = useState(true)
+    const [isCollapsed, setIsCollapsed] = useState(false)
+
+    const toggleSidebar = () => {
+        setIsCollapsed(!isCollapsed)
+    }
 
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Sidebar */}
-            {isSidebarOpen && <Sidebar />}
+            <Sidebar isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
-                <Header isSidebarOpen={isSidebarOpen} />
+                <Header isSidebarOpen={!isCollapsed} />
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
