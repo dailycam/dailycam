@@ -7,7 +7,7 @@ import Header from './Header'
  * 앱 내부 페이지용 레이아웃
  * 사이드바와 헤더 포함
  */
-export default function Layout() {
+export default function AppLayout() {
     const [isSidebarOpen] = useState(true)
 
     return (

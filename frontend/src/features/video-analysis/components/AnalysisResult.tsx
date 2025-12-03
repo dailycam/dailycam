@@ -6,6 +6,9 @@ interface AnalysisResultProps {
 }
 
 export const AnalysisResult = ({ analysisResult }: AnalysisResultProps) => {
+    // 디버깅용: 분석 결과 로깅
+    console.log('📊 분석 결과:', analysisResult)
+
     // 안전도 레벨 배지
     const getSafetyLevelBadge = (level: string) => {
         if (level === '매우높음') return { text: '매우 안전', color: 'bg-green-100 text-green-700' }

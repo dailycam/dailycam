@@ -1,13 +1,15 @@
 import { motion } from 'motion/react'
 import { Baby, TrendingUp } from 'lucide-react'
 import { RadarDataItem } from '../types'
+import { withParticle } from '../../../utils/formatters'
 
 interface DevelopmentStageCardProps {
     ageMonths: number
     strongestArea?: RadarDataItem
+    childName?: string
 }
 
-export const DevelopmentStageCard = ({ ageMonths, strongestArea }: DevelopmentStageCardProps) => {
+export const DevelopmentStageCard = ({ ageMonths, strongestArea, childName = '우리 아이' }: DevelopmentStageCardProps) => {
     return (
         <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -37,7 +39,7 @@ export const DevelopmentStageCard = ({ ageMonths, strongestArea }: DevelopmentSt
                         </div>
                         {strongestArea && strongestArea.score > 0 ? (
                             <p className="text-base text-gray-800 leading-relaxed">
-                                지수는 <span className="text-safe font-semibold">{strongestArea.category} 발달</span>에서 강점을 보여주네요! 🌟
+                                {withParticle(childName, '은/는')} <span className="text-safe font-semibold">{strongestArea.category} 발달</span>에서 강점을 보여주네요! 🌟
                             </p>
                         ) : (
                             <p className="text-base text-gray-500 leading-relaxed">

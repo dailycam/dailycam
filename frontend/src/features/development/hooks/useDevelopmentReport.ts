@@ -1,10 +1,33 @@
 import { useState, useEffect } from 'react'
 import { getDevelopmentData, DevelopmentData } from '../../../lib/api'
+import { getAuthToken } from '../../../lib/auth'
 import { RadarDataItem } from '../types'
 
 export const useDevelopmentReport = () => {
     const [date] = useState<Date>(new Date())
     const [developmentData, setDevelopmentData] = useState<DevelopmentData | null>(null)
+    const [childName, setChildName] = useState<string>('우리 아이')
+
+    // 사용자 정보 가져오기
+    useEffect(() => {
+        const fetchUserInfo = async () => {
+            const token = getAuthToken()
+            if (!token) return
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                if (response.ok) {
+                    const data = await response.json()
+                    setChildName(data.child_name || '우리 아이')
+                }
+            } catch (error) {
+                console.error('사용자 정보 로드 실패:', error)
+            }
+        }
+        fetchUserInfo()
+    }, [])
 
     // API에서 데이터 로드
     useEffect(() => {
@@ -53,6 +76,7 @@ export const useDevelopmentReport = () => {
         developmentData,
         radarData,
         strongestArea,
-        dailyDevelopmentFrequency
+        dailyDevelopmentFrequency,
+        childName
     }
 }

@@ -15,7 +15,8 @@ export default function DevelopmentReport() {
     developmentData,
     radarData,
     strongestArea,
-    dailyDevelopmentFrequency
+    dailyDevelopmentFrequency,
+    childName
   } = useDevelopmentReport()
 
   return (
@@ -46,6 +47,7 @@ export default function DevelopmentReport() {
         <DevelopmentStageCard
           ageMonths={developmentData?.ageMonths || 0}
           strongestArea={strongestArea}
+          childName={childName}
         />
       </div>
 

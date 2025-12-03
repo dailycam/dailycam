@@ -1,5 +1,5 @@
 /**
- * 백엔드 API 클라이언트
+ * 백엔??API ?�라?�언??
  */
 
 import { getAuthHeader } from './auth'
@@ -7,7 +7,7 @@ import { getAuthHeader } from './auth'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
- * 라이브 스트리밍 관련 API
+ * ?�이�??�트리밍 관??API
  */
 
 export interface UploadVideoResponse {
@@ -19,7 +19,7 @@ export interface UploadVideoResponse {
 }
 
 /**
- * 비디오 파일을 업로드하여 스트리밍 준비를 합니다.
+ * 비디???�일???�로?�하???�트리밍 준비�? ?�니??
  */
 export async function uploadVideoForStreaming(
   cameraId: string,
@@ -28,7 +28,7 @@ export async function uploadVideoForStreaming(
   const formData = new FormData()
   formData.append('video', videoFile)
 
-  console.log('비디오 업로드 시작:', {
+  console.log('비디???�로???�작:', {
     cameraId,
     filename: videoFile.name,
     size: videoFile.size,
@@ -42,48 +42,48 @@ export async function uploadVideoForStreaming(
       {
         method: 'POST',
         body: formData,
-        // 타임아웃 설정 (5분)
+        // ?�?�아???�정 (5�?
         signal: AbortSignal.timeout(5 * 60 * 1000),
       }
     )
 
-    console.log('업로드 응답 상태:', response.status, response.statusText)
+    console.log('?�로???�답 ?�태:', response.status, response.statusText)
 
     if (!response.ok) {
-      let errorMessage = '비디오 업로드 중 오류가 발생했습니다.'
+      let errorMessage = '비디???�로??�??�류가 발생?�습?�다.'
       try {
         const error = await response.json()
         errorMessage = error.detail || error.message || errorMessage
-        console.error('업로드 오류:', error)
+        console.error('?�로???�류:', error)
       } catch (e) {
-        // JSON 파싱 실패 시 텍스트로 읽기
+        // JSON ?�싱 ?�패 ???�스?�로 ?�기
         const text = await response.text()
-        console.error('업로드 오류 (텍스트):', text)
+        console.error('?�로???�류 (?�스??:', text)
         errorMessage = text || errorMessage
       }
       throw new Error(errorMessage)
     }
 
     const result = await response.json()
-    console.log('업로드 성공:', result)
+    console.log('?�로???�공:', result)
     return result
   } catch (error: any) {
-    console.error('업로드 예외:', error)
+    console.error('?�로???�외:', error)
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      throw new Error('업로드 시간이 초과되었습니다. 파일 크기를 확인해주세요.')
+      throw new Error('?�로???�간??초과?�었?�니?? ?�일 ?�기�??�인?�주?�요.')
     }
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.')
+      throw new Error('?�버???�결?????�습?�다. 백엔???�버가 ?�행 중인지 ?�인?�주?�요.')
     }
     throw error
   }
 }
 
 /**
- * 스트림 URL을 생성합니다.
- * timestamp가 제공되면 타임스탬프를 추가하여 브라우저 캐시를 무효화합니다.
- * timestamp가 없으면 기존 스트림을 계속 사용합니다.
- * video_path가 제공되면 정확한 파일 경로를 사용합니다.
+ * ?�트�?URL???�성?�니??
+ * timestamp가 ?�공?�면 ?�?�스?�프�?추�??�여 브라?��? 캐시�?무효?�합?�다.
+ * timestamp가 ?�으�?기존 ?�트림을 계속 ?�용?�니??
+ * video_path가 ?�공?�면 ?�확???�일 경로�??�용?�니??
  */
 export function getStreamUrl(
   cameraId: string,
@@ -94,12 +94,12 @@ export function getStreamUrl(
 ): string {
   let baseUrl = `${API_BASE_URL}/api/live-monitoring/stream/${cameraId}?loop=${loop}&speed=${speed}`
 
-  // timestamp가 제공된 경우에만 추가 (새 스트림 시작 시)
+  // timestamp가 ?�공??경우?�만 추�? (???�트�??�작 ??
   if (timestamp !== undefined) {
     baseUrl += `&t=${timestamp}`
   }
 
-  // video_path가 제공되면 정확한 파일 경로를 쿼리 파라미터로 추가
+  // video_path가 ?�공?�면 ?�확???�일 경로�?쿼리 ?�라미터�?추�?
   if (videoPath) {
     return `${baseUrl}&video_path=${encodeURIComponent(videoPath)}`
   }
@@ -117,7 +117,7 @@ export interface StartHlsStreamResponse {
 }
 
 /**
- * HLS 스트림을 시작합니다.
+ * HLS ?�트림을 ?�작?�니??
  */
 export async function startHlsStream(
   cameraId: string,
@@ -138,14 +138,14 @@ export async function startHlsStream(
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+    throw new Error(error.detail || 'HLS ?�트�??�작 �??�류가 발생?�습?�다.')
   }
 
   return await response.json()
 }
 
 /**
- * HLS 스트림을 중지합니다.
+ * HLS ?�트림을 중�??�니??
  */
 export async function stopHlsStream(cameraId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-hls-stream/${cameraId}`, {
@@ -153,16 +153,16 @@ export async function stopHlsStream(cameraId: string): Promise<void> {
   })
 
   if (!response.ok) {
-    // 404는 이미 중지된 것으로 간주
+    // 404???��? 중�???것으�?간주
     if (response.status === 404) return
 
     const error = await response.json()
-    throw new Error(error.detail || 'HLS 스트림 중지 중 오류가 발생했습니다.')
+    throw new Error(error.detail || 'HLS ?�트�?중�? �??�류가 발생?�습?�다.')
   }
 }
 
 /**
- * 스트림을 중지합니다.
+ * ?�트림을 중�??�니??
  */
 export async function stopStream(cameraId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-stream/${cameraId}`, {
@@ -171,7 +171,7 @@ export async function stopStream(cameraId: string): Promise<void> {
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || '스트림 중지 중 오류가 발생했습니다.')
+    throw new Error(error.detail || '?�트�?중�? �??�류가 발생?�습?�다.')
   }
 }
 
@@ -183,17 +183,17 @@ export interface StageDetermination {
 }
 
 export interface StageConsistency {
-  match_level?: '전형적' | '약간빠름' | '약간느림' | '많이다름' | '판단불가'
+  match_level?: '?�형?? | '?�간빠름' | '?�간?�림' | '많이?�름' | '?�단불�?'
   evidence?: (string | Record<string, any>)[]
   suggested_stage_for_next_analysis?: string
 }
 
 export interface DevelopmentSkill {
   name?: string
-  category?: '대근육운동' | '소근육운동' | '인지' | '언어' | '사회정서'
+  category?: '?�근육?�동' | '?�근?�운?? | '?��?' | '?�어' | '?�회?�서'
   present?: boolean
   frequency?: number
-  level?: '없음' | '초기' | '중간' | '숙련' | string | Record<string, any>
+  level?: '?�음' | '초기' | '중간' | '?�련' | string | Record<string, any>
   examples?: string[]
 }
 
@@ -217,8 +217,8 @@ export interface MetaInfo {
 }
 
 export interface EnvironmentRisk {
-  risk_type?: '낙상' | '충돌' | '끼임' | '질식/삼킴' | '화상' | '기타' | string
-  severity?: '사고' | '위험' | '주의' | '권장'
+  risk_type?: '?�상' | '충돌' | '?�임' | '질식/?�킴' | '?�상' | '기�?' | string
+  severity?: '?�고' | '?�험' | '주의' | '권장'
   trigger_behavior?: string
   environment_factor?: string
   has_safety_device?: boolean
@@ -227,15 +227,15 @@ export interface EnvironmentRisk {
 }
 
 export interface CriticalEvent {
-  event_type?: '실제사고' | '사고직전위험상황'
+  event_type?: '?�제?�고' | '?�고직전?�험?�황'
   timestamp_range?: string
   description?: string
-  estimated_outcome?: '큰부상가능' | '경미한부상가능' | '놀람/정서적스트레스' | '기타'
+  estimated_outcome?: '?��??��??? | '경�??��??��??? | '?�???�서?�스?�레?? | '기�?'
 }
 
 export interface IncidentEvent {
   event_id?: string | number
-  severity?: '사고' | '위험' | '주의' | '권장'
+  severity?: '?�고' | '?�험' | '주의' | '권장'
   timestamp_range?: string
   timestamp?: string
   description?: string
@@ -243,21 +243,28 @@ export interface IncidentEvent {
 }
 
 export interface IncidentSummaryItem {
-  severity: '사고' | '위험' | '주의' | '권장'
+  severity: '?�고' | '?�험' | '주의' | '권장'
   occurrences: number
   applied_deduction: number
 }
 
 export interface SafetyAnalysis {
-  overall_safety_level?: '매우낮음' | '낮음' | '중간' | '높음' | '매우높음'
+  overall_safety_level?: '매우??��' | '??��' | '중간' | '?�음' | '매우?�음'
   adult_presence?:
-  | '항상동반'
-  | '자주동반'
-  | '드물게동반'
-  | '거의없음'
-  | '판단불가'
+  | '??��?�반'
+  | '?�주?�반'
+  | '?�물게동�?
+  | '거의?�음'
+  | '?�단불�?'
   | Record<string, any>
   environment_risks?: EnvironmentRisk[]
+  environmental_hazards?: Array<{
+    type?: string
+    name?: string
+    severity?: '����' | '�߰�' | '����'
+    description?: string
+    recommendation?: string
+  }>
   critical_events?: CriticalEvent[]
   incident_events?: IncidentEvent[]
   incident_summary?: IncidentSummaryItem[]
@@ -290,7 +297,7 @@ export interface TimelineEvent {
 }
 
 /**
- * 비디오 파일을 백엔드로 전송하여 분석합니다.
+ * 비디???�일??백엔?�로 ?�송?�여 분석?�니??
  */
 export async function analyzeVideoWithBackend(
   file: File,
@@ -305,7 +312,7 @@ export async function analyzeVideoWithBackend(
   const formData = new FormData()
   formData.append('video', file)
 
-  // URL 파라미터 구성
+  // URL ?�라미터 구성
   const params = new URLSearchParams()
   if (options?.stage) params.append('stage', options.stage)
   if (options?.ageMonths !== undefined) params.append('age_months', options.ageMonths.toString())
@@ -315,7 +322,7 @@ export async function analyzeVideoWithBackend(
 
   const url = `${API_BASE_URL}/api/homecam/analyze-video${params.toString() ? '?' + params.toString() : ''}`
 
-  // 인증 토큰 가져오기 (공통 유틸리티 사용)
+  // ?�증 ?�큰 가?�오�?(공통 ?�틸리티 ?�용)
   const headers: HeadersInit = {
     ...getAuthHeader()
   }
@@ -327,26 +334,26 @@ export async function analyzeVideoWithBackend(
   })
 
   if (!response.ok) {
-    // 401 Unauthorized 에러 처리
+    // 401 Unauthorized ?�러 처리
     if (response.status === 401) {
       const errorText = await response.text()
-      let errorMessage = '인증이 필요합니다. 로그인 후 다시 시도해주세요.'
+      let errorMessage = '?�증???�요?�니?? 로그?????�시 ?�도?�주?�요.'
       try {
         const error = JSON.parse(errorText)
         errorMessage = error.detail || errorMessage
       } catch {
-        // JSON 파싱 실패 시 기본 메시지 사용
+        // JSON ?�싱 ?�패 ??기본 메시지 ?�용
       }
       throw new Error(errorMessage)
     }
 
-    // 기타 에러 처리
-    let errorMessage = '비디오 분석 중 오류가 발생했습니다.'
+    // 기�? ?�러 처리
+    let errorMessage = '비디??분석 �??�류가 발생?�습?�다.'
     try {
       const error = await response.json()
       errorMessage = error.detail || error.message || errorMessage
     } catch {
-      // JSON 파싱 실패 시 텍스트로 읽기
+      // JSON ?�싱 ?�패 ???�스?�로 ?�기
       const text = await response.text()
       errorMessage = text || errorMessage
     }
@@ -355,12 +362,12 @@ export async function analyzeVideoWithBackend(
 
   const data = await response.json()
 
-  // 백엔드 VLM 응답을 프론트엔드 형식으로 변환
-  // 백엔드는 VLM 메타데이터 기반 분석 결과를 반환합니다
+  // 백엔??VLM ?�답???�론?�엔???�식?�로 변??
+  // 백엔?�는 VLM 메�??�이??기반 분석 결과�?반환?�니??
   const safetyAnalysis = data.safety_analysis || {}
   const incidentEvents = safetyAnalysis.incident_events || []
 
-  // 사고 유형별 카운트
+  // ?�고 ?�형�?카운??
   let falls = 0
   let dangerousActions = 0
   const timelineEvents: any[] = []
@@ -368,23 +375,23 @@ export async function analyzeVideoWithBackend(
   incidentEvents.forEach((event: any) => {
     const severity = event.severity || ''
 
-    // 넘어짐 카운트 (사고발생, 사고)
-    if (severity === '사고발생' || severity === '사고') {
+    // ?�어�?카운??(?�고발생, ?�고)
+    if (severity === '?�고발생' || severity === '?�고') {
       falls++
     }
-    // 위험 행동 카운트
-    else if (severity === '위험') {
+    // ?�험 ?�동 카운??
+    else if (severity === '?�험') {
       dangerousActions++
     }
 
-    // 타임라인 이벤트 변환
+    // ?�?�라???�벤??변??
     let eventType: 'fall' | 'danger' | 'warning' | 'safe' = 'warning'
     let eventSeverity: 'high' | 'medium' | 'low' = 'medium'
 
-    if (severity === '사고발생' || severity === '사고') {
+    if (severity === '?�고발생' || severity === '?�고') {
       eventType = 'fall'
       eventSeverity = 'high'
-    } else if (severity === '위험') {
+    } else if (severity === '?�험') {
       eventType = 'danger'
       eventSeverity = 'high'
     } else if (severity === '주의') {
@@ -406,12 +413,12 @@ export async function analyzeVideoWithBackend(
   const totalIncidents = incidentEvents.length
   const safetyScore = safetyAnalysis.safety_score || 100
 
-  // 요약 생성
+  // ?�약 ?�성
   const summary = safetyAnalysis.overall_safety_level
-    ? `안전도: ${safetyAnalysis.overall_safety_level}. 총 ${totalIncidents}건의 이벤트가 감지되었습니다.`
-    : `총 ${totalIncidents}건의 이벤트가 감지되었습니다. 안전 점수: ${safetyScore}점`
+    ? `?�전?? ${safetyAnalysis.overall_safety_level}. �?${totalIncidents}건의 ?�벤?��? 감�??�었?�니??`
+    : `�?${totalIncidents}건의 ?�벤?��? 감�??�었?�니?? ?�전 ?�수: ${safetyScore}??
 
-  // 권장사항 추출
+  // 권장?�항 추출
   const recommendations: string[] = []
   if (safetyAnalysis.recommendations && Array.isArray(safetyAnalysis.recommendations)) {
     safetyAnalysis.recommendations.forEach((rec: any) => {
@@ -458,7 +465,7 @@ export interface AnalyticsSummary {
   safe_zone_percentage: number
   incident_reduction_percentage: number
 
-  // 비교 데이터
+  // 비교 ?�이??
   prev_avg_safety?: number
   prev_total_incidents?: number
   safety_change?: number
@@ -474,7 +481,7 @@ export interface AnalyticsData {
 }
 
 /**
- * Analytics 데이터 전체 조회 (데이터베이스에서)
+ * Analytics ?�이???�체 조회 (?�이?�베?�스?�서)
  */
 export async function fetchAnalyticsData(): Promise<AnalyticsData> {
   try {
@@ -483,13 +490,13 @@ export async function fetchAnalyticsData(): Promise<AnalyticsData> {
     })
 
     if (!response.ok) {
-      throw new Error('Analytics 데이터를 가져오는 중 오류가 발생했습니다.')
+      throw new Error('Analytics ?�이?��? 가?�오??�??�류가 발생?�습?�다.')
     }
 
     return await response.json()
   } catch (error) {
-    // 백엔드 연결 실패 시 빈 데이터 반환
-    console.warn('백엔드 연결 실패, 빈 데이터 반환:', error)
+    // 백엔???�결 ?�패 ??�??�이??반환
+    console.warn('백엔???�결 ?�패, �??�이??반환:', error)
     return {
       weekly_trend: [],
       incident_distribution: [],
@@ -569,8 +576,8 @@ export interface DashboardData {
 }
 
 /**
- * 대시보드 데이터 조회
- * @param rangeDays 조회할 일수 (기본값: 7)
+ * ?�?�보???�이??조회
+ * @param rangeDays 조회???�수 (기본�? 7)
  */
 export async function getDashboardData(rangeDays: number = 7): Promise<DashboardData> {
   try {
@@ -578,7 +585,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeader(), // 인증 헤더 추가
+        ...getAuthHeader(), // ?�증 ?�더 추�?
       },
       body: JSON.stringify({
         range_days: rangeDays,
@@ -586,17 +593,17 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
     })
 
     if (!response.ok) {
-      // 404 에러는 백엔드에 엔드포인트가 없는 경우이므로 조용히 목 데이터로 fallback
+      // 404 ?�러??백엔?�에 ?�드?�인?��? ?�는 경우?��?�?조용??�??�이?�로 fallback
       if (response.status === 404) {
         throw new Error('DASHBOARD_ENDPOINT_NOT_FOUND')
       }
-      throw new Error('대시보드 데이터를 가져오는 중 오류가 발생했습니다.')
+      throw new Error('?�?�보???�이?��? 가?�오??�??�류가 발생?�습?�다.')
     }
 
     const data = await response.json()
 
-    // [디버깅] 백엔드 응답 확인
-    console.log('✅ [Dashboard API] 백엔드 응답 받음:', data)
+    // [?�버�? 백엔???�답 ?�인
+    console.log('??[Dashboard API] 백엔???�답 받음:', data)
 
     return {
       summary: data.summary,
@@ -613,9 +620,9 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       hourlyStats: data.hourlyStats || [],
     }
   } catch (error) {
-    console.warn('백엔드 연결 실패, 빈 데이터 반환:', error)
+    console.warn('백엔???�결 ?�패, �??�이??반환:', error)
     return {
-      summary: '데이터를 불러올 수 없습니다.',
+      summary: '?�이?��? 불러?????�습?�다.',
       rangeDays: rangeDays,
       safetyScore: 0,
       developmentScore: 0,
@@ -632,11 +639,11 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
 }
 
 export interface DevelopmentRadarScores {
-  언어: number
-  운동: number
-  인지: number
-  사회성: number
-  정서: number
+  ?�어: number
+  ?�동: number
+  ?��?: number
+  ?�회?? number
+  ?�서: number
 }
 
 export interface DevelopmentFrequencyItem {
@@ -664,7 +671,7 @@ export interface DevelopmentData {
 }
 
 /**
- * 발달 리포트 데이터 조회
+ * 발달 리포???�이??조회
  */
 export async function getDevelopmentData(days: number = 7): Promise<DevelopmentData> {
   try {
@@ -676,7 +683,7 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
     })
 
     if (!response.ok) {
-      throw new Error('발달 데이터를 가져오는 중 오류가 발생했습니다.')
+      throw new Error('발달 ?�이?��? 가?�오??�??�류가 발생?�습?�다.')
     }
 
     const data = await response.json()
@@ -686,11 +693,11 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
       developmentSummary: data.development_summary || '',
       developmentScore: data.development_score || 0,
       developmentRadarScores: data.development_radar_scores || {
-        언어: 0,
-        운동: 0,
-        인지: 0,
-        사회성: 0,
-        정서: 0,
+        ?�어: 0,
+        ?�동: 0,
+        ?��?: 0,
+        ?�회?? 0,
+        ?�서: 0,
       },
       strongestArea: data.strongest_area || '',
       dailyDevelopmentFrequency: data.daily_development_frequency || [],
@@ -698,17 +705,17 @@ export async function getDevelopmentData(days: number = 7): Promise<DevelopmentD
       developmentInsights: data.development_insights || [],
     }
   } catch (error) {
-    console.warn('백엔드 연결 실패, 빈 데이터 반환:', error)
+    console.warn('백엔???�결 ?�패, �??�이??반환:', error)
     return {
       ageMonths: 0,
       developmentSummary: '',
       developmentScore: 0,
       developmentRadarScores: {
-        언어: 0,
-        운동: 0,
-        인지: 0,
-        사회성: 0,
-        정서: 0,
+        ?�어: 0,
+        ?�동: 0,
+        ?��?: 0,
+        ?�회?? 0,
+        ?�서: 0,
       },
       strongestArea: '',
       dailyDevelopmentFrequency: [],
@@ -741,7 +748,7 @@ export interface ClipHighlightsResponse {
 }
 
 /**
- * 하이라이트 클립 목록 조회
+ * ?�이?�이???�립 목록 조회
  */
 export async function getClipHighlights(
   category: string = 'all',
@@ -759,13 +766,13 @@ export async function getClipHighlights(
     )
 
     if (!response.ok) {
-      throw new Error('클립 데이터를 가져오는 중 오류가 발생했습니다.')
+      throw new Error('?�립 ?�이?��? 가?�오??�??�류가 발생?�습?�다.')
     }
 
     const data = await response.json()
     return data
   } catch (error) {
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+    console.warn('백엔???�결 ?�패, �??�이???�용:', error)
     return {
       clips: [],
       total: 0,

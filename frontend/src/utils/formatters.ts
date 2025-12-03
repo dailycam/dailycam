@@ -87,3 +87,75 @@ export const getWeekday = (date: Date): string => {
     const day = date.getDay()
     return WEEKDAYS_KR[day === 0 ? 6 : day - 1]
 }
+
+/**
+ * 한글 받침 확인 함수
+ * @param word 확인할 단어
+ * @returns 받침이 있으면 true, 없으면 false
+ */
+const hasFinalConsonant = (word: string): boolean => {
+    if (!word || word.length === 0) return false
+
+    const lastChar = word.charAt(word.length - 1)
+    const code = lastChar.charCodeAt(0)
+
+    // 한글 유니코드 범위: 0xAC00(가) ~ 0xD7A3(힣)
+    if (code < 0xAC00 || code > 0xD7A3) {
+        // 한글이 아닌 경우 (영어, 숫자 등)
+        // 영어 자음으로 끝나면 받침 있는 것으로 처리
+        return /[bcdfghjklmnpqrstvwxyz]$/i.test(lastChar)
+    }
+
+    // 한글의 경우: (코드 - 0xAC00) % 28이 0이면 받침 없음
+    return (code - 0xAC00) % 28 !== 0
+}
+
+/**
+ * 이름에 맞는 "은/는" 조사 선택
+ * @example getSubjectParticle("지수") // "는"
+ * @example getSubjectParticle("민준") // "은"
+ */
+export const getSubjectParticle = (name: string): string => {
+    return hasFinalConsonant(name) ? '은' : '는'
+}
+
+/**
+ * 이름에 맞는 "이/가" 조사 선택
+ * @example getNominativeParticle("지수") // "가"
+ * @example getNominativeParticle("민준") // "이"
+ */
+export const getNominativeParticle = (name: string): string => {
+    return hasFinalConsonant(name) ? '이' : '가'
+}
+
+/**
+ * 이름에 맞는 "을/를" 조사 선택
+ * @example getObjectParticle("지수") // "를"
+ * @example getObjectParticle("민준") // "을"
+ */
+export const getObjectParticle = (name: string): string => {
+    return hasFinalConsonant(name) ? '을' : '를'
+}
+
+/**
+ * 이름과 조사를 합쳐서 반환
+ * @example withParticle("지수", "은/는") // "지수는"
+ * @example withParticle("민준", "이/가") // "민준이"
+ */
+export const withParticle = (name: string, particleType: '은/는' | '이/가' | '을/를'): string => {
+    let particle = ''
+
+    switch (particleType) {
+        case '은/는':
+            particle = getSubjectParticle(name)
+            break
+        case '이/가':
+            particle = getNominativeParticle(name)
+            break
+        case '을/를':
+            particle = getObjectParticle(name)
+            break
+    }
+
+    return `${name}${particle}`
+}

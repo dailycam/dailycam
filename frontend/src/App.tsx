@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { AnalysisProvider } from './context/AnalysisContext'
 import HomeLayout from './components/layout/HomeLayout'
-import Layout from './components/layout/Layout'
+import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import AppHome from './pages/AppHome'
@@ -31,7 +31,7 @@ function App() {
         </Route>
 
         {/* 앱 (대시보드 및 기능들) */}
-        <Route element={<Layout />}>
+        <Route element={<AppLayout />}>
           {/* 미구독 사용자도 접근 가능 */}
           <Route path="/subscription" element={<SubscriptionPage />} />
           <Route path="/profile-setup" element={<ProfileSetup />} />
