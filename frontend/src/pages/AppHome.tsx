@@ -1,5 +1,3 @@
-// frontend/src/pages/AppHome.tsx
-
 import { useState, useEffect } from 'react'
 import {
     Youtube,
@@ -7,7 +5,6 @@ import {
     Newspaper,
     Sparkles,
     Hash,
-    ExternalLink,
     ChevronRight,
     Search,
     Lightbulb,
@@ -16,85 +13,14 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { getDashboardData, type DashboardData } from '../lib/api'
-
-// 임시 추천 링크 데이터 타입
-type RecommendedLink = {
-    id: string
-    type: 'youtube' | 'blog' | 'news'
-    title: string
-    description: string
-    thumbnail?: string
-    url: string
-    tags: string[]
-    category: string
-}
-
-// 콘텐츠 카드 컴포넌트
-const ContentCard = ({ link }: { link: RecommendedLink }) => {
-    return (
-        <a
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card p-0 border-0 shadow-sm hover:shadow-md transition-all overflow-hidden group block h-full"
-        >
-            {/* 썸네일 영역 */}
-            {link.type === 'youtube' && (
-                <div className="relative bg-gray-200 h-40 flex items-center justify-center">
-                    <Youtube className="w-12 h-12 text-gray-400" />
-                    <div className="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-1 rounded font-semibold">
-                        YouTube
-                    </div>
-                </div>
-            )}
-            {link.type === 'blog' && (
-                <div className="relative bg-gradient-to-br from-blue-50 to-purple-50 h-40 flex items-center justify-center">
-                    <FileText className="w-12 h-12 text-gray-400" />
-                    <div className="absolute top-2 left-2 bg-purple-600 text-white text-xs px-2 py-1 rounded font-semibold">
-                        Blog
-                    </div>
-                </div>
-            )}
-            {link.type === 'news' && (
-                <div className="relative bg-gradient-to-br from-orange-50 to-yellow-50 h-40 flex items-center justify-center">
-                    <Newspaper className="w-12 h-12 text-gray-400" />
-                    <div className="absolute top-2 left-2 bg-orange-600 text-white text-xs px-2 py-1 rounded font-semibold">
-                        News
-                    </div>
-                </div>
-            )}
-
-            {/* 콘텐츠 영역 */}
-            <div className="p-4">
-                <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors flex items-start justify-between gap-2">
-                    <span className="line-clamp-2">{link.title}</span>
-                    <ExternalLink className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                </h3>
-                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                    {link.description}
-                </p>
-
-                {/* 태그 */}
-                <div className="flex flex-wrap gap-1">
-                    {link.tags.map((tag, idx) => (
-                        <span
-                            key={idx}
-                            className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded"
-                        >
-                            #{tag}
-                        </span>
-                    ))}
-                </div>
-            </div>
-        </a>
-    )
-}
+import { RecommendationSection } from '../features/home/components/RecommendationSection'
+import { YOUTUBE_LINKS, BLOG_LINKS, NEWS_LINKS, CATEGORIES } from '../features/home/constants'
 
 export default function AppHome() {
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
     const [loading, setLoading] = useState(true)
     const [selectedCategory, setSelectedCategory] = useState<string>('전체')
-    const [searchQuery, setSearchQuery] = useState<string>('') // 검색어 state
+    const [searchQuery, setSearchQuery] = useState<string>('')
 
     useEffect(() => {
         async function loadData() {
@@ -128,103 +54,17 @@ export default function AppHome() {
         )
     }
 
-    // 유튜브 추천
-    const youtubeLinks: RecommendedLink[] = [
-        {
-            id: 'yt1',
-            type: 'youtube',
-            title: '6개월 아기 발달 체크리스트',
-            description: '우리 아기가 정상적으로 발달하고 있는지 확인해보세요',
-            url: 'https://youtube.com/example',
-            tags: ['발달', '6개월', '체크리스트'],
-            category: '발달'
-        },
-        {
-            id: 'yt2',
-            type: 'youtube',
-            title: '아기 수면교육 완벽 가이드',
-            description: '밤에 푹 자는 아기로 만드는 수면교육 방법',
-            url: 'https://youtube.com/example2',
-            tags: ['수면', '교육', '밤잠'],
-            category: '수면'
-        },
-        {
-            id: 'yt3',
-            type: 'youtube',
-            title: '이유식 초기 준비물 총정리',
-            description: '이유식 시작할 때 꼭 필요한 준비물 리스트',
-            url: 'https://youtube.com/example3',
-            tags: ['이유식', '준비물', '육아템'],
-            category: '영양'
-        },
-    ]
-
-    // 블로그 추천
-    const blogLinks: RecommendedLink[] = [
-        {
-            id: 'blog1',
-            type: 'blog',
-            title: '아기 안전사고 예방 가이드',
-            description: '집안에서 발생할 수 있는 안전사고를 미리 예방하는 방법',
-            url: 'https://blog.example.com/safety-guide',
-            tags: ['안전', '예방', '육아팁'],
-            category: '안전'
-        },
-        {
-            id: 'blog2',
-            type: 'blog',
-            title: '이유식 시작 완벽 가이드',
-            description: '우리 아기 첫 이유식, 언제 어떻게 시작할까요?',
-            url: 'https://blog.example.com/baby-food',
-            tags: ['영양', '이유식', '육아'],
-            category: '영양'
-        },
-        {
-            id: 'blog3',
-            type: 'blog',
-            title: '아기랑 놀아주는 방법 100가지',
-            description: '집에서 할 수 있는 다양한 놀이 방법',
-            url: 'https://blog.example.com/play-ideas',
-            tags: ['놀이', '육아', '집콕놀이'],
-            category: '놀이'
-        },
-    ]
-
-    // 뉴스 기사 추천
-    const newsLinks: RecommendedLink[] = [
-        {
-            id: 'news1',
-            type: 'news',
-            title: '2024년 육아 지원금 정책 총정리',
-            description: '올해 달라진 육아휴직 급여와 양육수당 안내',
-            url: 'https://news.example.com/childcare-policy',
-            tags: ['정책', '지원금', '육아휴직'],
-            category: '정책'
-        },
-        {
-            id: 'news2',
-            type: 'news',
-            title: '소아과 전문의가 알려주는 감기 예방법',
-            description: '환절기 우리 아이 건강 지키는 방법',
-            url: 'https://news.example.com/cold-prevention',
-            tags: ['건강', '질병', '예방'],
-            category: '건강'
-        },
-    ]
-
-    const categories = ['전체', '발달', '안전', '수면', '영양', '놀이']
-
     const filteredYoutube = selectedCategory === '전체'
-        ? youtubeLinks
-        : youtubeLinks.filter(link => link.category === selectedCategory)
+        ? YOUTUBE_LINKS
+        : YOUTUBE_LINKS.filter(link => link.category === selectedCategory)
 
     const filteredBlog = selectedCategory === '전체'
-        ? blogLinks
-        : blogLinks.filter(link => link.category === selectedCategory)
+        ? BLOG_LINKS
+        : BLOG_LINKS.filter(link => link.category === selectedCategory)
 
     const filteredNews = selectedCategory === '전체'
-        ? newsLinks
-        : newsLinks.filter(link => link.category === selectedCategory)
+        ? NEWS_LINKS
+        : NEWS_LINKS.filter(link => link.category === selectedCategory)
 
     return (
         <div className="p-6 lg:p-10 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20 min-h-screen">
@@ -352,7 +192,7 @@ export default function AppHome() {
                     {/* 카테고리 필터 */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-2 flex-1">
                         <Hash className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        {categories.map((category) => (
+                        {CATEGORIES.map((category) => (
                             <button
                                 key={category}
                                 onClick={() => setSelectedCategory(category)}
@@ -380,98 +220,32 @@ export default function AppHome() {
                 </div>
             </motion.div>
 
-            {/* 1. 유튜브 추천 섹션 */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="mb-8 bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-white"
-            >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-md">
-                        <Youtube className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-bold">추천 유튜브 영상</h2>
-                    </div>
-                </div>
+            <RecommendationSection
+                title="추천 유튜브 영상"
+                icon={Youtube}
+                iconColorClass="from-red-500 to-red-600"
+                links={filteredYoutube}
+                emptyMessage="해당 카테고리의 유튜브 영상이 없습니다."
+                delay={0.3}
+            />
 
-                <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory">
-                    {filteredYoutube.length > 0 ? (
-                        filteredYoutube.map((link) => (
-                            <div key={link.id} className="flex-shrink-0 w-80 snap-start">
-                                <ContentCard link={link} />
-                            </div>
-                        ))
-                    ) : (
-                        <div className="flex-1 text-center py-12">
-                            <p className="text-gray-500">해당 카테고리의 유튜브 영상이 없습니다.</p>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
+            <RecommendationSection
+                title="추천 블로그 포스트"
+                icon={FileText}
+                iconColorClass="from-purple-500 to-purple-600"
+                links={filteredBlog}
+                emptyMessage="해당 카테고리의 블로그 포스트가 없습니다."
+                delay={0.4}
+            />
 
-            {/* 2. 블로그 추천 섹션 */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="mb-8 bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-white"
-            >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
-                        <FileText className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-bold">추천 블로그 포스트</h2>
-                    </div>
-                </div>
-
-                <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory">
-                    {filteredBlog.length > 0 ? (
-                        filteredBlog.map((link) => (
-                            <div key={link.id} className="flex-shrink-0 w-80 snap-start">
-                                <ContentCard link={link} />
-                            </div>
-                        ))
-                    ) : (
-                        <div className="flex-1 text-center py-12">
-                            <p className="text-gray-500">해당 카테고리의 블로그 포스트가 없습니다.</p>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-
-            {/* 3. 뉴스 기사 추천 섹션 */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
-                className="mb-8 bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-sm border border-white"
-            >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-md">
-                        <Newspaper className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-bold">육아 뉴스 & 정보</h2>
-                    </div>
-                </div>
-
-                <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory">
-                    {filteredNews.length > 0 ? (
-                        filteredNews.map((link) => (
-                            <div key={link.id} className="flex-shrink-0 w-80 snap-start">
-                                <ContentCard link={link} />
-                            </div>
-                        ))
-                    ) : (
-                        <div className="flex-1 text-center py-12">
-                            <p className="text-gray-500">해당 카테고리의 뉴스 기사가 없습니다.</p>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
+            <RecommendationSection
+                title="육아 뉴스 & 정보"
+                icon={Newspaper}
+                iconColorClass="from-orange-500 to-orange-600"
+                links={filteredNews}
+                emptyMessage="해당 카테고리의 뉴스 기사가 없습니다."
+                delay={0.5}
+            />
         </div>
     )
 }

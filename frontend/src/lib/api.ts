@@ -571,223 +571,159 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       monitoringHours: data.monitoringHours || 0,
       activityPattern: data.activityPattern || "",
       weeklyTrend: data.weeklyTrend || [],
-      risks: data.risks || [],
-      recommendations: data.recommendations || [],
-      timelineEvents: data.timelineEvents || [],
-      hourlyStats: data.hourly_stats || [],
-    }
-  } catch (error: any) {
-    // 백엔드 연결 실패 시 목 데이터 반환
-    // 404 에러는 조용히 처리 (백엔드에 엔드포인트가 없는 경우)
-    if (error?.message !== 'DASHBOARD_ENDPOINT_NOT_FOUND') {
-      console.error('❌ [Dashboard API] 백엔드 연결 실패:', error)
-      console.error('❌ [Dashboard API] 에러 메시지:', error?.message)
-      console.error('❌ [Dashboard API] 목 데이터 사용')
-    }
-    return {
-      summary: "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 주방 데드존에 3회 접근했습니다.",
-      rangeDays: rangeDays,
-      safetyScore: 92,
-      developmentScore: 88,
-      incidentCount: 2,
-      monitoringHours: 8.5,
-      activityPattern: "블록 쌓기, 낮잠",
-      weeklyTrend: [
-        { day: "월", score: 88, incidents: 1, activity: 0, safety: 88 },
-        { day: "화", score: 90, incidents: 0, activity: 0, safety: 90 },
-        { day: "수", score: 85, incidents: 3, activity: 0, safety: 85 },
-        { day: "목", score: 92, incidents: 1, activity: 0, safety: 92 },
-        { day: "금", score: 89, incidents: 2, activity: 0, safety: 89 },
-        { day: "토", score: 93, incidents: 0, activity: 78, safety: 93 },
-        { day: "일", score: 92, incidents: 0, activity: 73, safety: 92 },
-      ] as DashboardWeeklyTrendItem[],
-      risks: [
-        {
-          level: 'high',
-          title: '주방 근처 반복 접근',
-          time: '오후 2:15 - 2:45',
-          count: 3,
-        },
-        {
-          level: 'medium',
-          title: '계단 입구 접근',
-          time: '오전 11:30',
-          count: 1,
-        },
-      ],
-      recommendations: [
-        {
-          priority: 'high',
-          title: '주방 안전 게이트 설치',
-          description: '아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다.',
-        },
-        {
-          priority: 'medium',
-          title: '거실 테이블 모서리 보호대 추가',
-          description: '충돌 위험이 감지되었습니다. 모서리 보호대를 추가로 설치하세요.',
-        },
-      ],
-    }
-  }
-}
-
-// ============================================================
-// Development Report API
-// ============================================================
-
-export interface DevelopmentRadarScores {
-  언어: number
-  운동: number
-  인지: number
-  사회성: number
-  정서: number
-}
-
-export interface DevelopmentFrequencyItem {
-  category: string
-  count: number
-  color: string
-}
-
-export interface RecommendedActivity {
-  title: string
-  benefit: string
-  description?: string
-  duration?: string
-}
-
-export interface DevelopmentData {
-  ageMonths: number
-  developmentSummary: string
-  developmentScore: number
-  developmentRadarScores: DevelopmentRadarScores
-  strongestArea: string
-  dailyDevelopmentFrequency: DevelopmentFrequencyItem[]
-  recommendedActivities: RecommendedActivity[]
-  developmentInsights: string[] // Added
-}
-
-/**
- * 발달 리포트 데이터 조회
- */
-export async function getDevelopmentData(days: number = 7): Promise<DevelopmentData> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/development/summary?days=${days}`, {
-      method: 'GET',
-      headers: {
-        ...getAuthHeader(), // 인증 헤더 추가
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('발달 데이터를 가져오는 중 오류가 발생했습니다.')
+      export interface DevelopmentRadarScores {
+      언어: number
+      운동: number
+      인지: number
+      사회성: number
+      정서: number
     }
 
-    const data = await response.json()
-
-    // 백엔드 응답을 프론트엔드 형식으로 변환
-    return {
-      ageMonths: data.age_months || 7,
-      developmentSummary: data.development_summary || '아직 분석된 데이터가 없습니다.',
-      developmentScore: data.development_score || 0,
-      developmentRadarScores: data.development_radar_scores || {
-        언어: 0,
-        운동: 0,
-        인지: 0,
-        사회성: 0,
-        정서: 0,
-      },
-      strongestArea: data.strongest_area || '운동',
-      dailyDevelopmentFrequency: data.daily_development_frequency || [],
-      recommendedActivities: data.recommended_activities || [],
-      developmentInsights: data.development_insights || [], // Added
+    export interface DevelopmentFrequencyItem {
+      category: string
+      count: number
+      color: string
     }
-  } catch (error) {
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    // 목 데이터 반환
-    return {
-      ageMonths: 7,
-      developmentSummary: '오늘 아이는 총 79건의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.',
-      developmentScore: 88,
-      developmentRadarScores: {
-        언어: 88,
-        운동: 92,
-        인지: 85,
-        사회성: 90,
-        정서: 87,
-      },
-      strongestArea: '운동',
-      dailyDevelopmentFrequency: [
-        { category: '언어', count: 18, color: '#a2d2ff' }, // Light Blue
-        { category: '운동', count: 25, color: '#b0f2c2' }, // Light Green
-        { category: '인지', count: 12, color: '#ffc77d' }, // Light Orange
-        { category: '사회성', count: 15, color: '#d4a2ff' }, // Light Purple
-        { category: '정서', count: 9, color: '#ffb0bb' }, // Light Pink
-      ],
-      recommendedActivities: [
-        {
-          title: '까꿍 놀이',
-          benefit: '인지 발달',
-          description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
-          duration: '10-15분',
-        },
-      ],
+
+    export interface RecommendedActivity {
+      title: string
+      benefit: string
+      description?: string
+      duration?: string
     }
-  }
-}
 
-// ============================================================
-// Clip Highlights API
-// ============================================================
+    export interface DevelopmentData {
+      ageMonths: number
+      developmentSummary: string
+      developmentScore: number
+      developmentRadarScores: DevelopmentRadarScores
+      strongestArea: string
+      dailyDevelopmentFrequency: DevelopmentFrequencyItem[]
+      recommendedActivities: RecommendedActivity[]
+      developmentInsights: string[] // Added
+    }
 
-export interface HighlightClip {
-  id: number
-  title: string
-  description: string
-  video_url: string
-  thumbnail_url: string
-  category: string
-  sub_category?: string
-  importance?: string
-  duration_seconds?: number
-  created_at?: string
-}
+    /**
+     * 발달 리포트 데이터 조회
+     */
+    export async function getDevelopmentData(days: number = 7): Promise<DevelopmentData> {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/development/summary?days=${days}`, {
+          method: 'GET',
+          headers: {
+            ...getAuthHeader(), // 인증 헤더 추가
+          },
+        })
 
-export interface ClipHighlightsResponse {
-  clips: HighlightClip[]
-  total: number
-}
+        if (!response.ok) {
+          throw new Error('발달 데이터를 가져오는 중 오류가 발생했습니다.')
+        }
 
-/**
- * 하이라이트 클립 목록 조회
- */
-export async function getClipHighlights(
-  category: string = 'all',
-  limit: number = 20
-): Promise<ClipHighlightsResponse> {
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/clips/list?category=${category}&limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          ...getAuthHeader(), // 인증 헤더 추가
-        },
+        const data = await response.json()
+
+        // 백엔드 응답을 프론트엔드 형식으로 변환
+        return {
+          ageMonths: data.age_months || 7,
+          developmentSummary: data.development_summary || '아직 분석된 데이터가 없습니다.',
+          developmentScore: data.development_score || 0,
+          developmentRadarScores: data.development_radar_scores || {
+            언어: 0,
+            운동: 0,
+            인지: 0,
+            사회성: 0,
+            정서: 0,
+          },
+          strongestArea: data.strongest_area || '운동',
+          dailyDevelopmentFrequency: data.daily_development_frequency || [],
+          recommendedActivities: data.recommended_activities || [],
+          developmentInsights: data.development_insights || [], // Added
+        }
+      } catch (error) {
+        console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+        // 목 데이터 반환
+        return {
+          ageMonths: 7,
+          developmentSummary: '오늘 아이는 총 79건의 발달 행동이 관찰되었으며, 특히 운동 발달 영역에서 활발한 움직임을 보였습니다.',
+          developmentScore: 88,
+          developmentRadarScores: {
+            언어: 88,
+            운동: 92,
+            인지: 85,
+            사회성: 90,
+            정서: 87,
+          },
+          strongestArea: '운동',
+          dailyDevelopmentFrequency: [
+            { category: '언어', count: 18, color: '#a2d2ff' }, // Light Blue
+            { category: '운동', count: 25, color: '#b0f2c2' }, // Light Green
+            { category: '인지', count: 12, color: '#ffc77d' }, // Light Orange
+            { category: '사회성', count: 15, color: '#d4a2ff' }, // Light Purple
+            { category: '정서', count: 9, color: '#ffb0bb' }, // Light Pink
+          ],
+          recommendedActivities: [
+            {
+              title: '까꿍 놀이',
+              benefit: '인지 발달',
+              description: '대상 영속성 개념을 발달시키는 데 도움이 됩니다.',
+              duration: '10-15분',
+            },
+          ],
+        }
       }
-    )
-
-    if (!response.ok) {
-      throw new Error('클립 데이터를 가져오는 중 오류가 발생했습니다.')
     }
 
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    // 목 데이터 반환
-    return {
-      clips: [],
-      total: 0,
+    // ============================================================
+    // Clip Highlights API
+    // ============================================================
+
+    export interface HighlightClip {
+      id: number
+      title: string
+      description: string
+      video_url: string
+      thumbnail_url: string
+      category: string
+      sub_category?: string
+      importance?: string
+      duration_seconds?: number
+      created_at?: string
     }
-  }
-}
+
+    export interface ClipHighlightsResponse {
+      clips: HighlightClip[]
+      total: number
+    }
+
+    /**
+     * 하이라이트 클립 목록 조회
+     */
+    export async function getClipHighlights(
+      category: string = 'all',
+      limit: number = 20
+    ): Promise<ClipHighlightsResponse> {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/clips/list?category=${category}&limit=${limit}`,
+          {
+            method: 'GET',
+            headers: {
+              ...getAuthHeader(), // 인증 헤더 추가
+            },
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error('클립 데이터를 가져오는 중 오류가 발생했습니다.')
+        }
+
+        const data = await response.json()
+        return data
+      } catch (error) {
+        console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+        // 목 데이터 반환
+        return {
+          clips: [],
+          total: 0,
+        }
+      }
+    }
