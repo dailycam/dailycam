@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { getDashboardData, type DashboardData } from '../lib/api'
+import { getAuthToken } from '../lib/auth'
 
 
 // 임시 추천 링크 데이터 타입
@@ -128,6 +129,28 @@ export default function AppHome() {
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState<string>('')
+    const [userInfo, setUserInfo] = useState<{ child_name?: string } | null>(null)
+
+    // 사용자 정보 가져오기
+    useEffect(() => {
+        const fetchUserInfo = async () => {
+            const token = getAuthToken()
+            if (!token) return
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                if (response.ok) {
+                    const data = await response.json()
+                    setUserInfo(data)
+                }
+            } catch (error) {
+                console.error('사용자 정보 로드 실패:', error)
+            }
+        }
+        fetchUserInfo()
+    }, [])
 
     useEffect(() => {
         async function loadData() {
@@ -305,7 +328,7 @@ export default function AppHome() {
                             <Sparkles className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-800">지수의 하루</h2>
+                            <h2 className="text-2xl font-bold text-gray-800">{userInfo?.child_name || '우리 아이'}의 하루</h2>
                             <p className="text-sm text-gray-600">오늘의 특별한 순간</p>
                         </div>
                     </div>
