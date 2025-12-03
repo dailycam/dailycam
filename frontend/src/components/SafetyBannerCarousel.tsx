@@ -22,7 +22,18 @@ export function SafetyBannerCarousel() {
     pauseOnHover: true,
     dotsClass: `slick-dots !bottom-6 transition-opacity duration-500 ${isHovered ? 'opacity-100' : 'opacity-0'}`,
     customPaging: () => (
-      <div className="w-3 h-3 rounded-full bg-gray-400 hover:bg-gray-600 transition-all duration-300 cursor-pointer" />
+      <div className="w-3 h-3 rounded-full bg-gray-300 hover:bg-gray-500 transition-all duration-300 cursor-pointer" />
+    ),
+    appendDots: (dots: React.ReactNode) => (
+      <div>
+        <style>{`
+          .slick-dots li.slick-active div {
+            background-color: rgb(31, 41, 55) !important; /* gray-800 - 활성화된 점은 진한 회색 */
+            transform: scale(1.2);
+          }
+        `}</style>
+        <ul style={{ margin: "0px" }}>{dots}</ul>
+      </div>
     ),
   };
 
