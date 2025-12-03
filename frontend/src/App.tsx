@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { AnalysisProvider } from './context/AnalysisContext' // 추가
-import HomeLayout from './components/Layout/HomeLayout'
-import Layout from './components/Layout/Layout'
+import HomeLayout from './components/layout/HomeLayout'
+import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import AppHome from './pages/AppHome'
 import { Dashboard } from './pages/Dashboard'

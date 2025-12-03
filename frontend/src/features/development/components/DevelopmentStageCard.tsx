@@ -35,9 +35,15 @@ export const DevelopmentStageCard = ({ ageMonths, strongestArea }: DevelopmentSt
                             <TrendingUp className="w-5 h-5 text-safe" />
                             <p className="text-sm text-gray-700 font-medium">발달 강점</p>
                         </div>
-                        <p className="text-base text-gray-800 leading-relaxed">
-                            지수는 <span className="text-safe font-semibold">{strongestArea?.category} 발달</span>에서 강점을 보여주네요! 🌟
-                        </p>
+                        {strongestArea && strongestArea.score > 0 ? (
+                            <p className="text-base text-gray-800 leading-relaxed">
+                                지수는 <span className="text-safe font-semibold">{strongestArea.category} 발달</span>에서 강점을 보여주네요! 🌟
+                            </p>
+                        ) : (
+                            <p className="text-base text-gray-500 leading-relaxed">
+                                아직 충분한 데이터가 모이지 않았어요.
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
