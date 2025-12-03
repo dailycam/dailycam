@@ -25,6 +25,9 @@ interface UserInfo {
   next_billing_at?: string | null
   subscription_plan?: string | null
   has_billing_key?: boolean
+  phone?: string | null
+  child_name?: string | null
+  child_birthdate?: string | null
 }
 
 type Section =
@@ -47,6 +50,17 @@ export default function Settings() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [activeSection, setActiveSection] = useState<Section>(initialSection)
   const [isCancelling, setIsCancelling] = useState(false)
+
+  // 프로필 편집 상태
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    phone: '',
+    child_name: '',
+    child_birthdate: '',
+    picture: ''
+  })
 
   const [notifications, setNotifications] = useState({
     danger: true,
@@ -84,10 +98,20 @@ export default function Settings() {
 
         if (response.ok) {
           const data = await response.json()
-          setUserInfo({
+          const userData = {
             ...data,
             is_subscribed: Boolean(data.is_subscribed),
             has_billing_key: Boolean(data.has_billing_key),
+          }
+          setUserInfo(userData)
+
+          // 프로필 폼 초기화
+          setProfileForm({
+            name: data.name || '',
+            phone: data.phone || '',
+            child_name: data.child_name || '',
+            child_birthdate: data.child_birthdate || '',
+            picture: data.picture || ''
           })
         } else {
           removeAuthToken()
@@ -100,6 +124,79 @@ export default function Settings() {
 
     fetchUserInfo()
   }, [navigate])
+
+  const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 파일 크기 체크 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하여야 합니다')
+      return
+    }
+
+    // 파일 타입 체크
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드 가능합니다')
+      return
+    }
+
+    // 이미지를 Base64로 변환
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const base64String = reader.result as string
+
+      try {
+        const token = getAuthToken()
+
+        // 즉시 서버에 저장
+        const response = await fetch('http://localhost:8000/api/profile/setup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...profileForm,
+            picture: base64String
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('사진 업데이트에 실패했습니다')
+        }
+
+        // 사용자 정보 다시 가져오기
+        const meResponse = await fetch('http://localhost:8000/api/auth/me', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (meResponse.ok) {
+          const data = await meResponse.json()
+          setUserInfo({
+            ...data,
+            is_subscribed: Boolean(data.is_subscribed),
+            has_billing_key: Boolean(data.has_billing_key),
+          })
+          setProfileForm({
+            name: data.name || '',
+            phone: data.phone || '',
+            child_name: data.child_name || '',
+            child_birthdate: data.child_birthdate || '',
+            picture: data.picture || ''
+          })
+        }
+
+        alert('프로필 사진이 변경되었습니다!')
+      } catch (error) {
+        console.error('사진 변경 오류:', error)
+        alert('사진 변경 중 오류가 발생했습니다')
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleCancelSubscription = async () => {
     if (!userInfo) return
@@ -153,6 +250,121 @@ export default function Settings() {
     } finally {
       setIsCancelling(false)
     }
+  }
+
+  const handleSaveProfile = async () => {
+    // 유효성 검사
+    if (!profileForm.name || profileForm.name.trim().length < 2) {
+      alert('이름은 최소 2자 이상이어야 합니다')
+      return
+    }
+
+    if (profileForm.phone && !/^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$/.test(profileForm.phone.replace(/-/g, ''))) {
+      alert('올바른 전화번호 형식이 아닙니다 (예: 010-1234-5678)')
+      return
+    }
+
+    if (profileForm.child_name && profileForm.child_name.trim().length < 2) {
+      alert('아이 이름은 최소 2자 이상이어야 합니다')
+      return
+    }
+
+    if (profileForm.child_birthdate) {
+      const birthDate = new Date(profileForm.child_birthdate)
+      const today = new Date()
+      if (birthDate > today) {
+        alert('미래 날짜는 선택할 수 없습니다')
+        return
+      }
+    }
+
+    try {
+      setIsSavingProfile(true)
+      const token = getAuthToken()
+
+      // 프로필 업데이트 API 호출
+      const response = await fetch('http://localhost:8000/api/profile/setup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(profileForm),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || '프로필 업데이트에 실패했습니다')
+      }
+
+      // 사용자 정보 다시 가져오기
+      const meResponse = await fetch('http://localhost:8000/api/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (meResponse.ok) {
+        const data = await meResponse.json()
+        setUserInfo({
+          ...data,
+          is_subscribed: Boolean(data.is_subscribed),
+          has_billing_key: Boolean(data.has_billing_key),
+        })
+        setProfileForm({
+          name: data.name || '',
+          phone: data.phone || '',
+          child_name: data.child_name || '',
+          child_birthdate: data.child_birthdate || '',
+          picture: data.picture || ''
+        })
+      }
+
+      setIsEditingProfile(false)
+      alert('프로필이 성공적으로 업데이트되었습니다!')
+    } catch (error) {
+      console.error('프로필 저장 오류:', error)
+      alert(error instanceof Error ? error.message : '프로필 저장 중 오류가 발생했습니다')
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    // 편집 취소 시 원래 값으로 복원
+    if (userInfo) {
+      setProfileForm({
+        name: userInfo.name || '',
+        phone: userInfo.phone || '',
+        child_name: userInfo.child_name || '',
+        child_birthdate: userInfo.child_birthdate || '',
+        picture: userInfo.picture || ''
+      })
+    }
+    setIsEditingProfile(false)
+  }
+
+  const calculateAgeInMonths = (birthdate: string | null | undefined): string => {
+    if (!birthdate) return ''
+
+    const birth = new Date(birthdate)
+    const today = new Date()
+
+    const yearDiff = today.getFullYear() - birth.getFullYear()
+    const monthDiff = today.getMonth() - birth.getMonth()
+    const dayDiff = today.getDate() - birth.getDate()
+
+    let totalMonths = yearDiff * 12 + monthDiff
+
+    // 날짜가 아직 안 지났으면 한 달 빼기
+    if (dayDiff < 0) {
+      totalMonths -= 1
+    }
+
+    if (totalMonths < 0) return '0개월'
+    if (totalMonths === 0) return '0개월'
+
+    return `${totalMonths}개월`
   }
 
 
@@ -226,13 +438,23 @@ export default function Settings() {
           {activeSection === 'profile' && (
             <>
               <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">프로필 정보</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">프로필 정보</h2>
+                  {!isEditingProfile && (
+                    <button
+                      onClick={() => setIsEditingProfile(true)}
+                      className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      수정하기
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-4">
                   <div className="flex items-center gap-4 mb-6">
-                    {userInfo?.picture ? (
+                    {(isEditingProfile ? profileForm.picture : userInfo?.picture) ? (
                       <img
-                        src={userInfo.picture}
-                        alt={userInfo.name}
+                        src={isEditingProfile ? profileForm.picture : userInfo?.picture || ''}
+                        alt={userInfo?.name || '프로필'}
                         className="w-20 h-20 rounded-full object-cover"
                       />
                     ) : (
@@ -241,7 +463,19 @@ export default function Settings() {
                       </div>
                     )}
                     <div>
-                      <button className="btn-secondary text-sm">사진 변경</button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePictureChange}
+                        className="hidden"
+                        id="picture-upload"
+                      />
+                      <label
+                        htmlFor="picture-upload"
+                        className="btn-secondary text-sm cursor-pointer inline-block"
+                      >
+                        사진 변경
+                      </label>
                       <p className="text-xs text-gray-500 mt-1">JPG, PNG (최대 5MB)</p>
                     </div>
                   </div>
@@ -250,9 +484,10 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">이름</label>
                     <input
                       type="text"
-                      value={userInfo?.name || '로딩 중...'}
+                      value={isEditingProfile ? profileForm.name : (userInfo?.name || '로딩 중...')}
+                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
                       className="input-field"
-                      readOnly
+                      readOnly={!isEditingProfile}
                     />
                   </div>
 
@@ -261,25 +496,83 @@ export default function Settings() {
                     <input
                       type="email"
                       value={userInfo?.email || '로딩 중...'}
-                      className="input-field"
+                      className="input-field bg-gray-50"
                       readOnly
                     />
+                    <p className="text-xs text-gray-500 mt-1">이메일은 변경할 수 없습니다</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">전화번호</label>
-                    <input type="tel" defaultValue="010-1234-5678" className="input-field" />
+                    <input
+                      type="tel"
+                      value={isEditingProfile ? profileForm.phone : (userInfo?.phone || '등록된 전화번호가 없습니다')}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      placeholder="010-1234-5678"
+                      className="input-field"
+                      readOnly={!isEditingProfile}
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">자녀 정보</label>
-                    <input type="text" defaultValue="아이 이름 (24개월)" className="input-field" />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">아이 이름</label>
+                    <input
+                      type="text"
+                      value={isEditingProfile ? profileForm.child_name : (userInfo?.child_name || '등록된 아이 정보가 없습니다')}
+                      onChange={(e) => setProfileForm({ ...profileForm, child_name: e.target.value })}
+                      placeholder="예: 지우"
+                      className="input-field"
+                      readOnly={!isEditingProfile}
+                    />
                   </div>
 
-                  <button className="btn-primary flex items-center gap-2">
-                    <Save className="w-4 h-4" />
-                    변경사항 저장
-                  </button>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">아이 생년월일</label>
+                    {isEditingProfile ? (
+                      <input
+                        type="date"
+                        value={profileForm.child_birthdate}
+                        onChange={(e) => setProfileForm({ ...profileForm, child_birthdate: e.target.value })}
+                        max={new Date().toISOString().split('T')[0]}
+                        className="input-field"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={
+                          userInfo?.child_birthdate
+                            ? `${new Date(userInfo.child_birthdate).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })} (${calculateAgeInMonths(userInfo.child_birthdate)})`
+                            : '등록된 생년월일이 없습니다'
+                        }
+                        className="input-field"
+                        readOnly
+                      />
+                    )}
+                  </div>
+
+                  {isEditingProfile ? (
+                    <div className="flex gap-3">
+                      <button
+                        className="btn-primary flex items-center gap-2 flex-1"
+                        onClick={handleSaveProfile}
+                        disabled={isSavingProfile}
+                      >
+                        <Save className="w-4 h-4" />
+                        {isSavingProfile ? '저장 중...' : '저장'}
+                      </button>
+                      <button
+                        className="btn-secondary flex-1"
+                        onClick={handleCancelEdit}
+                        disabled={isSavingProfile}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </>
@@ -501,7 +794,7 @@ export default function Settings() {
           )}
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 

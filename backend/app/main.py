@@ -15,6 +15,7 @@ from .api.dashboard.router import router as dashboard_router
 from .api.safety.router import router as safety_router
 from .api.development.router import router as development_router
 from .api.clips.router import router as clips_router
+from .api.profile.router import router as profile_router
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -168,6 +169,9 @@ def create_app() -> FastAPI:
         prefix="/api/clips",
         tags=["clips"]
     )
+
+    # 프로필 관리
+    app.include_router(profile_router)
 
     return app
 

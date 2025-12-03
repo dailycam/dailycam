@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { getDashboardData, type DashboardData } from '../lib/api'
+import { getAuthToken } from '../lib/auth'
 
 // 임시 추천 링크 데이터 타입
 type RecommendedLink = {
@@ -95,6 +96,28 @@ export default function AppHome() {
     const [loading, setLoading] = useState(true)
     const [selectedCategory, setSelectedCategory] = useState<string>('전체')
     const [searchQuery, setSearchQuery] = useState<string>('') // 검색어 state
+    const [userInfo, setUserInfo] = useState<{ child_name?: string; child_birthdate?: string } | null>(null)
+
+    // 사용자 정보 가져오기
+    useEffect(() => {
+        const fetchUserInfo = async () => {
+            const token = getAuthToken()
+            if (!token) return
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                if (response.ok) {
+                    const data = await response.json()
+                    setUserInfo(data)
+                }
+            } catch (error) {
+                console.error('사용자 정보 로드 실패:', error)
+            }
+        }
+        fetchUserInfo()
+    }, [])
 
     useEffect(() => {
         async function loadData() {
@@ -111,6 +134,43 @@ export default function AppHome() {
         }
         loadData()
     }, [])
+
+    // 개월 수 계산 함수
+    const calculateAgeInMonths = (birthdate: string | null | undefined): number => {
+        if (!birthdate) return 0
+
+        const birth = new Date(birthdate)
+        const today = new Date()
+
+        const yearDiff = today.getFullYear() - birth.getFullYear()
+        const monthDiff = today.getMonth() - birth.getMonth()
+        const dayDiff = today.getDate() - birth.getDate()
+
+        let totalMonths = yearDiff * 12 + monthDiff
+
+        if (dayDiff < 0) {
+            totalMonths -= 1
+        }
+
+        return totalMonths < 0 ? 0 : totalMonths
+    }
+
+    // 태어난 지 며칠인지 계산
+    const calculateDaysSinceBirth = (birthdate: string | null | undefined): number => {
+        if (!birthdate) return 0
+
+        const birth = new Date(birthdate)
+        const today = new Date()
+
+        // 시간을 00:00:00으로 설정하여 정확한 일수 계산
+        birth.setHours(0, 0, 0, 0)
+        today.setHours(0, 0, 0, 0)
+
+        const diffTime = today.getTime() - birth.getTime()
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+        return diffDays < 0 ? 0 : diffDays
+    }
 
     if (loading) {
         return (
@@ -238,16 +298,16 @@ export default function AppHome() {
                 <div className="flex items-center gap-2 mb-4">
                     <span className="px-3 py-1 rounded-full bg-primary-100/80 text-primary-700 text-xs font-bold flex items-center gap-1.5 border border-primary-200">
                         <Baby className="w-3.5 h-3.5" />
-                        생후 7개월
+                        생후 {calculateAgeInMonths(userInfo?.child_birthdate)}개월
                     </span>
                     <span className="px-3 py-1 rounded-full bg-white/80 text-gray-600 text-xs font-bold flex items-center gap-1.5 border border-gray-200 shadow-sm">
                         <Calendar className="w-3.5 h-3.5" />
-                        D+215
+                        D+{calculateDaysSinceBirth(userInfo?.child_birthdate)}
                     </span>
                 </div>
                 <p className="text-gray-500 mb-1">오늘도 함께해요</p>
                 <h1 className="text-4xl mb-2 bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent">
-                    지수는 기분이 아주 좋아요!
+                    {userInfo?.child_name || '우리 아이'}는 기분이 아주 좋아요!
                 </h1>
                 <p className="text-gray-600 leading-relaxed">
                     오늘 하루도 건강하고 안전하게 보냈어요. 특히 배밀이 연습에서 큰 진전을 보였답니다 🎉
