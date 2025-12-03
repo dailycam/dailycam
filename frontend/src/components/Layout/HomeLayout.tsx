@@ -6,6 +6,22 @@ import { Menu, X } from 'lucide-react'
 export default function HomeLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    e.preventDefault()
+    const element = document.querySelector(targetId)
+    if (element) {
+      const navbarHeight = 64 // h-16 = 4rem = 64px
+      const elementPosition = element.getBoundingClientRect().top
+      const offsetPosition = elementPosition + window.pageYOffset - navbarHeight
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      })
+      setMobileMenuOpen(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
@@ -39,18 +55,21 @@ export default function HomeLayout() {
             <div className="hidden md:flex md:items-center md:gap-8">
               <a
                 href="#features"
+                onClick={(e) => handleSmoothScroll(e, '#features')}
                 className="text-sm font-medium text-gray-700 hover:text-primary-600 transition-colors"
               >
                 기능
               </a>
               <a
                 href="#pricing"
+                onClick={(e) => handleSmoothScroll(e, '#pricing')}
                 className="text-sm font-medium text-gray-700 hover:text-primary-600 transition-colors"
               >
                 가격
               </a>
               <a
                 href="#testimonials"
+                onClick={(e) => handleSmoothScroll(e, '#testimonials')}
                 className="text-sm font-medium text-gray-700 hover:text-primary-600 transition-colors"
               >
                 고객 후기
@@ -90,21 +109,21 @@ export default function HomeLayout() {
               <a
                 href="#features"
                 className="block px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-primary-600 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(e) => handleSmoothScroll(e, '#features')}
               >
                 기능
               </a>
               <a
                 href="#pricing"
                 className="block px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-primary-600 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(e) => handleSmoothScroll(e, '#pricing')}
               >
                 가격
               </a>
               <a
                 href="#testimonials"
                 className="block px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-primary-600 rounded-lg"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(e) => handleSmoothScroll(e, '#testimonials')}
               >
                 고객 후기
               </a>

@@ -9,8 +9,6 @@ import {
   TrendingUp,
   Clock,
   Smartphone,
-  ArrowRight,
-  AlertTriangle,
   Camera,
   LayoutDashboard,
   X,
@@ -21,9 +19,6 @@ import {
   User,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
-import IncidentPieChart from '../components/Charts/IncidentPieChart'
-import { generateWeeklySafetyData } from '../utils/mockData'
 import { SafetyBannerCarousel } from '../components/SafetyBannerCarousel'
 import { Dashboard as DashboardPage } from './Dashboard'
 import ClipHighlightsPage from './ClipHighlights'
@@ -35,32 +30,27 @@ import SettingsPage from './Settings'
 const features = [
   {
     name: '실시간 AI 분석',
-    description: 'Gemini를 활용한 실시간 영상 분석으로 아이의 안전을 지킵니다.',
+    description: 'AI가 실시간으로 영상을 분석하여 안전을 지킵니다.',
     icon: Brain,
   },
   {
-    name: '즉시 알림',
-    description: '위험 상황 감지 시 즉시 푸시 알림을 받아 빠르게 대응할 수 있습니다.',
-    icon: Bell,
-  },
-  {
     name: '기존 홈캠 활용',
-    description: '새 카메라 구매 불필요! 기존 IP 카메라를 그대로 활용하세요.',
+    description: '새 카메라 구매 불필요! 기존 IP 카메라를 활용하세요.',
     icon: Camera,
   },
   {
     name: '안전도 분석',
-    description: '일일/주간/월간 안전도 트렌드와 히트맵으로 패턴을 파악합니다.',
+    description: '일일/주간/월간 안전도 트렌드를 한눈에 확인하세요.',
     icon: BarChart3,
   },
   {
     name: '24시간 모니터링',
-    description: '언제 어디서나 스마트폰으로 아이의 상태를 확인할 수 있습니다.',
+    description: '언제 어디서나 실시간으로 아이의 상태를 확인하세요.',
     icon: Clock,
   },
   {
-    name: '모바일 앱',
-    description: 'iOS/Android 앱으로 회사에서도 실시간으로 확인 가능합니다.',
+    name: '반응형 웹',
+    description: 'PC, 태블릿, 모바일 어디서나 접속 가능합니다.',
     icon: Smartphone,
   },
 ]
@@ -134,12 +124,6 @@ const pricingPlans = [
   },
 ]
 
-const stats = [
-  { label: '누적 모니터링 시간', value: '100만+' },
-  { label: '위험 감지 건수', value: '5,000+' },
-  { label: '만족도', value: '98%' },
-  { label: '활성 사용자', value: '2,500+' },
-]
 
 type PreviewKey = 'dashboard' | 'live' | 'development' | 'safety' | 'clips' | 'settings'
 
@@ -167,16 +151,8 @@ const previewComponents: Record<PreviewKey, ComponentType> = {
   settings: SettingsPage,
 }
 
+
 export default function Home() {
-  const weeklyData = generateWeeklySafetyData()
-
-  const incidentData = [
-    { name: '데드존 접근', value: 12, color: '#ef4444' },
-    { name: '모서리 충돌', value: 8, color: '#f59e0b' },
-    { name: '낙상 위험', value: 3, color: '#fb923c' },
-    { name: '기타', value: 2, color: '#9ca3af' },
-  ]
-
   const [isDashboardOpen, setIsDashboardOpen] = useState(false)
   const [activePreview, setActivePreview] = useState<PreviewKey>('dashboard')
   const navigate = useNavigate()
@@ -225,29 +201,9 @@ export default function Home() {
       {/* Hero Section with Carousel */}
       <SafetyBannerCarousel />
 
-      {/* Stats */}
-      <section className="relative bg-gradient-to-br from-primary-50 via-blue-50 to-purple-50 py-12">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-            {stats.map((stat) => (
-              <div
-                key={stat.label}
-                className="flex flex-col items-center justify-center bg-white/90 backdrop-blur-md rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow"
-              >
-                <dt className="text-sm font-medium leading-6 text-gray-600">
-                  {stat.label}
-                </dt>
-                <dd className="mt-2 text-3xl font-bold tracking-tight text-primary-600">
-                  {stat.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 sm:py-32">
+      <section id="features" className="py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-base font-semibold leading-7 text-primary-600">
@@ -281,57 +237,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Dashboard Preview Section */}
-      <section className="bg-gray-50 py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center mb-16">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-              실제 화면 미리보기
-            </h2>
-            <p className="mt-6 text-lg leading-8 text-gray-600">
-              웹에서 바로 사용할 수 있는 강력한 기능들
-            </p>
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-            {/* Safety Trend Chart */}
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">주간 안전도 추이</h3>
-                <TrendingUp className="w-6 h-6 text-safe" />
-              </div>
-              <div className="h-64">
-                <SafetyTrendChart data={weeklyData} />
-              </div>
-            </div>
-
-            {/* Incident Pie Chart */}
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">위험 유형별 분포</h3>
-                <AlertTriangle className="w-6 h-6 text-warning" />
-              </div>
-              <div className="h-64">
-                <IncidentPieChart data={incidentData} />
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={handleStartClick}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-primary-500 transition-all"
-            >
-              대시보드 시작하기
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </section>
+      {/* Divider */}
+      <div className="mx-auto max-w-7xl px-6 lg:px-8 py-8">
+        <div className="border-t border-gray-200"></div>
+      </div>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-24 sm:py-32">
+      <section id="pricing" className="py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
@@ -399,7 +312,7 @@ export default function Home() {
       </section>
 
       {/* Testimonials Section */}
-      <section id="testimonials" className="bg-gray-50 py-24 sm:py-32">
+      <section id="testimonials" className="bg-gray-50 py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
