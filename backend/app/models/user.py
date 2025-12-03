@@ -13,7 +13,7 @@ class User(Base):
     google_id = Column(String(255), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(255), nullable=True)
-    picture = Column(Text, nullable=True)  # Base64 이미지를 저장하기 위해 Text 타입 사용
+    picture = Column(Text, nullable=True)  # Base64 이미지를 저장하기 위해 Text 타입 사용 (DB에서는 MEDIUMTEXT로 설정, 최대 16MB)
 
     # 구독 여부 (0: 미구독, 1: 구독)
     is_subscribed = Column(Integer, default=0)
