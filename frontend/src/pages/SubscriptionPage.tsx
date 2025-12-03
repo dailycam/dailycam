@@ -74,9 +74,9 @@ export default function SubscriptionPage() {
         }
 
         // 🔥 정기결제용 customer_uid (유저별로 고정되게)
-        const customerUid = `user_${me.id}`
+        const customerUid = `user_${me.id}_${Date.now()}`
 
-        const merchantUid = `basic_${Date.now()}`
+        const merchantUid = `basic_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
         IMP.request_pay(
             {

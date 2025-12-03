@@ -53,9 +53,9 @@ export default function AuthCallback() {
                     console.log('[AuthCallback] 프로필 미완성 - 프로필 등록 페이지로 이동')
                     navigate('/profile-setup', { replace: true })
                 } else {
-                    // 구독 회원 + 프로필 완성 -> 대시보드
-                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 대시보드로 이동')
-                    navigate('/dashboard', { replace: true })
+                    // 구독 회원 + 프로필 완성 -> 앱 홈
+                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 앱 홈으로 이동')
+                    navigate('/home', { replace: true })
                 }
             } catch (error) {
                 console.error('[AuthCallback] 오류 발생:', error)
