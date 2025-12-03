@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ComponentType } from 'react'
 import {
   Brain,
@@ -179,6 +179,11 @@ export default function Home() {
 
   const [isDashboardOpen, setIsDashboardOpen] = useState(false)
   const [activePreview, setActivePreview] = useState<PreviewKey>('dashboard')
+  const navigate = useNavigate()
+
+  const handleStartClick = () => {
+    navigate('/login')
+  }
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -315,7 +320,7 @@ export default function Home() {
           <div className="text-center">
             <button
               type="button"
-              onClick={openDashboardOverlay}
+              onClick={handleStartClick}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-primary-500 transition-all"
             >
               대시보드 시작하기
@@ -379,7 +384,7 @@ export default function Home() {
                 </div>
                 <button
                   type="button"
-                  onClick={openDashboardOverlay}
+                  onClick={handleStartClick}
                   className={`mt-8 w-full rounded-lg px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-all ${plan.popular
                     ? 'bg-primary-600 text-white hover:bg-primary-500 focus-visible:outline-primary-600'
                     : 'bg-primary-50 text-primary-600 hover:bg-primary-100'
@@ -445,7 +450,7 @@ export default function Home() {
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <button
                 type="button"
-                onClick={openDashboardOverlay}
+                onClick={handleStartClick}
                 className="rounded-lg bg-white px-6 py-3 text-base font-semibold text-primary-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all"
               >
                 무료 체험 시작하기

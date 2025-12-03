@@ -107,6 +107,60 @@ export function getStreamUrl(
   return baseUrl
 }
 
+export interface StartHlsStreamResponse {
+  message: string
+  camera_id: string
+  status: string
+  stream_type: string
+  analysis_enabled: boolean
+  playlist_url: string
+}
+
+/**
+ * HLS 스트림을 시작합니다.
+ */
+export async function startHlsStream(
+  cameraId: string,
+  enableAnalysis: boolean = true,
+  enableRealtimeDetection: boolean = true
+): Promise<StartHlsStreamResponse> {
+  const params = new URLSearchParams({
+    enable_analysis: enableAnalysis.toString(),
+    enable_realtime_detection: enableRealtimeDetection.toString(),
+  })
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/start-hls-stream/${cameraId}?${params.toString()}`,
+    {
+      method: 'POST',
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
+ * HLS 스트림을 중지합니다.
+ */
+export async function stopHlsStream(cameraId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-hls-stream/${cameraId}`, {
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    // 404는 이미 중지된 것으로 간주
+    if (response.status === 404) return
+
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 중지 중 오류가 발생했습니다.')
+  }
+}
+
 /**
  * 스트림을 중지합니다.
  */

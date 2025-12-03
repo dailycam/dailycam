@@ -1,128 +1,69 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import { Play, Download, Share2, TrendingUp, Shield, Calendar, Clock, Film } from 'lucide-react'
+import { getClipHighlights, HighlightClip } from '../lib/api'
 
 export default function ClipHighlights() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'development' | 'safety'>('development')
+  const [developmentClips, setDevelopmentClips] = useState<HighlightClip[]>([])
+  const [safetyClips, setSafetyClips] = useState<HighlightClip[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const developmentClips = [
-    {
-      id: 'dev-1',
-      title: '배밀이 자세로 2미터 이동',
-      category: '운동 발달',
-      timestamp: '2024-11-19 15:23',
-      duration: '0:45',
-      thumbnail: '🤸',
-      description: '아기가 배밀이 자세로 약 2미터를 이동하는 모습이 포착되었습니다. 대근육 발달의 중요한 이정표입니다.',
-      importance: 'high',
-      color: 'safe',
-    },
-    {
-      id: 'dev-2',
-      title: '혼자 앉기 시도',
-      category: '운동 발달',
-      timestamp: '2024-11-19 14:23',
-      duration: '0:38',
-      thumbnail: '🪑',
-      description: '아기가 처음으로 혼자 앉으려는 시도를 했습니다. 균형 감각이 발달하고 있습니다.',
-      importance: 'high',
-      color: 'safe',
-    },
-    {
-      id: 'dev-3',
-      title: '다양한 옹알이 소리',
-      category: '언어 발달',
-      timestamp: '2024-11-19 12:10',
-      duration: '1:15',
-      thumbnail: '🗣️',
-      description: '여러 음절의 옹알이가 관찰되었습니다. "바바", "마마" 등의 소리를 반복했습니다.',
-      importance: 'medium',
-      color: 'primary',
-    },
-    {
-      id: 'dev-4',
-      title: '눈 맞춤 및 웃음 반응',
-      category: '사회성 발달',
-      timestamp: '2024-11-19 09:45',
-      duration: '0:52',
-      thumbnail: '😊',
-      description: '부모와의 상호작용 중 활발한 눈 맞춤과 웃음 반응을 보였습니다.',
-      importance: 'medium',
-      color: 'primary',
-    },
-    {
-      id: 'dev-5',
-      title: '장난감 손 뻗기 및 잡기',
-      category: '인지 발달',
-      timestamp: '2024-11-19 09:15',
-      duration: '1:05',
-      thumbnail: '🧸',
-      description: '목표물을 향해 손을 뻗고 성공적으로 잡는 행동이 관찰되었습니다.',
-      importance: 'medium',
-      color: 'warning',
-    },
-  ]
+  // API에서 클립 데이터 가져오기
+  useEffect(() => {
+    const fetchClips = async () => {
+      try {
+        setLoading(true)
+        const response = await getClipHighlights('all', 50)
 
-  const safetyClips = [
-    {
-      id: 'safe-1',
-      title: '침대 가장자리 접근',
-      category: '주의',
-      timestamp: '2024-11-19 13:45',
-      duration: '0:28',
-      thumbnail: '⚠️',
-      description: '아기가 침대 가장자리에 접근했습니다. 이후 안전한 영역으로 복귀했습니다.',
-      importance: 'warning',
-      color: 'warning',
-    },
-    {
-      id: 'safe-2',
-      title: '활발한 움직임 감지',
-      category: '주의',
-      timestamp: '2024-11-19 11:20',
-      duration: '0:35',
-      thumbnail: '🏃',
-      description: '평소보다 활발한 움직임이 감지되었습니다. 안전 상태 모니터링 강화됨.',
-      importance: 'warning',
-      color: 'warning',
-    },
-    {
-      id: 'safe-3',
-      title: '안전한 수면 자세 확인',
-      category: '권장',
-      timestamp: '2024-11-19 08:30',
-      duration: '0:15',
-      thumbnail: '😴',
-      description: '바른 자세로 안전하게 수면 중인 모습입니다.',
-      importance: 'info',
-      color: 'safe',
-    },
-    {
-      id: 'safe-4',
-      title: '정상 기상',
-      category: '권장',
-      timestamp: '2024-11-19 06:00',
-      duration: '0:42',
-      thumbnail: '🌅',
-      description: '정상적으로 기상하는 모습이 관찰되었습니다.',
-      importance: 'info',
-      color: 'safe',
-    },
-  ]
+        const devClips = response.clips.filter(clip => clip.category === '발달')
+        const safeClips = response.clips.filter(clip => clip.category === '안전')
 
-  const renderClipCard = (clip: typeof developmentClips[0], type: 'development' | 'safety') => {
+        setDevelopmentClips(devClips)
+        setSafetyClips(safeClips)
+      } catch (error) {
+        console.error('클립 데이터 로드 실패:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchClips()
+  }, [])
+
+  // 재생 시간 포맷팅
+  const formatDuration = (seconds: number | undefined): string => {
+    if (!seconds) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // 날짜 포맷팅
+  const formatDate = (dateStr: string | undefined): string => {
+    if (!dateStr) return ''
+    const date = new Date(dateStr)
+    return date.toLocaleString('ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const renderClipCard = (clip: HighlightClip) => {
     const bgColor =
       clip.importance === 'high'
         ? 'bg-safe-50 border-safe-200'
-        : clip.importance === 'warning'
+        : clip.importance === 'warning' || clip.category === '안전'
           ? 'bg-warning-50 border-warning-200'
           : 'bg-primary-50 border-primary-200'
 
     const badgeColor =
       clip.importance === 'high'
         ? 'bg-safe-200 text-safe-dark'
-        : clip.importance === 'warning'
+        : clip.importance === 'warning' || clip.category === '안전'
           ? 'bg-warning-200 text-warning-dark'
           : 'bg-primary-200 text-primary-700'
 
@@ -130,21 +71,27 @@ export default function ClipHighlights() {
       <div
         key={clip.id}
         className={`card p-4 ${bgColor} border-2 hover:shadow-md transition-shadow cursor-pointer`}
-        onClick={() => setSelectedClip(clip.id)}
+        onClick={() => setSelectedClip(clip.id.toString())}
       >
         <div className="flex gap-4">
           <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl">
-            {clip.thumbnail}
+            {clip.thumbnail_url ? (
+              <img src={clip.thumbnail_url} alt={clip.title} className="w-full h-full object-cover rounded-lg" />
+            ) : (
+              clip.category === '발달' ? '🎯' : '⚠️'
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1">
                 <h4 className="mb-1 font-semibold text-gray-900">{clip.title}</h4>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs px-2 py-1 rounded ${badgeColor}`}>{clip.category}</span>
+                  <span className={`text-xs px-2 py-1 rounded ${badgeColor}`}>
+                    {clip.sub_category || clip.category}
+                  </span>
                   <span className="text-xs text-gray-500 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {clip.duration}
+                    {formatDuration(clip.duration_seconds)}
                   </span>
                 </div>
               </div>
@@ -155,7 +102,7 @@ export default function ClipHighlights() {
             <p className="text-sm text-gray-600 mb-2">{clip.description}</p>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Calendar className="w-3 h-3" />
-              {clip.timestamp}
+              {formatDate(clip.created_at)}
             </div>
           </div>
         </div>
@@ -173,6 +120,17 @@ export default function ClipHighlights() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">클립 데이터를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-8">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
@@ -180,7 +138,7 @@ export default function ClipHighlights() {
           <Film className="w-8 h-8 text-primary-600" />
           <h1 className="text-3xl font-bold text-gray-900">클립 하이라이트</h1>
         </div>
-        <p className="text-gray-600">AI가 자동으로 생성한 중요한 순간들을 확인하세요</p>
+        <p className="text-gray-600">중요한 순간들을 확인하세요</p>
       </motion.div>
 
       {/* Summary Stats */}
@@ -224,7 +182,9 @@ export default function ClipHighlights() {
               <Clock className="w-8 h-8 text-primary-600" />
               <div>
                 <p className="text-sm text-gray-600">총 재생시간</p>
-                <p className="text-primary-600 text-xl font-bold">7분 23초</p>
+                <p className="text-primary-600 text-xl font-bold">
+                  {formatDuration([...developmentClips, ...safetyClips].reduce((sum, clip) => sum + (clip.duration_seconds || 0), 0))}
+                </p>
               </div>
             </div>
           </div>
@@ -237,8 +197,8 @@ export default function ClipHighlights() {
           <button
             onClick={() => setActiveTab('development')}
             className={`px-4 py-2 font-medium transition-colors border-b-2 ${activeTab === 'development'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+              ? 'border-primary-500 text-primary-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
               }`}
           >
             <TrendingUp className="w-4 h-4 inline mr-2" />
@@ -259,11 +219,17 @@ export default function ClipHighlights() {
             <div className="card p-6 bg-gradient-to-br from-safe-50 to-white mb-4">
               <h3 className="mb-2 text-safe-dark font-semibold">발달 클립 하이라이트</h3>
               <p className="text-sm text-gray-700">
-                AI가 분석한 중요한 발달 이정표와 행동 패턴을 자동으로 클립으로 저장했습니다. 각 클립은 언어, 운동, 인지, 사회성 등의 발달 영역별로 분류되어 있습니다.
+                중요한 발달 이정표와 행동 패턴을 자동으로 클립으로 저장했습니다. 각 클립은 언어, 운동, 인지, 사회성 등의 발달 영역별로 분류되어 있습니다.
               </p>
             </div>
             <div className="space-y-4">
-              {developmentClips.map((clip) => renderClipCard(clip, 'development'))}
+              {developmentClips.length > 0 ? (
+                developmentClips.map((clip) => renderClipCard(clip))
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <p>아직 발달 클립이 없습니다.</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -277,13 +243,19 @@ export default function ClipHighlights() {
               </p>
             </div>
             <div className="space-y-4">
-              {safetyClips.map((clip) => renderClipCard(clip, 'safety'))}
+              {safetyClips.length > 0 ? (
+                safetyClips.map((clip) => renderClipCard(clip))
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <p>아직 안전 클립이 없습니다.</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
       </div>
 
-      {/* Video Player Modal Placeholder */}
+      {/* Video Player Modal */}
       {selectedClip && (
         <div
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
@@ -291,11 +263,25 @@ export default function ClipHighlights() {
         >
           <div className="bg-white rounded-lg max-w-4xl w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="aspect-video bg-gray-900 rounded-lg mb-4 flex items-center justify-center">
-              <div className="text-white text-center">
-                <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p>영상 플레이어</p>
-                <p className="text-sm opacity-50 mt-2">데모 환경에서는 실제 영상이 재생되지 않습니다</p>
-              </div>
+              {(() => {
+                const clip = [...developmentClips, ...safetyClips].find(c => c.id.toString() === selectedClip)
+                return clip ? (
+                  <video
+                    key={clip.video_url}
+                    controls
+                    autoPlay
+                    className="w-full h-full object-contain"
+                    src={clip.video_url}
+                  >
+                    브라우저가 비디오 태그를 지원하지 않습니다.
+                  </video>
+                ) : (
+                  <div className="text-white text-center">
+                    <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p>영상 플레이어</p>
+                  </div>
+                )
+              })()}
             </div>
             <button onClick={() => setSelectedClip(null)} className="btn-primary w-full">
               닫기
