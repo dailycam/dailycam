@@ -38,7 +38,7 @@ export const PageHeader = ({
                 </div>
                 {description && <p className="text-gray-600">{description}</p>}
             </div>
-            {actions && <div className="flex items-center gap-3">{actions}</div>}
+            {actions && <div className="flex items-center gap-3" data-actions="true">{actions}</div>}
         </motion.div>
     )
 }

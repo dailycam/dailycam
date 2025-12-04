@@ -63,27 +63,43 @@ export default function AppHome() {
         fetchUserInfo()
     }, [])
 
-    // AI 추천 콘텐츠 가져오기
+    // AI 추천 콘텐츠 가져오기 (캐시 우선 전략)
     useEffect(() => {
         async function loadAIContent() {
             try {
-                setContentLoading(true)
+                // 1. 캐시된 데이터 먼저 로드 (즉시 표시)
+                const cachedBlogs = localStorage.getItem('cached_blogs')
+                const cachedNews = localStorage.getItem('cached_news')
+                const cachedTrending = localStorage.getItem('cached_trending')
 
-                // 병렬로 모든 콘텐츠 가져오기
+                if (cachedBlogs || cachedNews || cachedTrending) {
+                    console.log('📦 캐시된 콘텐츠 로드 중...')
+                    if (cachedBlogs) setRecommendedBlogs(JSON.parse(cachedBlogs))
+                    if (cachedNews) setRecommendedNews(JSON.parse(cachedNews))
+                    if (cachedTrending) setTrendingContent(JSON.parse(cachedTrending))
+                    setContentLoading(false) // 캐시 표시 후 로딩 종료
+                }
+
+                // 2. 백그라운드에서 최신 데이터 가져오기
+                console.log('🔄 최신 콘텐츠 가져오는 중...')
                 const [blogs, news, trending] = await Promise.all([
                     getRecommendedBlogs(),
                     getRecommendedNews(),
                     getTrendingContent()
                 ])
 
+                // 3. 상태 업데이트 및 캐시 저장
                 setRecommendedBlogs(blogs)
                 setRecommendedNews(news)
                 setTrendingContent(trending)
 
-                console.log('AI 추천 콘텐츠 로드 완료:', { blogs, news, trending })
+                localStorage.setItem('cached_blogs', JSON.stringify(blogs))
+                localStorage.setItem('cached_news', JSON.stringify(news))
+                localStorage.setItem('cached_trending', JSON.stringify(trending))
+
+                console.log('✅ AI 추천 콘텐츠 로드 완료:', { blogs, news, trending })
             } catch (error) {
                 console.error('AI 콘텐츠 로드 실패:', error)
-                // 에러 시 기본 콘텐츠 사용 (fallback은 API 함수에서 처리)
             } finally {
                 setContentLoading(false)
             }
