@@ -78,7 +78,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             # 기존 사용자 정보 업데이트
             user.email = email
             user.name = name
-            user.picture = picture
+            # 사용자가 커스텀 프로필 사진을 업로드했다면 (Base64로 시작) 유지, 아니면 Google 사진으로 업데이트
+            if not user.picture or not user.picture.startswith('data:image'):
+                user.picture = picture
         else:
             # 새 사용자 생성
             user = User(
@@ -128,6 +130,9 @@ async def get_current_user(
             detail="사용자를 찾을 수 없습니다"
         )
     
+    # 프로필 완성 여부 확인
+    profile_completed = bool(user.phone and user.child_name and user.child_birthdate)
+    
     return {
         "id": user.id,
         "email": user.email,
@@ -137,7 +142,11 @@ async def get_current_user(
         "created_at": user.created_at,
         "next_billing_at": user.next_billing_at,
         "has_billing_key": user.subscription_customer_uid is not None,
-        "subscription_plan": user.subscription_plan
+        "subscription_plan": user.subscription_plan,
+        "phone": user.phone,
+        "child_name": user.child_name,
+        "child_birthdate": user.child_birthdate.isoformat() if user.child_birthdate else None,
+        "profile_completed": profile_completed
     }
 
 

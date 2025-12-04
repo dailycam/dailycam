@@ -2,6 +2,16 @@
 
 import os
 import asyncio
+from dotenv import load_dotenv
+
+# .env 파일 명시적 로드
+load_dotenv()
+
+# LangChain 호환성을 위해 GEMINI_API_KEY를 GOOGLE_API_KEY로 설정
+if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
+
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +25,8 @@ from .api.dashboard.router import router as dashboard_router
 from .api.safety.router import router as safety_router
 from .api.development.router import router as development_router
 from .api.clips.router import router as clips_router
+from .api.profile.router import router as profile_router
+from .api.content.router import router as content_router
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -242,6 +254,12 @@ def create_app() -> FastAPI:
         prefix="/api/clips",
         tags=["clips"]
     )
+
+    # 프로필 관리
+    app.include_router(profile_router)
+
+    # AI 콘텐츠 추천
+    app.include_router(content_router)
 
     return app
 

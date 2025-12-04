@@ -734,3 +734,136 @@ export async function getClipHighlights(
     throw error
   }
 }
+
+// ============================================================
+// Content Recommendation API (Gemini AI)
+// ============================================================
+
+export interface VideoRecommendation {
+  id: string
+  type: 'youtube'
+  title: string
+  description: string
+  url: string
+  thumbnail?: string
+  channel?: string
+  views?: string
+  tags: string[]
+  category: string
+}
+
+export interface BlogRecommendation {
+  id: string
+  type: 'blog'
+  title: string
+  description: string
+  url: string
+  tags: string[]
+  category: string
+}
+
+export type ContentRecommendation = VideoRecommendation | BlogRecommendation
+
+export interface ContentResponse<T> {
+  videos?: T[]
+  blogs?: T[]
+  content?: T[]
+  age_months: number
+  cached: boolean
+  cached_at?: string
+  generated_at?: string
+}
+
+/**
+ * AI 추천 YouTube 영상 가져오기
+ */
+export async function getRecommendedVideos(): Promise<VideoRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-videos`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 영상을 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<VideoRecommendation> = await response.json()
+    return data.videos || []
+  } catch (error) {
+    console.error('추천 영상 조회 실패:', error)
+    // 에러 시 빈 배열 반환 (fallback)
+    return []
+  }
+}
+
+/**
+ * AI 추천 블로그 포스트 가져오기
+ */
+export async function getRecommendedBlogs(): Promise<BlogRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-blogs`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 블로그를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<BlogRecommendation> = await response.json()
+    return data.blogs || []
+  } catch (error) {
+    console.error('추천 블로그 조회 실패:', error)
+    return []
+  }
+}
+
+/**
+ * AI 추천 트렌딩 콘텐츠 가져오기 (영상+블로그 혼합)
+ */
+export async function getTrendingContent(): Promise<ContentRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/trending`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('트렌딩 콘텐츠를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<ContentRecommendation> = await response.json()
+    return data.content || []
+  } catch (error) {
+    console.error('트렌딩 콘텐츠 조회 실패:', error)
+    return []
+  }
+}
+// 콘텐츠 검색
+export async function searchContent(query: string): Promise<ContentRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/search?query=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('검색 중 오류가 발생했습니다.')
+    }
+
+    const data: { results: ContentRecommendation[] } = await response.json()
+    return data.results || []
+  } catch (error) {
+    console.error('검색 실패:', error)
+    return []
+  }
+}

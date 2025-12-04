@@ -283,7 +283,7 @@ export default function LiveMonitoring() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">모니터링</h1>
-          <p className="text-gray-600 mt-1">AI가 아이의 행동을 분석합니다</p>
+          <p className="text-gray-600 mt-1">아이의 행동을 분석합니다</p>
         </div>
         <div className="flex gap-2">
           {!streamUrl ? (
@@ -656,8 +656,8 @@ function CameraThumbnail({
     <button
       onClick={onClick}
       className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${isActive
-          ? 'border-primary-500 ring-2 ring-primary-200'
-          : 'border-gray-200 hover:border-gray-300'
+        ? 'border-primary-500 ring-2 ring-primary-200'
+        : 'border-gray-200 hover:border-gray-300'
         } ${isOffline ? 'opacity-50' : ''}`}
     >
       <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">

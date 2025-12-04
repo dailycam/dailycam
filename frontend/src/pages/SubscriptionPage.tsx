@@ -74,9 +74,9 @@ export default function SubscriptionPage() {
         }
 
         // 🔥 정기결제용 customer_uid (유저별로 고정되게)
-        const customerUid = `user_${me.id}`
+        const customerUid = `user_${me.id}_${Date.now()}`
 
-        const merchantUid = `basic_${Date.now()}`
+        const merchantUid = `basic_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
         IMP.request_pay(
             {
@@ -124,7 +124,31 @@ export default function SubscriptionPage() {
                         window.dispatchEvent(new Event('subscriptionChanged'))
 
                         alert('베이직 플랜 월 정기구독이 시작되었습니다.')
-                        navigate('/dashboard')
+
+                        // 프로필 완성 여부 확인 후 리다이렉트
+                        try {
+                            const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                                headers: {
+                                    Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+                                },
+                            })
+                            if (meRes.ok) {
+                                const userData = await meRes.json()
+                                // 프로필이 완성되지 않았으면 프로필 설정 페이지로
+                                if (!userData.profile_completed) {
+                                    navigate('/profile-setup')
+                                } else {
+                                    // 이미 프로필이 있으면 홈으로
+                                    navigate('/')
+                                }
+                            } else {
+                                // 사용자 정보를 가져올 수 없으면 기본적으로 프로필 설정으로
+                                navigate('/profile-setup')
+                            }
+                        } catch (e) {
+                            console.error('프로필 확인 실패:', e)
+                            navigate('/profile-setup')
+                        }
                     } catch (e) {
                         console.error(e)
                         alert(
