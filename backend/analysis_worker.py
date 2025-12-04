@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.database.session import get_db
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.models.live_monitoring.models import SegmentAnalysis
+from app.models.analysis import AnalysisLog, DevelopmentEvent, DevelopmentCategory
 from app.services.gemini_service import GeminiService
 
 
@@ -207,12 +208,54 @@ class AnalysisWorker:
                 incident_count=job.incident_count
             )
             db.add(segment_analysis)
+            db.flush()  # segment_analysis.id를 얻기 위해 flush
+            
+            # DevelopmentEvent 생성을 위한 AnalysisLog 생성
+            # camera_id로 user_id 매핑 (현재는 기본값 1, 추후 확장 가능)
+            user_id = self._get_user_id_from_camera(job.camera_id, db)
+            
+            # AnalysisLog 생성 (SegmentAnalysis를 위한 최소한의 로그)
+            analysis_log = AnalysisLog(
+                analysis_id=segment_analysis.id,  # segment_analysis.id를 analysis_id로 사용
+                user_id=user_id,
+                video_path=job.video_path,
+                safety_score=job.safety_score,
+                development_score=analysis_result.get('development_analysis', {}).get('development_score'),
+                created_at=job.segment_start  # 세그먼트 시작 시간 사용
+            )
+            db.add(analysis_log)
+            db.flush()  # analysis_log.id를 얻기 위해 flush
+            
+            # DevelopmentEvent 생성 (development_analysis.skills에서 추출)
+            development_analysis = analysis_result.get('development_analysis', {})
+            skills = development_analysis.get('skills', [])
+            
+            development_events_created = 0
+            for skill in skills:
+                if not skill.get('present', False):
+                    continue
+                
+                # category 매핑: "대근육운동" -> GROSS_MOTOR, "소근육운동" -> FINE_MOTOR 등
+                category_str = skill.get('category', '')
+                category = self._map_category_to_enum(category_str)
+                
+                if category:
+                    dev_event = DevelopmentEvent(
+                        analysis_log_id=analysis_log.id,
+                        category=category,
+                        title=skill.get('name', '발달 행동'),
+                        description=f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
+                        event_timestamp=job.segment_start
+                    )
+                    db.add(dev_event)
+                    development_events_created += 1
             
             db.commit()
             
             print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}")
             print(f"  📊 안전 점수: {job.safety_score}")
             print(f"  🚨 사건 수: {job.incident_count}")
+            print(f"  🎯 발달 이벤트 생성: {development_events_created}개")
             
         except Exception as e:
             import traceback
@@ -239,6 +282,25 @@ class AnalysisWorker:
             db.commit()
         finally:
             db.close()
+    
+    def _get_user_id_from_camera(self, camera_id: str, db) -> int:
+        """camera_id로 user_id 찾기 (현재는 기본값 1, 추후 확장 가능)"""
+        # TODO: camera_id와 user_id 매핑 테이블에서 조회
+        # 현재는 기본값 1 사용
+        return 1
+    
+    def _map_category_to_enum(self, category_str: str):
+        """스키마의 category 문자열을 DevelopmentCategory Enum으로 매핑"""
+        category_map = {
+            "대근육운동": DevelopmentCategory.GROSS_MOTOR,
+            "소근육운동": DevelopmentCategory.FINE_MOTOR,
+            "언어": DevelopmentCategory.LANGUAGE,
+            "인지": DevelopmentCategory.COGNITIVE,
+            "사회정서": DevelopmentCategory.SOCIAL,
+            # 하위 호환성
+            "운동": DevelopmentCategory.MOTOR,  # 구분 불가능할 때
+        }
+        return category_map.get(category_str)
 
 
 if __name__ == "__main__":

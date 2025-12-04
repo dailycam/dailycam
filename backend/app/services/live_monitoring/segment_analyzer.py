@@ -37,7 +37,7 @@ class SegmentAnalysisScheduler:
             # 30초 여유를 두어 10분 분량 비디오가 완전히 저장되도록 함
             now = datetime.now()
             
-            # 다음 10분 단위 시간 계산
+            # 다음 10분 단위 시간 계산 (서버 시간 기준)
             current_minutes = now.minute
             next_minutes = ((current_minutes // 10) + 1) * 10
             
@@ -53,9 +53,13 @@ class SegmentAnalysisScheduler:
                 next_analysis_time += timedelta(minutes=10)
             
             wait_seconds = (next_analysis_time - now).total_seconds()
+
+            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력
+            kst_offset = timedelta(hours=9)
+            next_analysis_time_kst = next_analysis_time + kst_offset
             
             if wait_seconds > 0:
-                print(f"[10분 분석 스케줄러] 다음 분석 시간: {next_analysis_time.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
+                print(f"[10분 분석 스케줄러] 다음 분석 시간(한국 시각): {next_analysis_time_kst.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
                 await asyncio.sleep(wait_seconds)
             
             if self.is_running:
@@ -79,16 +83,22 @@ class SegmentAnalysisScheduler:
             # 1. 분석할 구간 정의 (현재 시간 기준 10분 전 구간)
             now = datetime.now()
             
-            # 현재 시간을 10분 단위로 내림
+            # 현재 시간을 10분 단위로 내림 (서버 시간 기준)
             current_minutes = (now.minute // 10) * 10
             current_segment_end = now.replace(minute=current_minutes, second=0, microsecond=0)
             
             # 10분 전 구간을 분석 대상으로 설정
             segment_end = current_segment_end - timedelta(minutes=10)
             segment_start = segment_end - timedelta(minutes=10)
+
+            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력 (실제 계산은 서버 시간 기준)
+            kst_offset = timedelta(hours=9)
+            now_kst = now + kst_offset
+            segment_start_kst = segment_start + kst_offset
+            segment_end_kst = segment_end + kst_offset
             
-            print(f"[Job 등록] 📅 현재 시간: {now.strftime('%H:%M:%S')}")
-            print(f"[Job 등록] 🎯 분석 대상 구간: {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 📅 현재 시간(한국 시각): {now_kst.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start_kst.strftime('%H:%M:%S')} ~ {segment_end_kst.strftime('%H:%M:%S')}")
             
             # 2. 해당 구간의 비디오 파일 찾기
             video_path = self._get_segment_video(segment_start)

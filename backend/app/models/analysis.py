@@ -89,10 +89,13 @@ class SafetyEvent(Base):
 
 class DevelopmentCategory(str, enum.Enum):
     """발달 영역"""
-    MOTOR = "운동"
+    GROSS_MOTOR = "대근육운동"
+    FINE_MOTOR = "소근육운동"
     LANGUAGE = "언어"
     COGNITIVE = "인지"
-    SOCIAL = "사회성"
+    SOCIAL = "사회정서"
+    # 하위 호환성을 위한 레거시 값
+    MOTOR = "운동"  # 대근육운동 또는 소근육운동을 구분할 수 없을 때 사용
 
 
 class DevelopmentEvent(Base):

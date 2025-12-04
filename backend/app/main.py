@@ -36,6 +36,7 @@ from app.database import SessionLocal
 from pathlib import Path
 from .services.live_monitoring.hls_stream_generator import HLSStreamGenerator
 from .services.live_monitoring.segment_analyzer import start_segment_analysis_for_camera
+from .services.live_monitoring.hourly_aggregator import start_hourly_aggregation_for_camera
 
 
 def create_app() -> FastAPI:
@@ -139,6 +140,9 @@ def create_app() -> FastAPI:
                 
                 # 10분 단위 분석 스케줄러 시작
                 await start_segment_analysis_for_camera(camera_id)
+                
+                # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
+                await start_hourly_aggregation_for_camera(camera_id)
                 
                 print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
                 print(f"   스트림 URL: http://localhost:8000/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")

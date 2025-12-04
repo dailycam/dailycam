@@ -72,6 +72,36 @@ class SegmentAnalysis(Base):
         return f"<SegmentAnalysis(id={self.id}, camera={self.camera_id}, segment={self.segment_start}, status={self.status})>"
 
 
+class HourlyReport(Base):
+    """1시간 단위 리포트 (텍스트 데이터 종합 분석 결과)"""
+    __tablename__ = "hourly_reports"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    camera_id = Column(String(50), nullable=False, index=True)
+    hour_start = Column(DateTime, nullable=False, index=True)  # 해당 시간대 시작 (예: 14:00)
+    hour_end = Column(DateTime, nullable=False)  # 해당 시간대 종료 (예: 15:00)
+    
+    # 수치 데이터 (실시간 집계용)
+    average_safety_score = Column(Float)  # 해당 시간대 평균 안전 점수
+    total_incidents = Column(Integer)  # 해당 시간대 총 사건 수
+    segment_count = Column(Integer)  # 분석된 세그먼트 수 (최대 6개)
+    
+    # 텍스트 데이터 (1시간마다 Gemini로 종합 분석)
+    safety_summary = Column(Text)  # 안전 요약 (종합 분석 결과)
+    safety_insights = Column(JSON)  # 안전 인사이트 리스트 (중복 제거, 그룹화됨)
+    development_summary = Column(Text)  # 발달 요약 (종합 분석 결과)
+    development_insights = Column(JSON)  # 발달 인사이트 리스트 (중복 제거, 그룹화됨)
+    recommended_activities = Column(JSON)  # 추천 활동 리스트 (중복 제거, 그룹화됨)
+    
+    # 메타데이터
+    segment_analyses_ids = Column(JSON)  # 해당 시간대의 segment_analyses ID 배열
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<HourlyReport(id={self.id}, camera={self.camera_id}, hour={self.hour_start})>"
+
+
 class DailyReport(Base):
     """일일 리포트"""
     __tablename__ = "daily_reports"
