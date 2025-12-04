@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
-import { AnalysisProvider } from './context/AnalysisContext' // 추가
-import HomeLayout from './components/Layout/HomeLayout'
-import Layout from './components/Layout/Layout'
+import { AnalysisProvider } from './context/AnalysisContext'
+import HomeLayout from './components/layout/HomeLayout'
+import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import AppHome from './pages/AppHome'
@@ -19,7 +19,7 @@ import ProfileSetup from './pages/ProfileSetup'
 
 function App() {
   return (
-    <AnalysisProvider> {/* 추가 */}
+    <AnalysisProvider>
       <Routes>
         {/* 로그인 */}
         <Route path="/login" element={<Login />} />
@@ -31,7 +31,7 @@ function App() {
         </Route>
 
         {/* 앱 (대시보드 및 기능들) */}
-        <Route element={<Layout />}>
+        <Route element={<AppLayout />}>
           {/* 미구독 사용자도 접근 가능 */}
           <Route path="/subscription" element={<SubscriptionPage />} />
           <Route path="/profile-setup" element={<ProfileSetup />} />
@@ -49,7 +49,7 @@ function App() {
           </Route>
         </Route>
       </Routes>
-    </AnalysisProvider> /* 추가 */
+    </AnalysisProvider>
   )
 }
 
