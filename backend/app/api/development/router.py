@@ -3,13 +3,26 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
 from app.models.analysis import AnalysisLog, DevelopmentEvent
+from app.models.user import User
 
 router = APIRouter()
+
+
+def calculate_age_months(birth_date: date) -> int:
+    """생년월일로부터 현재 개월 수 계산"""
+    today = datetime.now().date()
+    months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
+    
+    # 일자가 지나지 않았으면 1개월 차감
+    if today.day < birth_date.day:
+        months -= 1
+    
+    return max(0, months)  # 음수 방지
 
 
 @router.get("/summary")
@@ -23,6 +36,14 @@ def get_development_summary(
     
     오늘(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
     """
+    # 0. 사용자 정보 조회 및 현재 개월 수 계산
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    # 생년월일로부터 현재 개월 수 계산
+    age_months = 7  # 기본값
+    if user and user.child_birthdate:
+        age_months = calculate_age_months(user.child_birthdate)
+    
     # 1. 날짜 범위 설정
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -42,9 +63,9 @@ def get_development_summary(
     )
     
     if not today_logs:
-        # 데이터가 없으면 기본값 반환
+        # 데이터가 없으면 기본값 반환 (계산된 age_months 사용)
         return {
-            "age_months": 7,
+            "age_months": age_months,
             "development_summary": "아직 분석된 데이터가 없습니다.",
             "development_score": 0,
             "development_radar_scores": {
@@ -139,11 +160,9 @@ def get_development_summary(
     # 8. 추천 활동 (가장 최신 로그의 추천 사용)
     recommendations = latest_log.recommendations if latest_log and latest_log.recommendations else []
     
-    # 9. 월령 (가장 최신 로그의 월령 사용)
-    age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
-    
+    # 9. 최종 응답 (사용자 생년월일 기반 age_months 사용)
     return {
-        "age_months": age_months,
+        "age_months": age_months,  # 사용자 프로필의 생년월일로부터 계산된 값
         "development_summary": development_summary,
         "development_score": avg_dev_score,  # 평균 발달 점수
         "development_radar_scores": radar_scores,  # 평균 오각형 점수
@@ -152,3 +171,4 @@ def get_development_summary(
         "recommended_activities": recommendations,
         "development_insights": latest_log.development_insights if latest_log and latest_log.development_insights else [], # AI로부터 직접 받아옴
     }
+

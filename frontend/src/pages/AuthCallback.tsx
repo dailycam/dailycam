@@ -53,9 +53,37 @@ export default function AuthCallback() {
                     console.log('[AuthCallback] 프로필 미완성 - 프로필 등록 페이지로 이동')
                     navigate('/profile-setup', { replace: true })
                 } else {
-                    // 구독 회원 + 프로필 완성 -> 앱 홈
-                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 앱 홈으로 이동')
-                    navigate('/home', { replace: true })
+                    // 구독 회원 + 프로필 완성 -> 대시보드로 이동
+                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 대시보드로 이동')
+
+                    // 상태 업데이트
+                    setStatus('대시보드로 이동 중...')
+
+                    // 대시보드로 즉시 이동
+                    navigate('/dashboard', { replace: true })
+
+                    // AI 콘텐츠 미리 로드 (대시보드 데이터 로드 후 실행되도록 약간 지연)
+                    setTimeout(() => {
+                        console.log('[AuthCallback] AI 콘텐츠 미리 로드 시작')
+                        Promise.all([
+                            fetch('http://localhost:8000/api/content/recommended-videos', {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch('http://localhost:8000/api/content/recommended-blogs', {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch('http://localhost:8000/api/content/recommended-news', {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch('http://localhost:8000/api/content/trending', {
+                                headers: { Authorization: `Bearer ${token}` }
+                            })
+                        ]).then(() => {
+                            console.log('[AuthCallback] AI 콘텐츠 미리 로드 완료')
+                        }).catch(err => {
+                            console.warn('[AuthCallback] AI 콘텐츠 미리 로드 실패 (무시):', err)
+                        })
+                    }, 500) // 500ms 지연
                 }
             } catch (error) {
                 console.error('[AuthCallback] 오류 발생:', error)

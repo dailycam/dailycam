@@ -168,6 +168,50 @@ class GeminiContentCurator:
         
         return results if results else self._get_fallback_trending(child_age_months)
     
+    async def get_recommended_news(self, child_age_months: int) -> List[Dict[str, Any]]:
+        """
+        아이 개월 수에 맞는 육아 뉴스 추천
+        
+        Args:
+            child_age_months: 아이 개월 수
+            
+        Returns:
+            추천 뉴스 리스트
+        """
+        development_stage = get_development_stage(child_age_months)
+        
+        # 뉴스 검색 쿼리 생성 (더 구체적으로)
+        news_queries = [
+            '육아 뉴스',
+            '아기 건강 뉴스',
+            '육아 정책'
+        ]
+        
+        # 웹 검색으로 뉴스 찾기
+        all_news = []
+        for query in news_queries:  # 모든 쿼리 사용
+            news = self.web_tool.search_news(query, max_results=5)
+            all_news.extend(news)
+        
+        if not all_news:
+            return self._get_fallback_news(child_age_months)
+        
+        # 검색 결과를 뉴스 형식으로 변환
+        print("✅ [News] 검색 결과 그대로 반환 (빠른 응답)")
+        results = []
+        for idx, news in enumerate(all_news):
+            results.append({
+                'id': f"news_{idx+1}",
+                'type': 'news',
+                'title': news.get('title', ''),
+                'description': news.get('description', '')[:200],
+                'url': news.get('url', ''),
+                'thumbnail': None,
+                'tags': [],
+                'category': '뉴스'
+            })
+        return results if results else self._get_fallback_news(child_age_months)
+    
     def _generate_video_queries(self, age_months: int) -> List[str]:
         """영상 검색 쿼리 생성"""
         return [
@@ -264,6 +308,20 @@ class GeminiContentCurator:
             b['id'] = f"trending_{b['id']}"
             
         return videos + blogs
+    
+    def _get_fallback_news(self, age_months: int) -> List[Dict[str, Any]]:
+        """기본 뉴스 (API 실패 시)"""
+        return [
+            {
+                'id': f'fallback_news_{age_months}',
+                'type': 'news',
+                'title': f'{age_months}개월 아기 육아 정보',
+                'description': '최신 육아 뉴스와 정보를 확인하세요',
+                'url': 'https://news.naver.com',
+                'tags': ['뉴스', f'{age_months}개월'],
+                'category': '뉴스'
+            }
+        ]
     
     def _convert_search_to_recommendations(self, search_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """검색 결과를 추천 형식으로 변환"""

@@ -137,6 +137,52 @@ async def get_recommended_blogs(
         raise HTTPException(status_code=500, detail="블로그 추천 중 오류가 발생했습니다")
 
 
+@router.get("/recommended-news")
+async def get_recommended_news(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    AI 추천 뉴스
+    
+    사용자의 아이 개월 수에 맞는 육아 뉴스를 Gemini AI가 추천합니다.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+    
+    age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    
+    # 캐시 확인
+    cache_key = f"news:{age_months}"
+    cached = get_from_cache(cache_key)
+    if cached:
+        return {
+            "news": cached,
+            "age_months": age_months,
+            "cached": True,
+            "cached_at": datetime.utcnow().isoformat()
+        }
+    
+    # Gemini AI Agent 호출
+    try:
+        curator = get_curator()
+        news = await curator.get_recommended_news(age_months)
+        
+        # 캐시 저장 (24시간)
+        save_to_cache(cache_key, news, ttl=86400)
+        
+        return {
+            "news": news,
+            "age_months": age_months,
+            "cached": False,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        print(f"뉴스 추천 오류: {e}")
+        raise HTTPException(status_code=500, detail="뉴스 추천 중 오류가 발생했습니다")
+
+
 @router.get("/trending")
 async def get_trending_content(
     user_id: int = Depends(get_current_user_id),

@@ -846,6 +846,31 @@ export async function getTrendingContent(): Promise<ContentRecommendation[]> {
     return []
   }
 }
+
+/**
+ * AI 추천 뉴스 가져오기
+ */
+export async function getRecommendedNews(): Promise<ContentRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-news`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 뉴스를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: { news: ContentRecommendation[] } = await response.json()
+    return data.news || []
+  } catch (error) {
+    console.error('추천 뉴스 조회 실패:', error)
+    return []
+  }
+}
+
 // 콘텐츠 검색
 export async function searchContent(query: string): Promise<ContentRecommendation[]> {
   try {

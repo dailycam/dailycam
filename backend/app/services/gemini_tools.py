@@ -249,6 +249,63 @@ class WebSearchTool:
         except Exception as e:
             print(f"DuckDuckGo 웹 검색 오류: {e}")
             return []
+    
+    def search_news(
+        self, 
+        query: str, 
+        max_results: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        뉴스 검색 (DuckDuckGo news 메서드 사용)
+        """
+        try:
+            print(f"🔍 [News] 검색 쿼리: {query}")
+            with DDGS() as ddgs:
+                # DuckDuckGo의 news() 메서드 사용
+                results = ddgs.news(
+                    keywords=query,
+                    region="kr-kr",
+                    safesearch="moderate",
+                    max_results=max_results
+                )
+                
+                news = []
+                result_count = 0
+                
+                for r in results:
+                    result_count += 1
+                    print(f"📰 [News] 결과 {result_count}: {r.get('title', 'No title')[:50]}")
+                    
+                    # 이미지 URL 추출 시도
+                    thumbnail = r.get('image', None)
+                    
+                    # DuckDuckGo에서 이미지를 제공하지 않으면 URL에서 추출 시도
+                    if not thumbnail:
+                        url = r.get('url', '')
+                        if url:
+                            print(f"🔍 [News] URL에서 썸네일 추출 시도: {url[:50]}...")
+                            thumbnail = extract_blog_thumbnail(url)
+                    
+                    if thumbnail:
+                        print(f"✅ [News] 썸네일: {thumbnail[:80]}...")
+                    else:
+                        print(f"⚠️ [News] 썸네일 없음")
+                    
+                    news.append({
+                        'title': r.get('title', ''),
+                        'description': r.get('body', '')[:200],
+                        'url': r.get('url', ''),
+                        'thumbnail': thumbnail,
+                        'score': 0.0
+                    })
+                
+                print(f"✅ [News] 총 {len(news)}개 결과 반환")
+                return news
+        except Exception as e:
+            print(f"❌ [News] DuckDuckGo 뉴스 검색 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 
 def extract_blog_thumbnail(url: str) -> Optional[str]:

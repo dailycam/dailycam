@@ -8,7 +8,6 @@ import { LayoutDashboard } from 'lucide-react'
 
 export const Dashboard = () => {
     const {
-        loading,
         error,
         selectedHour,
         setSelectedHour,
@@ -25,7 +24,7 @@ export const Dashboard = () => {
         closeModal
     } = useDashboard()
 
-    if (loading) return <div className="p-8 text-center">Loading...</div>
+    // 에러만 표시, 로딩 중에도 UI는 표시
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>
 
     return (

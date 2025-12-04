@@ -4,7 +4,7 @@ import { TimelineEvent, MonitoringRange, HourlyStat, DailyStats, ClockData } fro
 
 export const useDashboard = () => {
     const [dashboardData, setDashboardData] = useState<any>(null)
-    const [loading, setLoading] = useState(true)
+    const [loading, setLoading] = useState(false) // 초기값 false로 변경
     const [error, setError] = useState<string | null>(null)
     const [selectedHour, setSelectedHour] = useState<number>(new Date().getHours())
 

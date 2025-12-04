@@ -39,11 +39,19 @@ export const ContentCard = ({ link, showViews = false }: { link: RecommendedLink
             <div className={`relative bg-gradient-to-br ${config.gradientFrom} ${config.gradientTo} h-40 flex items-center justify-center overflow-hidden`}>
                 {/* 썸네일 이미지 */}
                 {link.thumbnail ? (
-                    <img
-                        src={link.thumbnail}
-                        alt={link.title}
-                        className="absolute inset-0 w-full h-full object-cover"
-                    />
+                    <>
+                        <img
+                            src={link.thumbnail}
+                            alt={link.title}
+                            className="absolute inset-0 w-full h-full object-cover thumbnail-image"
+                            onError={(e) => {
+                                // 이미지 로드 실패 시 숨기기
+                                e.currentTarget.style.display = 'none'
+                            }}
+                        />
+                        {/* 이미지 로드 실패 시 보여줄 기본 아이콘 */}
+                        <config.icon className="w-14 h-14 text-gray-300 group-hover:scale-110 transition-transform fallback-icon" />
+                    </>
                 ) : (
                     <config.icon className="w-14 h-14 text-gray-300 group-hover:scale-110 transition-transform" />
                 )}
