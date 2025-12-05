@@ -8,7 +8,9 @@ analysis_jobs 테이블을 폴링하여 PENDING 상태의 Job을 처리
 import asyncio
 import time
 import signal
+import signal
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 from sqlalchemy import and_
@@ -21,6 +23,7 @@ from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.models.live_monitoring.models import SegmentAnalysis
 from app.models.analysis import AnalysisLog, DevelopmentEvent, DevelopmentCategory
 from app.services.gemini_service import GeminiService
+from app.services.analysis_service import AnalysisService
 
 
 class AnalysisWorker:
@@ -214,41 +217,17 @@ class AnalysisWorker:
             # camera_id로 user_id 매핑 (현재는 기본값 1, 추후 확장 가능)
             user_id = self._get_user_id_from_camera(job.camera_id, db)
             
-            # AnalysisLog 생성 (SegmentAnalysis를 위한 최소한의 로그)
-            analysis_log = AnalysisLog(
-                analysis_id=segment_analysis.id,  # segment_analysis.id를 analysis_id로 사용
+            # AnalysisService를 사용하여 AnalysisLog 및 관련 데이터(SafetyEvent, DevelopmentEvent, HighlightClip 등) 일괄 저장
+            # SegmentAnalysis의 ID를 AnalysisLog의 analysis_id로 사용하여 연결
+            # 이를 통해 대시보드, 리포트, 홈 화면에 데이터가 올바르게 표시됨
+            print(f"[워커 {self.worker_id}] 💾 AnalysisService를 통해 상세 결과 저장 중...")
+            AnalysisService.save_analysis_result(
+                db=db,
                 user_id=user_id,
                 video_path=job.video_path,
-                safety_score=job.safety_score,
-                development_score=analysis_result.get('development_analysis', {}).get('development_score'),
-                created_at=job.segment_start  # 세그먼트 시작 시간 사용
+                analysis_result=analysis_result,
+                analysis_id=segment_analysis.id
             )
-            db.add(analysis_log)
-            db.flush()  # analysis_log.id를 얻기 위해 flush
-            
-            # DevelopmentEvent 생성 (development_analysis.skills에서 추출)
-            development_analysis = analysis_result.get('development_analysis', {})
-            skills = development_analysis.get('skills', [])
-            
-            development_events_created = 0
-            for skill in skills:
-                if not skill.get('present', False):
-                    continue
-                
-                # category 매핑: "대근육운동" -> GROSS_MOTOR, "소근육운동" -> FINE_MOTOR 등
-                category_str = skill.get('category', '')
-                category = self._map_category_to_enum(category_str)
-                
-                if category:
-                    dev_event = DevelopmentEvent(
-                        analysis_log_id=analysis_log.id,
-                        category=category,
-                        title=skill.get('name', '발달 행동'),
-                        description=f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
-                        event_timestamp=job.segment_start
-                    )
-                    db.add(dev_event)
-                    development_events_created += 1
             
             db.commit()
             
@@ -256,6 +235,17 @@ class AnalysisWorker:
             print(f"  📊 안전 점수: {job.safety_score}")
             print(f"  🚨 사건 수: {job.incident_count}")
             print(f"  🎯 발달 이벤트 생성: {development_events_created}개")
+            
+            # 6. 파일 삭제 (옵션)
+            delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
+            if delete_after and video_path.exists():
+                try:
+                    os.remove(video_path)
+                    print(f"[워커 {self.worker_id}] 🗑️ 분석 완료된 파일 삭제함: {video_path.name}")
+                except Exception as e:
+                    print(f"[워커 {self.worker_id}] ⚠️ 파일 삭제 실패: {e}")
+            elif not delete_after:
+                print(f"[워커 {self.worker_id}] 📦 설정에 의해 파일 보존됨: {video_path.name}")
             
         except Exception as e:
             import traceback
@@ -277,7 +267,17 @@ class AnalysisWorker:
                 job.status = JobStatus.FAILED
                 job.error_message = str(e)
                 job.completed_at = datetime.now()
+                job.completed_at = datetime.now()
                 print(f"[워커 {self.worker_id}] ❌ Job 최종 실패 (재시도 {job.max_retries}회 초과)")
+                
+                # 최종 실패 시에도 파일 삭제 (불필요한 용량 차지 방지)
+                delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
+                if delete_after and video_path.exists():
+                    try:
+                        os.remove(video_path)
+                        print(f"[워커 {self.worker_id}] 🗑️ 실패한 파일 삭제함: {video_path.name}")
+                    except Exception as de:
+                        print(f"[워커 {self.worker_id}] ⚠️ 파일 삭제 실패: {de}")
             
             db.commit()
         finally:

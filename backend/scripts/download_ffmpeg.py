@@ -18,7 +18,8 @@ def download_ffmpeg():
     # 설정 - 안정적인 최신 버전 사용
     FFMPEG_URL = "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip"
     
-    backend_dir = Path(__file__).resolve().parent
+    # backend 루트 디렉토리 (scripts 폴더의 상위 폴더)
+    backend_dir = Path(__file__).resolve().parent.parent
     bin_dir = backend_dir / "bin"
     temp_zip = backend_dir / "ffmpeg_temp.zip"
     

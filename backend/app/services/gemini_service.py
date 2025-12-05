@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
 import cv2
+import time
 import google.generativeai as genai
 import yaml
 from dotenv import load_dotenv
@@ -63,6 +64,33 @@ class GeminiService:
 
         # 프롬프트 캐시 딕셔너리 초기화
         self.prompt_cache: Dict[str, str] = {}
+
+    def _upload_to_gemini(self, video_bytes: bytes, mime_type: str = "video/mp4"):
+        """Gemini File API를 사용하여 비디오 업로드"""
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        try:
+            print(f"[Gemini 업로드] 파일 업로드 시작: {tmp_path} ({len(video_bytes)/1024/1024:.2f}MB)")
+            video_file = genai.upload_file(tmp_path, mime_type=mime_type)
+            print(f"[Gemini 업로드] 완료: {video_file.name}")
+            
+            # 파일 처리가 완료될 때까지 대기
+            while video_file.state.name == "PROCESSING":
+                print("[Gemini 업로드] 처리 중...")
+                time.sleep(2)
+                video_file = genai.get_file(video_file.name)
+                
+            if video_file.state.name == "FAILED":
+                raise ValueError(f"Gemini 파일 처리 실패: {video_file.state.name}")
+                
+            print(f"[Gemini 업로드] 처리 완료 (상태: {video_file.state.name})")
+            return video_file
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     # ------------------------------------------------------------------
     # 공통 유틸
@@ -375,6 +403,9 @@ class GeminiService:
                 '-i', input_path,
                 '-vf', f'scale={target_width}:{target_height},fps={target_fps}',
                 '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',  # Gemini 호환성 필수
+                '-profile:v', 'baseline', # 호환성 강화
+                '-level', '3.0',
                 '-preset', 'fast',
                 '-crf', '28',  # 압축률 높임 (품질은 충분)
                 '-movflags', '+faststart',  # moov atom을 파일 시작 부분에 배치
@@ -751,11 +782,14 @@ class GeminiService:
             # ----------------------------------------------------------
             # 1단계: VLM 호출 → 메타데이터 추출
             # ----------------------------------------------------------
+            # ----------------------------------------------------------
+            # 1단계: VLM 호출 → 메타데이터 추출
+            # ----------------------------------------------------------
             print("[1단계] 비디오에서 메타데이터 추출 중...")
 
             try:
-                video_base64 = base64.b64encode(optimized_video_bytes).decode("utf-8")
-                print(f"[1단계] Base64 인코딩 완료 (크기: {len(video_base64)} 문자)")
+                # Base64 대신 File API 사용 (20MB 이상 파일 지원)
+                video_file = self._upload_to_gemini(optimized_video_bytes, mime_type)
                 
                 metadata_prompt = self._load_prompt("vlm_metadata.ko.txt")
                 print(f"[1단계] 프롬프트 로드 완료 (크기: {len(metadata_prompt)} 문자)")
@@ -769,14 +803,18 @@ class GeminiService:
                 print("[1단계] Gemini VLM API 호출 중...")
                 response = self.model.generate_content(
                     [
-                        {
-                            "mime_type": mime_type,
-                            "data": video_base64,
-                        },
+                        video_file,
                         metadata_prompt,
                     ],
                     generation_config=vlm_generation_config,
                 )
+                
+                # 원격 파일 삭제
+                try:
+                    genai.delete_file(video_file.name)
+                    print(f"[Gemini 업로드] 원격 파일 삭제 완료: {video_file.name}")
+                except Exception as e:
+                    print(f"[Gemini 업로드] 원격 파일 삭제 실패: {e}")
 
                 if not response or not hasattr(response, "text"):
                     raise ValueError("Gemini VLM 응답이 올바르지 않습니다.")

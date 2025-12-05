@@ -1,8 +1,10 @@
 import sys
 import os
 
-# 현재 디렉토리를 path에 추가하여 app 모듈을 찾을 수 있게 함
-sys.path.append(os.getcwd())
+from pathlib import Path
+
+# 현재 스크립트의 상위 폴더(backend)를 path에 추가하여 app 모듈을 찾을 수 있게 함
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import create_engine, inspect
 from app.database import SQLALCHEMY_DATABASE_URL

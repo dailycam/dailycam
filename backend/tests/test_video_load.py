@@ -1,13 +1,15 @@
 """영상 로드 테스트"""
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.services.live_monitoring.video_queue import VideoQueue
 
 def test_video_loading():
     camera_id = "camera-1"
-    video_dir = Path("videos/camera-1")
+    # backend 루트 기준 경로 설정
+    backend_dir = Path(__file__).resolve().parent.parent
+    video_dir = backend_dir / "videos/camera-1"
     
     print(f"=" * 60)
     print(f"영상 로드 테스트: {camera_id}")

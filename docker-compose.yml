@@ -9,6 +9,7 @@ services:
       MYSQL_DATABASE: dailycam
       MYSQL_USER: dailycam_user
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dailycam_pass_2024}
+      TZ: Asia/Seoul
     ports:
       - "3306:3306"
     volumes:
@@ -17,7 +18,7 @@ services:
       - ./backend/scripts/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}" ]
       timeout: 5s
       retries: 10
       interval: 10s
@@ -45,6 +46,8 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production-2024}
       - PORTONE_API_KEY=${PORTONE_API_KEY}
       - PORTONE_API_SECRET=${PORTONE_API_SECRET:-your-portone-secret}
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
@@ -67,6 +70,9 @@ services:
       - MYSQL_DATABASE=dailycam
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-1
+      - DELETE_VIDEO_AFTER_ANALYSIS=true
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     volumes:
       - ./backend/temp_videos:/app/temp_videos
     command: python analysis_worker.py
@@ -88,6 +94,9 @@ services:
       - MYSQL_DATABASE=dailycam
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-2
+      - DELETE_VIDEO_AFTER_ANALYSIS=true
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
     volumes:
       - ./backend/temp_videos:/app/temp_videos
     command: python analysis_worker.py
@@ -102,4 +111,3 @@ volumes:
 networks:
   dailycam-network:
     driver: bridge
-

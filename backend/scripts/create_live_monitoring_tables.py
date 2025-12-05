@@ -6,8 +6,8 @@
 import sys
 from pathlib import Path
 
-# 프로젝트 루트를 Python 경로에 추가
-backend_dir = Path(__file__).resolve().parent
+# 프로젝트 루트를 Python 경로에 추가 (scripts 폴더의 상위 폴더인 backend 폴더)
+backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from app.database.base import Base

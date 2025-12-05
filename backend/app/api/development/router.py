@@ -192,12 +192,7 @@ def get_development_summary(
         recommendations = []
     
     # 9. 최종 응답 (사용자 생년월일 기반 age_months 사용)
-    return {
-        "age_months": age_months,  # 사용자 프로필의 생년월일로부터 계산된 값
-        "development_summary": development_summary,
-        "development_score": avg_dev_score,  # 평균 발달 점수
-        "development_radar_scores": radar_scores,  # 평균 오각형 점수
-    }
+
     # 발달 인사이트 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
     if latest_hourly_report and latest_hourly_report.development_insights:
         development_insights = latest_hourly_report.development_insights
@@ -206,8 +201,8 @@ def get_development_summary(
     else:
         development_insights = []
     
-    # 월령 (가장 최신 로그의 월령 사용)
-    age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
+    # 월령은 위에서 계산된 값(user.child_birthdate 기반)을 그대로 사용합니다.
+    # age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
     
     return {
         "age_months": age_months,
