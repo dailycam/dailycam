@@ -234,7 +234,6 @@ class AnalysisWorker:
             print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}")
             print(f"  📊 안전 점수: {job.safety_score}")
             print(f"  🚨 사건 수: {job.incident_count}")
-            print(f"  🎯 발달 이벤트 생성: {development_events_created}개")
             
             # 6. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"

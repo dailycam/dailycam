@@ -1,28 +1,21 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { Newspaper, ArrowRight } from 'lucide-react'
+import { Newspaper, ArrowRight, ChevronUp } from 'lucide-react'
 import {
     getRecommendedBlogs,
     getRecommendedNews,
     getTrendingContent,
     searchContent
 } from '../lib/api'
-import { getAuthToken } from '../lib/auth'
 import { RecommendedLink } from '../features/home/types'
-import {
-    POPULAR_KEYWORDS,
-    HIGHLIGHT_MOMENTS
-} from '../features/home/constants'
-import { HighlightSection } from '../features/home/components/HighlightSection'
+import { POPULAR_KEYWORDS } from '../features/home/constants'
 import { SearchSection } from '../features/home/components/SearchSection'
 import { TrendingSection } from '../features/home/components/TrendingSection'
 import { BlogRecommendationSection } from '../features/home/components/BlogRecommendationSection'
 import { QuickStartSection } from '../features/home/components/QuickStartSection'
-import { ContentCard } from '../features/home/components/ContentCard'
 
 export default function AppHome() {
     const [searchQuery, setSearchQuery] = useState<string>('')
-    const [userInfo, setUserInfo] = useState<{ child_name?: string } | null>(null)
 
     // 검색 결과 state
     const [searchResults, setSearchResults] = useState<RecommendedLink[]>([])
@@ -33,35 +26,11 @@ export default function AppHome() {
     const [recommendedBlogs, setRecommendedBlogs] = useState<RecommendedLink[]>([])
     const [recommendedNews, setRecommendedNews] = useState<RecommendedLink[]>([])
     const [trendingContent, setTrendingContent] = useState<RecommendedLink[]>([])
-    const [contentLoading, setContentLoading] = useState(true)
-
-
 
     // 더보기 기능을 위한 표시 개수 state
     const [visibleBlogsCount, setVisibleBlogsCount] = useState(5)
     const [visibleTrendingCount, setVisibleTrendingCount] = useState(5)
     const [visibleNewsCount, setVisibleNewsCount] = useState(5)
-
-    // 사용자 정보 가져오기
-    useEffect(() => {
-        const fetchUserInfo = async () => {
-            const token = getAuthToken()
-            if (!token) return
-
-            try {
-                const response = await fetch('http://localhost:8000/api/auth/me', {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (response.ok) {
-                    const data = await response.json()
-                    setUserInfo(data)
-                }
-            } catch (error) {
-                console.error('사용자 정보 로드 실패:', error)
-            }
-        }
-        fetchUserInfo()
-    }, [])
 
     // AI 추천 콘텐츠 가져오기 (캐시 우선 전략)
     useEffect(() => {
@@ -77,7 +46,6 @@ export default function AppHome() {
                     if (cachedBlogs) setRecommendedBlogs(JSON.parse(cachedBlogs))
                     if (cachedNews) setRecommendedNews(JSON.parse(cachedNews))
                     if (cachedTrending) setTrendingContent(JSON.parse(cachedTrending))
-                    setContentLoading(false) // 캐시 표시 후 로딩 종료
                 }
 
                 // 2. 백그라운드에서 최신 데이터 가져오기
@@ -97,11 +65,9 @@ export default function AppHome() {
                 localStorage.setItem('cached_news', JSON.stringify(news))
                 localStorage.setItem('cached_trending', JSON.stringify(trending))
 
-                console.log('✅ AI 추천 콘텐츠 로드 완료:', { blogs, news, trending })
+                console.log('✅ AI 추천 콘텐츠 로드 완료')
             } catch (error) {
                 console.error('AI 콘텐츠 로드 실패:', error)
-            } finally {
-                setContentLoading(false)
             }
         }
 
@@ -148,10 +114,7 @@ export default function AppHome() {
 
     return (
         <div className="p-6 lg:p-10 max-w-7xl mx-auto min-h-screen bg-gradient-to-br from-green-50/20 via-emerald-50/10 to-teal-50/20">
-            {/* 1. 지수의 하루 - 오늘의 하이라이트 */}
-            <HighlightSection userInfo={userInfo} moments={HIGHLIGHT_MOMENTS} />
-
-            {/* 2. 검색창 + 인기 검색어 + 검색 결과 */}
+            {/* 1. 검색창 + 인기 검색어 + 검색 결과 */}
             <SearchSection
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
@@ -163,30 +126,16 @@ export default function AppHome() {
                 setSearchFilter={setSearchFilter}
             />
 
-            {/* 3. 엄마들이 가장 많이 본 */}
-            <TrendingSection
-                trendingContent={trendingContent}
-                visibleTrendingCount={visibleTrendingCount}
-                setVisibleTrendingCount={setVisibleTrendingCount}
-            />
-
-            {/* 5. 육아 꿀팁 (블로그) */}
-            <BlogRecommendationSection
-                recommendedBlogs={recommendedBlogs}
-                visibleBlogsCount={visibleBlogsCount}
-                setVisibleBlogsCount={setVisibleBlogsCount}
-            />
-
-            {/* 6. 육아 뉴스 & 정보 (AI 추천 뉴스) */}
+            {/* 2. 육아 뉴스 & 정보 (AI 추천 뉴스) */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
                 className="mb-10"
             >
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-sm">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-300 to-orange-400 flex items-center justify-center shadow-sm">
                             <Newspaper className="w-6 h-6 text-white" />
                         </div>
                         <div>
@@ -194,24 +143,65 @@ export default function AppHome() {
                             <p className="text-sm text-gray-600">최신 육아 뉴스와 정책</p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setVisibleNewsCount(prev => prev + 5)}
-                        className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={visibleNewsCount >= recommendedNews.length}
-                    >
-                        더보기
-                        <ArrowRight className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-3">
+                        {visibleNewsCount > 5 && (
+                            <button
+                                onClick={() => setVisibleNewsCount(5)}
+                                className="text-gray-500 hover:text-gray-700 font-medium text-sm flex items-center gap-1"
+                            >
+                                접기
+                                <ChevronUp className="w-4 h-4" />
+                            </button>
+                        )}
+                        {visibleNewsCount < recommendedNews.length && (
+                            <button
+                                onClick={() => setVisibleNewsCount(prev => prev + 5)}
+                                className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center gap-1"
+                            >
+                                더보기
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                {/* 리스트 형식으로 변경 */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
                     {recommendedNews.slice(0, visibleNewsCount).map((link) => (
-                        <ContentCard key={link.id} link={link} />
+                        <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group"
+                        >
+                            <div className="flex-1 min-w-0 pr-4">
+                                <h3 className="text-sm font-medium text-gray-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
+                                    {link.title}
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-1">{link.category}</p>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-primary-600 flex-shrink-0 transition-colors" />
+                        </a>
                     ))}
                 </div>
             </motion.div>
 
-            {/* 7. 빠른 시작 */}
+            {/* 3. 유튜브 (엄마들이 가장 많이 본) */}
+            <TrendingSection
+                trendingContent={trendingContent}
+                visibleTrendingCount={visibleTrendingCount}
+                setVisibleTrendingCount={setVisibleTrendingCount}
+            />
+
+            {/* 4. 블로그 (육아 꿀팁) */}
+            <BlogRecommendationSection
+                recommendedBlogs={recommendedBlogs}
+                visibleBlogsCount={visibleBlogsCount}
+                setVisibleBlogsCount={setVisibleBlogsCount}
+            />
+
+            {/* 5. 빠른 시작 */}
             <QuickStartSection />
         </div>
     )

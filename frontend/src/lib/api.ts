@@ -300,6 +300,7 @@ export async function analyzeVideoWithBackend(
     temperature?: number
     topK?: number
     topP?: number
+    save_to_db?: boolean
   }
 ): Promise<VideoAnalysisResult> {
   const formData = new FormData()
@@ -312,6 +313,7 @@ export async function analyzeVideoWithBackend(
   if (options?.temperature !== undefined) params.append('temperature', options.temperature.toString())
   if (options?.topK !== undefined) params.append('top_k', options.topK.toString())
   if (options?.topP !== undefined) params.append('top_p', options.topP.toString())
+  if (options?.save_to_db !== undefined) params.append('save_to_db', options.save_to_db.toString())
 
   const url = `${API_BASE_URL}/api/homecam/analyze-video${params.toString() ? '?' + params.toString() : ''}`
 

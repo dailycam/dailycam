@@ -46,6 +46,9 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production-2024}
       - PORTONE_API_KEY=${PORTONE_API_KEY}
       - PORTONE_API_SECRET=${PORTONE_API_SECRET:-your-portone-secret}
+      # Content Curation API Keys
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
     volumes:
@@ -68,9 +71,11 @@ services:
       - MYSQL_USER=dailycam_user
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
       - MYSQL_DATABASE=dailycam
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-1
-      - DELETE_VIDEO_AFTER_ANALYSIS=true
+      - DELETE_VIDEO_AFTER_ANALYSIS=false
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
     volumes:
@@ -92,9 +97,11 @@ services:
       - MYSQL_USER=dailycam_user
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
       - MYSQL_DATABASE=dailycam
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-2
-      - DELETE_VIDEO_AFTER_ANALYSIS=true
+      - DELETE_VIDEO_AFTER_ANALYSIS=false
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
     volumes:

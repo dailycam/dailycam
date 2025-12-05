@@ -15,6 +15,7 @@ if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles  # 👈 추가
 from starlette.middleware.sessions import SessionMiddleware
 
 from .api.homecam import router as homecam_router
@@ -27,6 +28,7 @@ from .api.development.router import router as development_router
 from .api.clips.router import router as clips_router
 from .api.profile.router import router as profile_router
 from .api.content.router import router as content_router
+from .api.reports.router import router as report_router
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -264,6 +266,22 @@ def create_app() -> FastAPI:
 
     # AI 콘텐츠 추천
     app.include_router(content_router)
+
+    # 일일 육아 리포트 (추가)
+    app.include_router(report_router, prefix="/api/reports", tags=["reports"])
+
+    # ----------------------------------------------------
+    # 정적 파일 마운트 (비디오 및 썸네일 서빙용)
+    # ----------------------------------------------------
+    # /videos 경로로 요청이 오면 videos 디렉토리의 파일 제공
+    video_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "videos")
+    os.makedirs(video_path, exist_ok=True)
+    app.mount("/videos", StaticFiles(directory=video_path), name="videos")
+
+    # /temp_videos 경로 (HLS 스트리밍용)
+    temp_video_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp_videos")
+    os.makedirs(temp_video_path, exist_ok=True)
+    app.mount("/temp_videos", StaticFiles(directory=temp_video_path), name="temp_videos")
 
     return app
 

@@ -382,15 +382,21 @@ class GeminiService:
             # FFmpeg를 사용하여 최적화
             import subprocess
             import shutil
+            import platform
             
-            # FFmpeg 경로 찾기
+            # FFmpeg 경로 찾기 (OS별 처리)
             ffmpeg_path = None
             backend_dir = Path(__file__).resolve().parents[2]
-            local_ffmpeg = backend_dir / "bin" / "ffmpeg.exe"
+            
+            # Windows vs Linux 구분
+            is_windows = platform.system() == 'Windows'
+            ffmpeg_filename = "ffmpeg.exe" if is_windows else "ffmpeg"
+            local_ffmpeg = backend_dir / "bin" / ffmpeg_filename
             
             if local_ffmpeg.exists():
                 ffmpeg_path = str(local_ffmpeg)
             else:
+                # 시스템 PATH에서 찾기
                 ffmpeg_path = shutil.which('ffmpeg')
             
             if not ffmpeg_path:
@@ -746,6 +752,26 @@ class GeminiService:
                     "action_needed": None
                 }
             }
+
+    # ------------------------------------------------------------------
+    # 텍스트 생성 유틸 (LLM 모드)
+    # ------------------------------------------------------------------
+    async def generate_text_from_prompt(self, prompt: str) -> str:
+        """
+        순수 텍스트 프롬프트를 사용하여 텍스트 응답을 생성합니다. (LLM 모드)
+        주로 리포트 요약, 메시지 생성 등에 사용됩니다.
+        """
+        try:
+            print(f"[Gemini] 텍스트 생성 요청: {prompt[:50]}...")
+            # generate_content는 동기 함수이므로 asyncio.to_thread 사용 고려 (일단은 그냥 호출)
+            # 텍스트 전용 모델을 명시하는 게 좋지만, 기존 model(flash)도 텍스트 처리가 가능함.
+            response = self.model.generate_content(prompt)
+            if response and hasattr(response, "text"):
+                return response.text.strip()
+            return "응답을 생성할 수 없습니다."
+        except Exception as e:
+            print(f"[Gemini 텍스트 생성 오류] {e}")
+            return f"오류가 발생했습니다: {str(e)}"
 
     # ------------------------------------------------------------------
     # 메인 엔트리: 3단계 메타데이터 기반 분석

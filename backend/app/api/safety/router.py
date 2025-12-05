@@ -232,24 +232,31 @@ def get_safety_report_summary(
     # 체크리스트 데이터 생성 (SafetyEvent 기반)
     checklist = []
     
-    # 최근 안전 이벤트 조회 (최대 10개)
+    # 최근 미해결 안전 이벤트 조회 (오늘 발생한 건만, 최대 50개 조회 후 중복 제거)
     recent_safety_events = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= start_date
+            AnalysisLog.created_at >= today_start,  # 오늘 발생한 건만 조회
+            (SafetyEvent.resolved == False) | (SafetyEvent.resolved == None)  # 미해결 건만 조회
         )
         .order_by(SafetyEvent.event_timestamp.desc())
-        .limit(10)
+        .limit(50)
         .all()
     )
 
+    seen_titles = set()
     for event in recent_safety_events:
-        # 이미 해결된 이벤트는 체크리스트에서 제외
-        if event.resolved:
+        # DB에서 이미 필터링했으므로 여기서는 체크 불필요
+        
+        title = event.title or ""
+        
+        # 중복 제거: 이미 추가된 제목이면 건너뜀
+        if title in seen_titles:
             continue
-
+        seen_titles.add(title)
+        
         severity_val = event.severity.value if hasattr(event.severity, 'value') else str(event.severity)
         
         # 우선순위 매핑
@@ -261,7 +268,6 @@ def get_safety_report_summary(
             
         # 아이콘 매핑 (제목 키워드 기반)
         icon = "Shield"
-        title = event.title or ""
         if "전기" in title or "콘센트" in title or "감전" in title:
             icon = "Zap"
         elif "침대" in title or "낙상" in title:

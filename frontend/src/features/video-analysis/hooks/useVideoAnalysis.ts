@@ -98,6 +98,7 @@ export const useVideoAnalysis = () => {
                 temperature,
                 topK,
                 topP,
+                save_to_db: false // 테스트 페이지이므로 DB 저장 안 함
             })
 
             // 타임아웃 정리

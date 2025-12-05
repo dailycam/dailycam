@@ -264,10 +264,26 @@ async def search_content(
     try:
         curator = get_curator()
         
-        # YouTube와 블로그 검색
+        # YouTube, 블로그, 뉴스 검색 (개별 예외 처리로 전체 실패 방지)
         search_query = f'{query} "{age_months}개월"'
-        videos = curator.youtube_tool.search_videos(search_query, max_results=10)
-        blogs = curator.web_tool.search_blogs(search_query, max_results=10)
+        
+        videos = []
+        try:
+            videos = curator.youtube_tool.search_videos(search_query, max_results=10)
+        except Exception as e:
+            print(f"⚠️ [Search] YouTube 검색 실패: {e}")
+
+        blogs = []
+        try:
+            blogs = curator.web_tool.search_blogs(search_query, max_results=10)
+        except Exception as e:
+            print(f"⚠️ [Search] 블로그 검색 실패: {e}")
+
+        news = []
+        try:
+            news = curator.web_tool.search_news(search_query, max_results=10)
+        except Exception as e:
+            print(f"⚠️ [Search] 뉴스 검색 실패: {e}")
         
         # 결과 변환
         results = []
@@ -282,7 +298,7 @@ async def search_content(
                 'url': video.get('url', ''),
                 'thumbnail': video.get('thumbnail'),
                 'channel': video.get('channel', ''),
-                'views': curator._format_views(video.get('view_count', 0)),
+                'views': curator._format_views(video.get('view_count') or 0),
                 'tags': [],
                 'category': '검색'
             })
@@ -298,6 +314,19 @@ async def search_content(
                 'thumbnail': None,
                 'tags': [],
                 'category': '검색'
+            })
+        
+        # 뉴스 결과 추가
+        for idx, news_item in enumerate(news):
+            results.append({
+                'id': f"search_news_{idx}",
+                'type': 'news',
+                'title': news_item.get('title', ''),
+                'description': news_item.get('description', '')[:200],
+                'url': news_item.get('url', ''),
+                'thumbnail': None,
+                'tags': [],
+                'category': news_item.get('source', '뉴스')
             })
         
         # 캐시 저장 (1시간)

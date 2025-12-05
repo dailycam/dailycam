@@ -56,9 +56,9 @@ export default {
         sans: ['Pretendard', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        'xl': '16px',
-        '2xl': '20px',
-        '3xl': '24px',
+        'xl': '6px',    // 기존 8px → 6px
+        '2xl': '8px',   // 기존 10px → 8px
+        '3xl': '10px',  // 기존 12px → 10px
       },
       boxShadow: {
         'soft': '0 8px 30px rgba(0, 0, 0, 0.04)',

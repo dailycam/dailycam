@@ -115,30 +115,30 @@ class GeminiContentCurator:
     
     async def get_trending_content(self, child_age_months: int) -> List[Dict[str, Any]]:
         """
-        트렌딩 콘텐츠 (영상+블로그 혼합)
+        트렌딩 콘텐츠 (유튜브 영상만 - "엄마들이 가장 많이 본")
         
         Args:
             child_age_months: 아이 개월 수
             
         Returns:
-            트렌딩 콘텐츠 리스트
+            트렌딩 유튜브 영상 리스트
         """
         development_stage = get_development_stage(child_age_months)
         
-        # YouTube와 블로그 검색
-        trending_query = f'"{child_age_months}개월" 아기 육아 인기'
+        # YouTube 검색만 수행
+        trending_query = f'"{child_age_months}개월" 아기 육아 인기 한국'
         
         youtube_results = self.youtube_tool.search_videos(trending_query, max_results=10)
-        blog_results = self.web_tool.search_blogs(trending_query, max_results=10)
         
-        if not youtube_results and not blog_results:
+        if not youtube_results:
+            print("⚠️ [Trending] YouTube 검색 결과 없음, Fallback 사용")
             return self._get_fallback_trending(child_age_months)
         
         # 검색 결과를 바로 반환 (Gemini 필터링 제거 - 속도 개선)
-        print("✅ [Trending] 검색 결과 그대로 반환 (빠른 응답)")
+        print(f"✅ [Trending] YouTube 검색 결과: {len(youtube_results)}개")
         results = []
         
-        # YouTube 결과 추가
+        # YouTube 결과만 추가
         for idx, video in enumerate(youtube_results):
             results.append({
                 'id': f"trend_yt_{idx+1}",
@@ -153,18 +153,13 @@ class GeminiContentCurator:
                 'category': '트렌딩'
             })
         
-        # 블로그 결과 추가
-        for idx, blog in enumerate(blog_results):
-            results.append({
-                'id': f"trend_blog_{idx+1}",
-                'type': 'blog',
-                'title': blog.get('title', ''),
-                'description': blog.get('description', '')[:200],
-                'url': blog.get('url', ''),
-                'thumbnail': None,
-                'tags': [],
-                'category': '트렌딩'
-            })
+        # 디버깅: 타입 확인
+        print(f"🔍 [Trending] 반환할 결과 개수: {len(results)}")
+        type_counts = {}
+        for item in results:
+            item_type = item.get('type', 'unknown')
+            type_counts[item_type] = type_counts.get(item_type, 0) + 1
+        print(f"🔍 [Trending] 타입별 개수: {type_counts}")
         
         return results if results else self._get_fallback_trending(child_age_months)
     
@@ -215,18 +210,18 @@ class GeminiContentCurator:
     def _generate_video_queries(self, age_months: int) -> List[str]:
         """영상 검색 쿼리 생성"""
         return [
-            f'"{age_months}개월" 아기 발달',
-            f'"{age_months}개월" 육아 팁',
-            f'"{age_months}개월" 이유식',
-            f'"{age_months}개월" 놀이'
+            f'"{age_months}개월" 아기 발달 한국',
+            f'"{age_months}개월" 육아 팁 한국',
+            f'"{age_months}개월" 이유식 한국',
+            f'"{age_months}개월" 놀이 한국'
         ]
     
     def _generate_blog_queries(self, age_months: int) -> List[str]:
         """블로그 검색 쿼리 생성"""
         return [
-            f'"{age_months}개월" 아기 육아',
-            f'"{age_months}개월" 발달 체크',
-            f'"{age_months}개월" 수면 교육'
+            f'"{age_months}개월" 아기 육아 한국',
+            f'"{age_months}개월" 발달 체크 한국',
+            f'"{age_months}개월" 수면 교육 한국'
         ]
     
     def _parse_json_response(self, response_text: str) -> List[Dict]:
@@ -296,18 +291,14 @@ class GeminiContentCurator:
         ]
     
     def _get_fallback_trending(self, age_months: int) -> List[Dict[str, Any]]:
-        """기본 트렌딩 (API 실패 시)"""
+        """기본 트렌딩 (API 실패 시) - 유튜브만"""
         videos = self._get_fallback_videos(age_months)
-        blogs = self._get_fallback_blogs(age_months)
         
         # ID 충돌 방지를 위해 prefix 추가
         for v in videos:
             v['id'] = f"trending_{v['id']}"
             
-        for b in blogs:
-            b['id'] = f"trending_{b['id']}"
-            
-        return videos + blogs
+        return videos
     
     def _get_fallback_news(self, age_months: int) -> List[Dict[str, Any]]:
         """기본 뉴스 (API 실패 시)"""
