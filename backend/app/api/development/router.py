@@ -9,6 +9,8 @@ from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
 from app.models.analysis import AnalysisLog, DevelopmentEvent
 from app.models.user import User
+from app.models.live_monitoring.models import SegmentAnalysis, HourlyReport
+
 
 router = APIRouter()
 
@@ -138,9 +140,12 @@ def get_development_summary(
     # 카테고리별 색상 매핑 (파스텔톤)
     category_colors = {
         "언어": "#a2d2ff", # Light Blue
-        "운동": "#b0f2c2", # Light Green
+        "운동": "#b0f2c2", # Light Green (레거시)
+        "대근육운동": "#90e0a0", # Light Green (대근육)
+        "소근육운동": "#b0f2c2", # Light Green (소근육)
         "인지": "#ffc77d", # Light Orange
         "사회성": "#d4a2ff", # Light Purple
+        "사회정서": "#d4a2ff", # Light Purple
         "정서": "#ffb0bb", # Light Pink
     }
     
@@ -153,12 +158,38 @@ def get_development_summary(
         for cat, count in category_counts
     ]
     
-    # 7. 발달 요약 (가장 최신 로그의 요약 사용)
-    latest_log = today_logs[0] if today_logs else None
-    development_summary = latest_log.development_summary if latest_log and latest_log.development_summary else "아직 분석된 데이터가 없습니다."
+    # 7. 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
+    now = datetime.now()
+    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
     
-    # 8. 추천 활동 (가장 최신 로그의 추천 사용)
-    recommendations = latest_log.recommendations if latest_log and latest_log.recommendations else []
+    # 최신 HourlyReport 조회
+    camera_id = "camera-1"  # 추후 사용자별 카메라 매핑으로 변경
+    latest_hourly_report = (
+        db.query(HourlyReport)
+        .filter(
+            HourlyReport.camera_id == camera_id,
+            HourlyReport.hour_start < current_hour_start
+        )
+        .order_by(HourlyReport.hour_start.desc())
+        .first()
+    )
+    
+    # 발달 요약 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    latest_log = today_logs[0] if today_logs else None
+    if latest_hourly_report and latest_hourly_report.development_summary:
+        development_summary = latest_hourly_report.development_summary
+    elif latest_log and latest_log.development_summary:
+        development_summary = latest_log.development_summary
+    else:
+        development_summary = "아직 분석된 데이터가 없습니다."
+    
+    # 추천 활동 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    if latest_hourly_report and latest_hourly_report.recommended_activities:
+        recommendations = latest_hourly_report.recommended_activities
+    elif latest_log and latest_log.recommendations:
+        recommendations = latest_log.recommendations
+    else:
+        recommendations = []
     
     # 9. 최종 응답 (사용자 생년월일 기반 age_months 사용)
     return {
@@ -166,9 +197,26 @@ def get_development_summary(
         "development_summary": development_summary,
         "development_score": avg_dev_score,  # 평균 발달 점수
         "development_radar_scores": radar_scores,  # 평균 오각형 점수
+    }
+    # 발달 인사이트 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    if latest_hourly_report and latest_hourly_report.development_insights:
+        development_insights = latest_hourly_report.development_insights
+    elif latest_log and latest_log.development_insights:
+        development_insights = latest_log.development_insights
+    else:
+        development_insights = []
+    
+    # 월령 (가장 최신 로그의 월령 사용)
+    age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
+    
+    return {
+        "age_months": age_months,
+        "development_summary": development_summary,  # HourlyReport에서 가져온 종합 요약
+        "development_score": avg_dev_score,  # 평균 발달 점수 (실시간)
+        "development_radar_scores": radar_scores,  # 평균 오각형 점수 (실시간)
         "strongest_area": strongest_area,
-        "daily_development_frequency": daily_frequency,  # 모든 이벤트 집계
-        "recommended_activities": recommendations,
-        "development_insights": latest_log.development_insights if latest_log and latest_log.development_insights else [], # AI로부터 직접 받아옴
+        "daily_development_frequency": daily_frequency,  # 모든 이벤트 집계 (실시간)
+        "recommended_activities": recommendations,  # HourlyReport에서 가져온 종합 추천
+        "development_insights": development_insights,  # HourlyReport에서 가져온 종합 인사이트
     }
 

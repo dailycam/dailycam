@@ -140,12 +140,12 @@ export function ClockGaugeSection({ selectedHour, hourlyStats = [] }: ClockGauge
                 </div>
                 <div className="flex items-baseline gap-2">
                     <div className="text-3xl font-bold text-gray-900">
-                        {selectedStat?.eventCount || 0}
+                        {selectedStat?.analysisCount || 0}
                     </div>
                     <span className="text-sm text-gray-500">회</span>
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                    {selectedHour}:00 - {(selectedHour + 1) % 24}:00
+                    {selectedHour}:00 - {(selectedHour + 1) % 24}:00 시간대에 VLM 분석 완료
                 </div>
             </div>
         </div>

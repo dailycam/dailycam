@@ -307,6 +307,7 @@ class GeminiService:
         - 해상도: 높이 480px (비율 유지)
         - FPS: 1fps (초당 1프레임)
         - 이미 충분히 낮은 경우(높이 <=480, fps <=2)는 원본 사용
+        - FFmpeg를 사용하여 moov atom을 파일 시작 부분에 배치 (faststart)
         """
         print("[비디오 최적화] 전처리 시작...")
 
@@ -317,14 +318,17 @@ class GeminiService:
         output_path = input_path.replace(".mp4", "_opt.mp4")
 
         try:
+            # 먼저 비디오 정보 확인
             cap = cv2.VideoCapture(input_path)
             if not cap.isOpened():
-                print("[비디오 최적화] 비디오 열기 실패, 원본 사용")
+                print("[비디오 최적화] ❌ 비디오 열기 실패, 원본 사용")
+                print(f"  파일 크기: {len(video_bytes) / (1024 * 1024):.2f}MB")
                 return video_bytes
 
             orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             orig_fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
 
             target_height = 480
             target_fps = 1.0
@@ -332,48 +336,68 @@ class GeminiService:
             # 이미 최적화된 상태면 패스
             if orig_height <= target_height and orig_fps <= 2:
                 print(
-                    f"[비디오 최적화] 이미 최적화된 상태 ({orig_width}x{orig_height}, {orig_fps}fps)"
+                    f"[비디오 최적화] ✅ 이미 최적화된 상태 ({orig_width}x{orig_height}, {orig_fps}fps)"
                 )
-                cap.release()
                 return video_bytes
 
             scale = target_height / float(orig_height)
             target_width = int(orig_width * scale)
+            # 짝수로 맞추기 (FFmpeg 요구사항)
+            if target_width % 2 != 0:
+                target_width += 1
 
             print(
                 f"[비디오 최적화] {orig_width}x{orig_height} {orig_fps}fps "
                 f"-> {target_width}x{target_height} {target_fps}fps"
             )
 
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(
-                output_path, fourcc, target_fps, (target_width, target_height)
+            # FFmpeg를 사용하여 최적화
+            import subprocess
+            import shutil
+            
+            # FFmpeg 경로 찾기
+            ffmpeg_path = None
+            backend_dir = Path(__file__).resolve().parents[2]
+            local_ffmpeg = backend_dir / "bin" / "ffmpeg.exe"
+            
+            if local_ffmpeg.exists():
+                ffmpeg_path = str(local_ffmpeg)
+            else:
+                ffmpeg_path = shutil.which('ffmpeg')
+            
+            if not ffmpeg_path:
+                print("[비디오 최적화] ⚠️ FFmpeg를 찾을 수 없습니다. 원본 사용")
+                return video_bytes
+            
+            # FFmpeg 명령어 구성
+            cmd = [
+                ffmpeg_path,
+                '-i', input_path,
+                '-vf', f'scale={target_width}:{target_height},fps={target_fps}',
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-crf', '28',  # 압축률 높임 (품질은 충분)
+                '-movflags', '+faststart',  # moov atom을 파일 시작 부분에 배치
+                '-an',  # 오디오 제거 (필요 없음)
+                '-y',  # 덮어쓰기
+                output_path
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
 
-            step = int(orig_fps / target_fps) if orig_fps > 0 else 1
-            if step < 1:
-                step = 1
-
-            count = 0
-            processed_frames = 0
-
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-                if count % step == 0:
-                    resized = cv2.resize(frame, (target_width, target_height))
-                    out.write(resized)
-                    processed_frames += 1
-
-                count += 1
-
-            cap.release()
-            out.release()
+            if result.returncode != 0:
+                print(f"[비디오 최적화] ❌ FFmpeg 실행 실패, 원본 사용")
+                stderr_output = result.stderr.decode('utf-8', errors='ignore')
+                print(f"  FFmpeg 오류: {stderr_output[:200]}")
+                return video_bytes
 
             if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-                print("[비디오 최적화] 출력 파일 생성 실패, 원본 사용")
+                print("[비디오 최적화] ❌ 출력 파일 생성 실패, 원본 사용")
                 return video_bytes
 
             with open(output_path, "rb") as f:
@@ -381,14 +405,16 @@ class GeminiService:
 
             reduction_ratio = (1 - len(optimized_bytes) / len(video_bytes)) * 100
             print(
-                f"[비디오 최적화 완료] "
+                f"[비디오 최적화] ✅ 완료: "
                 f"{len(video_bytes)/1024/1024:.2f}MB -> {len(optimized_bytes)/1024/1024:.2f}MB "
                 f"({reduction_ratio:.1f}% 감소)"
             )
             return optimized_bytes
 
         except Exception as e:
-            print(f"[비디오 최적화 오류] {e}")
+            import traceback
+            print(f"[비디오 최적화] ❌ 오류: {e}")
+            print(traceback.format_exc())
             return video_bytes
         finally:
             try:
@@ -576,6 +602,121 @@ class GeminiService:
             raise ValueError(f"JSON 파싱 실패: {str(e)}")
 
     # ------------------------------------------------------------------
+    # 실시간 스냅샷 분석 메서드
+    # ------------------------------------------------------------------
+    async def analyze_realtime_snapshot(
+        self,
+        frame_or_video: bytes,
+        content_type: str = "image/jpeg",
+        age_months: Optional[int] = None,
+    ) -> dict:
+        """
+        실시간 프레임 또는 짧은 영상을 분석합니다.
+        
+        Args:
+            frame_or_video: 이미지(JPEG) 또는 짧은 비디오 바이트
+            content_type: MIME 타입 (image/jpeg 또는 video/mp4)
+            age_months: 아이의 개월 수
+        
+        Returns:
+            dict: 실시간 분석 결과
+        """
+        try:
+            # 프롬프트
+            prompt = """
+다음 이미지를 분석하여 아이의 현재 상태를 평가해주세요.
+
+**분석 항목:**
+1. 현재 활동 (current_activity)
+2. 안전 상태 (safety_status)
+3. 발달 관찰 (developmental_observation)
+4. 이벤트 요약 (event_summary)
+
+**응답 형식 (JSON):**
+```json
+{
+  "current_activity": {
+    "activity_type": "놀이",
+    "location": "거실",
+    "description": "블록으로 놀고 있습니다"
+  },
+  "safety_status": {
+    "is_safe": true,
+    "risk_level": "safe",
+    "concerns": []
+  },
+  "developmental_observation": {
+    "notable": false,
+    "milestone": null,
+    "description": "정상적인 놀이 활동"
+  },
+  "event_summary": {
+    "title": "안전한 놀이 활동",
+    "description": "아이가 거실에서 블록으로 안전하게 놀고 있습니다.",
+    "severity": "safe",
+    "action_needed": null
+  }
+}
+```
+"""
+            
+            # 이미지/비디오 인코딩
+            media_base64 = base64.b64encode(frame_or_video).decode("utf-8")
+            
+            # Gemini API 호출
+            generation_config = genai.types.GenerationConfig(
+                temperature=0.3,
+                top_k=30,
+                top_p=0.95,
+            )
+            
+            response = self.model.generate_content(
+                [
+                    {
+                        "mime_type": content_type,
+                        "data": media_base64,
+                    },
+                    prompt,
+                ],
+                generation_config=generation_config,
+            )
+            
+            if not response or not hasattr(response, "text"):
+                raise ValueError("Gemini 응답이 올바르지 않습니다.")
+            
+            result_text = response.text.strip()
+            result = self._extract_and_parse_json(result_text)
+            
+            return result
+            
+        except Exception as e:
+            print(f"[실시간 분석 오류] {e}")
+            # 기본 응답 반환
+            return {
+                "current_activity": {
+                    "activity_type": "알 수 없음",
+                    "location": "알 수 없음",
+                    "description": "분석 중 오류가 발생했습니다."
+                },
+                "safety_status": {
+                    "is_safe": True,
+                    "risk_level": "safe",
+                    "concerns": []
+                },
+                "developmental_observation": {
+                    "notable": False,
+                    "milestone": None,
+                    "description": "분석 불가"
+                },
+                "event_summary": {
+                    "title": "분석 오류",
+                    "description": str(e),
+                    "severity": "info",
+                    "action_needed": None
+                }
+            }
+
+    # ------------------------------------------------------------------
     # 메인 엔트리: 3단계 메타데이터 기반 분석
     # ------------------------------------------------------------------
     async def analyze_video_vlm(
@@ -603,38 +744,54 @@ class GeminiService:
             # ----------------------------------------------------------
             # 0단계: 비디오 최적화 (해상도/FPS 다운샘플링)
             # ----------------------------------------------------------
+            print(f"[0단계] 비디오 최적화 시작 (원본 크기: {len(video_bytes) / (1024 * 1024):.2f}MB)")
             optimized_video_bytes = self._optimize_video(video_bytes)
+            print(f"[0단계] ✅ 비디오 최적화 완료 (최적화 크기: {len(optimized_video_bytes) / (1024 * 1024):.2f}MB)")
 
             # ----------------------------------------------------------
             # 1단계: VLM 호출 → 메타데이터 추출
             # ----------------------------------------------------------
-            print("[1차 VLM] 비디오에서 메타데이터 추출 중...")
+            print("[1단계] 비디오에서 메타데이터 추출 중...")
 
-            video_base64 = base64.b64encode(optimized_video_bytes).decode("utf-8")
-            metadata_prompt = self._load_prompt("vlm_metadata.ko.txt")
+            try:
+                video_base64 = base64.b64encode(optimized_video_bytes).decode("utf-8")
+                print(f"[1단계] Base64 인코딩 완료 (크기: {len(video_base64)} 문자)")
+                
+                metadata_prompt = self._load_prompt("vlm_metadata.ko.txt")
+                print(f"[1단계] 프롬프트 로드 완료 (크기: {len(metadata_prompt)} 문자)")
 
-            vlm_generation_config = genai.types.GenerationConfig(
-                temperature=0.0,  # 사실 기반 추출
-                top_k=30,
-                top_p=0.95,
-            )
+                vlm_generation_config = genai.types.GenerationConfig(
+                    temperature=0.0,  # 사실 기반 추출
+                    top_k=30,
+                    top_p=0.95,
+                )
 
-            response = self.model.generate_content(
-                [
-                    {
-                        "mime_type": mime_type,
-                        "data": video_base64,
-                    },
-                    metadata_prompt,
-                ],
-                generation_config=vlm_generation_config,
-            )
+                print("[1단계] Gemini VLM API 호출 중...")
+                response = self.model.generate_content(
+                    [
+                        {
+                            "mime_type": mime_type,
+                            "data": video_base64,
+                        },
+                        metadata_prompt,
+                    ],
+                    generation_config=vlm_generation_config,
+                )
 
-            if not response or not hasattr(response, "text"):
-                raise ValueError("Gemini VLM 응답이 올바르지 않습니다.")
+                if not response or not hasattr(response, "text"):
+                    raise ValueError("Gemini VLM 응답이 올바르지 않습니다.")
 
-            metadata_text = response.text.strip()
-            metadata = self._extract_and_parse_json(metadata_text)
+                metadata_text = response.text.strip()
+                print(f"[1단계] ✅ Gemini VLM 응답 수신 (크기: {len(metadata_text)} 문자)")
+                
+                metadata = self._extract_and_parse_json(metadata_text)
+                print(f"[1단계] ✅ JSON 파싱 완료")
+                
+            except Exception as e:
+                print(f"[1단계] ❌ 메타데이터 추출 실패: {e}")
+                import traceback
+                print(traceback.format_exc())
+                raise
 
             print(
                 f"[1차 완료] 관찰 {len(metadata.get('timeline_observations', []))}개, "
