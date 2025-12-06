@@ -1,3 +1,5 @@
+import { Camera } from 'lucide-react'
+
 export default function Login() {
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트
@@ -5,35 +7,39 @@ export default function Login() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
-            <div className="absolute inset-0 bg-black opacity-20"></div>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cream-50 via-primary-50/30 to-cyan-50 p-4 relative">
+            {/* 배경 장식 (subtle) */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary-200/20 rounded-full blur-3xl"></div>
+                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-200/20 rounded-full blur-3xl"></div>
+            </div>
 
-            <div className="relative z-10 max-w-md w-full mx-4">
-                {/* 로그인 카드 */}
-                <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/20">
+            <div className="relative z-10 max-w-md w-full">
+                {/* 로그인 카드 - Glassmorphism */}
+                <div className="bg-white/80 backdrop-blur-md rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white/50 p-10">
+
                     {/* 로고 */}
-                    <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-4 shadow-lg">
-                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
+                    <div className="flex justify-center mb-6">
+                        <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-cyan-100 rounded-full flex items-center justify-center shadow-soft">
+                            <Camera className="w-10 h-10 text-primary-600" strokeWidth={1.5} />
                         </div>
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2">DailyCam</h1>
-                        <p className="text-gray-600">AI 기반 스마트 모니터링</p>
                     </div>
 
-                    {/* 환영 메시지 */}
-                    <div className="text-center mb-8">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">환영합니다!</h2>
-                        <p className="text-gray-600">Google 계정으로 간편하게 시작하세요</p>
+                    {/* 텍스트 영역 */}
+                    <div className="text-center mb-10">
+                        <h1 className="text-3xl font-bold text-gray-800 mb-2">DailyCam</h1>
+                        <p className="text-gray-500 text-base leading-relaxed">
+                            엄마 아빠의 눈이 되어줄게요.<br />
+                            <span className="text-primary-600 font-semibold">AI 안심 모니터링</span>을 시작해보세요.
+                        </p>
                     </div>
 
                     {/* Google 로그인 버튼 */}
                     <button
                         onClick={handleGoogleLogin}
-                        className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-900 font-semibold py-4 px-6 rounded-xl border-2 border-gray-200 shadow-md hover:shadow-lg transition-all duration-200 group"
+                        className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-medium py-4 px-6 rounded-2xl hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-300 transform hover:-translate-y-0.5"
                     >
-                        <svg className="w-6 h-6" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
                             <path
                                 fill="#4285F4"
                                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -44,25 +50,25 @@ export default function Login() {
                             />
                             <path
                                 fill="#FBBC05"
-                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.26.81-.58z"
                             />
                             <path
                                 fill="#EA4335"
                                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                             />
                         </svg>
-                        <span>Google로 계속하기</span>
+                        Google 계정으로 계속하기
                     </button>
 
                     {/* 추가 정보 */}
                     <div className="mt-8 text-center">
-                        <p className="text-sm text-gray-500">
+                        <p className="text-xs text-gray-400">
                             로그인하면{' '}
-                            <a href="#" className="text-indigo-600 hover:text-indigo-700 font-medium">
+                            <a href="#" className="text-primary-600 hover:text-primary-700 underline">
                                 서비스 약관
                             </a>
                             {' '}및{' '}
-                            <a href="#" className="text-indigo-600 hover:text-indigo-700 font-medium">
+                            <a href="#" className="text-primary-600 hover:text-primary-700 underline">
                                 개인정보 처리방침
                             </a>
                             에 동의하게 됩니다.
@@ -70,18 +76,12 @@ export default function Login() {
                     </div>
                 </div>
 
-                {/* 하단 장식 */}
+                {/* 하단 카피라이트 */}
                 <div className="mt-8 text-center">
-                    <p className="text-white/80 text-sm">
-                        © 2024 DailyCam. All rights reserved.
+                    <p className="text-gray-400/80 text-xs">
+                        © 2025 DailyCam. 아이를 위한 따뜻한 기술.
                     </p>
                 </div>
-            </div>
-
-            {/* 배경 장식 */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
             </div>
         </div>
     )

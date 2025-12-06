@@ -1,6 +1,8 @@
 import { Bell, User, LogOut, ChevronDown, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { getAuthToken, removeAuthToken } from '../../lib/auth' // 이 줄만 남깁니다.
+
 
 interface UserInfo {
   id: number
@@ -12,14 +14,59 @@ interface UserInfo {
   subscription_plan?: string | null
 }
 
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  type: 'checklist_completed' | 'system';
+  data?: any;
+}
+
 interface HeaderProps {
   isSidebarOpen: boolean
 }
 
 export default function Header({ isSidebarOpen }: HeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const navigate = useNavigate()
+
+  // 알림 이벤트 리스너
+  useEffect(() => {
+    const handleChecklistCompleted = (event: CustomEvent) => {
+      const { item } = event.detail;
+      const newNotification: Notification = {
+        id: Date.now().toString(),
+        title: '안전 체크리스트 완료',
+        message: `'${item.title}' 항목이 완료 처리되었습니다.`,
+        time: '방금 전',
+        type: 'checklist_completed',
+        data: item
+      };
+      setNotifications(prev => [newNotification, ...prev]);
+    };
+
+    window.addEventListener('checklist-completed' as any, handleChecklistCompleted);
+    return () => {
+      window.removeEventListener('checklist-completed' as any, handleChecklistCompleted);
+    };
+  }, []);
+
+  const handleRollback = (notification: Notification) => {
+    if (notification.type === 'checklist_completed' && notification.data) {
+      // 롤백 이벤트 발생
+      const event = new CustomEvent('checklist-rollback', {
+        detail: { item: notification.data }
+      });
+      window.dispatchEvent(event);
+
+      // 알림 삭제
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    }
+  };
 
   // 플랜 코드 → 표시용 문구
   const getPlanLabel = (info: UserInfo | null) => {
@@ -42,7 +89,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
   // 사용자 정보 가져오기
   useEffect(() => {
     const fetchUserInfo = async () => {
-      const token = localStorage.getItem('access_token')
+      const token = getAuthToken()
 
       if (!token) {
         navigate('/login')
@@ -63,7 +110,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
             is_subscribed: Boolean(data.is_subscribed),
           })
         } else {
-          localStorage.removeItem('access_token')
+          removeAuthToken()
           navigate('/login')
         }
       } catch (error) {
@@ -75,7 +122,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
   }, [navigate])
 
   const handleLogout = async () => {
-    const token = localStorage.getItem('access_token')
+    const token = getAuthToken()
 
     if (token) {
       try {
@@ -90,7 +137,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
       }
     }
 
-    localStorage.removeItem('access_token')
+    removeAuthToken()
     navigate('/')
   }
 
@@ -122,10 +169,58 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
       {/* Right Section (Notifications and User Profile) */}
       <div className="flex items-center gap-4 ml-auto">
         {/* Notifications */}
-        <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-danger-500 rounded-full"></span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Bell className="w-5 h-5" />
+            {notifications.length > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-danger-500 rounded-full"></span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+              <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-semibold text-gray-900">알림</h3>
+                <button
+                  onClick={() => setNotifications([])}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  모두 지우기
+                </button>
+              </div>
+
+              {notifications.length === 0 ? (
+                <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                  새로운 알림이 없습니다.
+                </div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto">
+                  {notifications.map((noti) => (
+                    <div key={noti.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
+                      <div className="flex justify-between items-start mb-1">
+                        <p className="text-sm font-medium text-gray-900">{noti.title}</p>
+                        <span className="text-xs text-gray-400">{noti.time}</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">{noti.message}</p>
+                      {noti.type === 'checklist_completed' && (
+                        <button
+                          onClick={() => handleRollback(noti)}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                        >
+                          <LogOut className="w-3 h-3 rotate-180" /> {/* Undo icon substitute */}
+                          실행 취소
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* User Profile with Dropdown */}
         <div className="relative pl-4 border-l border-gray-200">
