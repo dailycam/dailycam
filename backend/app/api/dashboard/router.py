@@ -37,10 +37,18 @@ def get_dashboard_summary(
     start_date = end_date - timedelta(days=range_days)
     
     # 2. 오늘 날짜의 모든 분석 로그 조회 (일일 집계)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    # KST 기준 오늘 날짜
+    kst = pytz.timezone('Asia/Seoul')
+    now_kst = datetime.now(kst)
+    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end_kst = now_kst.replace(hour=23, minute=59, second=59, microsecond=999999)
     
-    print(f"[Dashboard] 오늘 날짜 범위: {today_start} ~ {today_end}")
+    # UTC로 변환 (데이터베이스는 UTC로 저장됨)
+    today_start_utc = today_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    today_end_utc = today_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    
+    print(f"[Dashboard] 오늘 날짜 범위 (KST): {today_start_kst} ~ {today_end_kst}")
+    print(f"[Dashboard] 오늘 날짜 범위 (UTC): {today_start_utc} ~ {today_end_utc}")
     print(f"[Dashboard] User ID: {user_id}")
     
     # SegmentAnalysis만 조회 (실시간 수치 데이터)
@@ -50,8 +58,8 @@ def get_dashboard_summary(
         db.query(SegmentAnalysis)
         .filter(
             SegmentAnalysis.camera_id == camera_id,
-            SegmentAnalysis.segment_start >= today_start,
-            SegmentAnalysis.segment_start <= today_end,
+            SegmentAnalysis.segment_start >= today_start_utc,
+            SegmentAnalysis.segment_start <= today_end_utc,
             SegmentAnalysis.status == 'completed'
         )
         .all()
@@ -207,7 +215,6 @@ def get_dashboard_summary(
     timeline_events: List[Dict[str, Any]] = []
     
     # SegmentAnalysis의 이벤트들을 타임라인에 추가
-    kst = pytz.timezone('Asia/Seoul')
     for segment in today_segments:
         # UTC를 KST로 변환
         segment_start_kst = segment.segment_start.replace(tzinfo=pytz.UTC).astimezone(kst)
@@ -251,13 +258,26 @@ def get_dashboard_summary(
             else:
                 category = "안전"
             
+            # title 처리: title이 없으면 description 사용, 둘 다 없으면 기본값
+            title = incident.get('title', '').strip()
+            description = incident.get('description', '').strip()
+            
+            if not title:
+                if description:
+                    title = description[:50]
+                else:
+                    title = f"{severity_raw} 이벤트"
+            
+            if not description:
+                description = title
+            
             timeline_events.append({
                 "time": time_str,
                 "hour": segment_hour,
                 "type": "safety",
                 "severity": mapped_severity,
-                "title": incident.get('title', '') or incident.get('description', '안전 이벤트')[:50],
-                "description": incident.get('description', ''),
+                "title": title,
+                "description": description,
                 "resolved": False,
                 "hasClip": False,
                 "category": category,
@@ -298,6 +318,17 @@ def get_dashboard_summary(
     
     # 시간순으로 정렬 (최신순)
     timeline_events.sort(key=lambda x: x["hour"], reverse=True)
+    
+    # 디버깅: 안전 이벤트 개수 확인
+    safety_events = [e for e in timeline_events if e["type"] == "safety"]
+    danger_events = [e for e in safety_events if e["severity"] == "danger"]
+    warning_events = [e for e in safety_events if e["severity"] == "warning"]
+    info_events = [e for e in safety_events if e["severity"] == "info"]
+    
+    print(f"[Dashboard] 타임라인 이벤트 총 {len(timeline_events)}개")
+    print(f"[Dashboard] 안전 이벤트: {len(safety_events)}개 (위험: {len(danger_events)}, 주의: {len(warning_events)}, 정보: {len(info_events)})")
+    if safety_events:
+        print(f"[Dashboard] 샘플 안전 이벤트: severity={safety_events[0]['severity']}, title={safety_events[0]['title'][:50]}, category={safety_events[0]['category']}")
     
     # 9. 시간대별 통계 (hourly_stats) 생성 (SegmentAnalysis만 사용)
     hourly_stats: List[Dict[str, Any]] = []

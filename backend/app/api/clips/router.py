@@ -145,3 +145,52 @@ async def delete_clip(
     db.commit()
     
     return {"message": "클립이 삭제되었습니다", "clip_id": clip_id}
+
+
+@router.post("/fix-existing-clips")
+def fix_existing_clips(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    기존 클립 데이터를 아카이브 영상으로 업데이트 (임시 엔드포인트)
+    """
+    from pathlib import Path
+    
+    # 모든 클립 조회
+    clips = db.query(HighlightClip).all()
+    
+    # 아카이브 디렉토리
+    archive_dir = Path("temp_videos/hls_buffer/camera-1/archive")
+    archive_videos = sorted(archive_dir.glob("archive_*.mp4"))
+    
+    if not archive_videos:
+        raise HTTPException(status_code=404, detail="아카이브 영상이 없습니다")
+    
+    updated_count = 0
+    for idx, clip in enumerate(clips):
+        # 아카이브 영상 중 하나를 순서대로 선택
+        archive_video = archive_videos[idx % len(archive_videos)]
+        
+        # 비디오 URL 업데이트 (슬래시 확실히 추가)
+        video_url = f"/temp_videos/hls_buffer/camera-1/archive/{archive_video.name}"
+        clip.video_url = video_url if video_url.startswith('/') else '/' + video_url
+        
+        # 썸네일 URL 업데이트 (슬래시 확실히 추가)
+        thumbnail_name = archive_video.stem + ".jpg"
+        thumbnail_url = f"/temp_videos/hls_buffer/camera-1/archive/thumbnails/{thumbnail_name}"
+        clip.thumbnail_url = thumbnail_url if thumbnail_url.startswith('/') else '/' + thumbnail_url
+        
+        # 재생 시간 설정 (10분 = 600초)
+        if not clip.duration_seconds or clip.duration_seconds == 0:
+            clip.duration_seconds = 600
+        
+        updated_count += 1
+    
+    db.commit()
+    
+    return {
+        "message": f"{updated_count}개의 클립이 업데이트되었습니다",
+        "updated_count": updated_count,
+        "archive_videos_count": len(archive_videos)
+    }

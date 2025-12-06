@@ -74,9 +74,30 @@ export default function ClipHighlights() {
         onClick={() => setSelectedClip(clip.id.toString())}
       >
         <div className="flex gap-4">
-          <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl">
-            {clip.thumbnail_url ? (
-              <img src={clip.thumbnail_url} alt={clip.title} className="w-full h-full object-cover rounded-lg" />
+          <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl overflow-hidden">
+            {clip.video_url ? (
+              <video
+                className="w-full h-full object-cover rounded-lg"
+                src={`http://localhost:8000${clip.video_url}#t=5`}
+                preload="metadata"
+                muted
+                playsInline
+                onError={(e) => {
+                  // 비디오 로드 실패 시 기본 이모지 표시
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.parentElement!.innerHTML = clip.category === '발달' ? '🎯' : '⚠️'
+                }}
+              />
+            ) : clip.thumbnail_url ? (
+              <img
+                src={`http://localhost:8000${clip.thumbnail_url}`}
+                alt={clip.title}
+                className="w-full h-full object-cover rounded-lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.parentElement!.innerHTML = clip.category === '발달' ? '🎯' : '⚠️'
+                }}
+              />
             ) : (
               clip.category === '발달' ? '🎯' : '⚠️'
             )}
@@ -271,7 +292,16 @@ export default function ClipHighlights() {
                     controls
                     autoPlay
                     className="w-full h-full object-contain"
-                    src={`${clip.video_url}#t=0,${clip.duration_seconds || ''}`}
+                    src={`http://localhost:8000${clip.video_url}`}
+                    onError={(e) => {
+                      console.error('비디오 로드 실패:', clip.video_url)
+                      e.currentTarget.parentElement!.innerHTML = `
+                        <div class="text-white text-center">
+                          <p class="text-red-400 mb-2">⚠️ 영상을 불러올 수 없습니다</p>
+                          <p class="text-sm text-gray-400">${clip.video_url}</p>
+                        </div>
+                      `
+                    }}
                   >
                     브라우저가 비디오 태그를 지원하지 않습니다.
                   </video>

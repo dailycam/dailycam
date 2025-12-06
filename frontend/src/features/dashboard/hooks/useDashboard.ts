@@ -166,15 +166,17 @@ export const useDashboard = () => {
         return data
     }, [timelineEvents, hourlyStats])
 
-    // [수정] 백엔드에서 받은 실제 데이터 직접 사용
+    // 백엔드에서 받은 실제 데이터 직접 사용
     const dailyStats: DailyStats = useMemo(() => {
-        const currentHour = new Date().getHours()
+        const now = new Date()
+        const currentHour = now.getHours()
 
-        // 22시 이후면 초기화 (이 로직은 유지)
-        if (currentHour >= 22) {
+        // 자정 이후 (0시 0분~0시 59분)면 초기화
+        if (currentHour === 0) {
+            console.log('🌙 [Daily Stats] 자정 이후 - 점수 초기화 (0점)')
             return {
-                safetyScore: 100,
-                developmentScore: 50,
+                safetyScore: 0,
+                developmentScore: 0,
                 monitoringHours: 0,
                 incidentCount: 0
             }

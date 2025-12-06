@@ -225,6 +225,22 @@ class AnalysisWorker:
             print(f"  🚨 사건 수: {job.incident_count}")
             print(f"  🎯 발달 점수: {segment_analysis.development_score}")
 
+            # 7. 하이라이트 클립 자동 생성
+            try:
+                from app.services.clip_generator import generate_clips_for_segment
+                
+                # 안전 이벤트나 발달 마일스톤이 있으면 클립 생성
+                has_safety_events = segment_analysis.safety_incidents and len(segment_analysis.safety_incidents) > 0
+                has_dev_milestones = segment_analysis.development_milestones and len(segment_analysis.development_milestones) > 0
+                
+                if has_safety_events or has_dev_milestones:
+                    print(f"[워커 {self.worker_id}] 🎬 하이라이트 클립 생성 시작...")
+                    await generate_clips_for_segment(job.camera_id, segment_analysis.id)
+                else:
+                    print(f"[워커 {self.worker_id}] ℹ️  클립 생성 스킵 (이벤트 없음)")
+            except Exception as clip_error:
+                print(f"[워커 {self.worker_id}] ⚠️  클립 생성 실패 (분석은 완료됨): {clip_error}")
+
             
             # 6. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"

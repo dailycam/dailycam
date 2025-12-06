@@ -73,27 +73,61 @@ class ClipGenerator:
         """
         clips = []
         
+        # 아카이브 영상 경로 찾기
+        archive_dir = Path(f"temp_videos/hls_buffer/{self.camera_id}/archive")
+        segment_start = segment_analysis.segment_start
+        
+        # 아카이브 파일명: archive_YYYYMMDD_HHMMSS.mp4
+        archive_filename = f"archive_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        archive_video = archive_dir / archive_filename
+        
+        # 패턴 매칭으로 찾기
+        if not archive_video.exists():
+            pattern = f"archive_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
+            matches = list(archive_dir.glob(pattern))
+            if matches:
+                archive_video = matches[0]
+            else:
+                print(f"[클립 생성] ⚠️  아카이브 영상 없음: {archive_filename}")
+                return clips
+        
+        # 썸네일 경로
+        thumbnail_name = archive_video.stem + ".jpg"
+        thumbnail_path = archive_dir / "thumbnails" / thumbnail_name
+        
         # 1. 안전 이벤트 클립 생성
         if segment_analysis.safety_incidents:
-            safety_clips = await self._create_safety_clips(segment_analysis, db)
+            safety_clips = await self._create_safety_clips_simple(
+                segment_analysis, 
+                archive_video, 
+                thumbnail_path,
+                db
+            )
             clips.extend(safety_clips)
         
         # 2. 발달 마일스톤 클립 생성
         if segment_analysis.development_milestones:
-            development_clips = await self._create_development_clips(segment_analysis, db)
+            development_clips = await self._create_development_clips_simple(
+                segment_analysis, 
+                archive_video, 
+                thumbnail_path,
+                db
+            )
             clips.extend(development_clips)
         
         return clips
     
-    async def _create_safety_clips(
-        self, 
+    
+    async def _create_safety_clips_simple(
+        self,
         segment_analysis: SegmentAnalysis,
+        archive_video: Path,
+        thumbnail_path: Path,
         db: Session
     ) -> List[HighlightClip]:
-        """안전 이벤트에서 클립 생성"""
+        """안전 이벤트에서 클립 생성 (간소화 버전 - 아카이브 영상 직접 사용)"""
         clips = []
         
-        # safety_incidents는 JSON 형태로 저장됨
         incidents = segment_analysis.safety_incidents or []
         
         for idx, incident in enumerate(incidents):
@@ -102,28 +136,28 @@ class ClipGenerator:
             if severity not in ['danger', 'warning', '위험', '주의']:
                 continue
             
-            # 클립 생성
-            clip_info = await self._extract_clip(
-                segment_analysis=segment_analysis,
-                event_data=incident,
-                clip_index=idx,
-                category=ClipCategory.SAFETY
+            # 비디오 URL (아카이브 영상 직접 사용)
+            video_url = f"/temp_videos/hls_buffer/{self.camera_id}/archive/{archive_video.name}"
+            
+            # 썸네일 URL
+            thumbnail_url = f"/temp_videos/hls_buffer/{self.camera_id}/archive/thumbnails/{thumbnail_path.name}"
+            if not thumbnail_path.exists():
+                thumbnail_url = ""  # 썸네일 없으면 빈 문자열
+            
+            clip = HighlightClip(
+                title=incident.get('title', '안전 이벤트'),
+                description=incident.get('description', ''),
+                video_url=video_url,
+                thumbnail_url=thumbnail_url,
+                category=ClipCategory.SAFETY,
+                sub_category=incident.get('category', '안전'),
+                importance='high' if severity in ['danger', '위험'] else 'medium',
+                duration_seconds=600,  # 10분 세그먼트
             )
             
-            if clip_info:
-                clip = HighlightClip(
-                    title=incident.get('title', '안전 이벤트'),
-                    description=incident.get('description', ''),
-                    video_url=clip_info['video_url'],
-                    thumbnail_url=clip_info['thumbnail_url'],
-                    category=ClipCategory.SAFETY,
-                    sub_category=incident.get('category', '안전'),
-                    importance='high' if severity in ['danger', '위험'] else 'medium',
-                    duration_seconds=clip_info['duration'],
-                )
-                
-                db.add(clip)
-                clips.append(clip)
+            db.add(clip)
+            clips.append(clip)
+            print(f"[클립 생성] ✅ 안전 클립 생성: {clip.title}")
         
         if clips:
             db.commit()
@@ -131,44 +165,56 @@ class ClipGenerator:
         
         return clips
     
-    async def _create_development_clips(
-        self, 
+    
+    async def _create_development_clips_simple(
+        self,
         segment_analysis: SegmentAnalysis,
+        archive_video: Path,
+        thumbnail_path: Path,
         db: Session
     ) -> List[HighlightClip]:
-        """발달 마일스톤에서 클립 생성"""
+        """발달 마일스톤에서 클립 생성 (간소화 버전 - 아카이브 영상 직접 사용)"""
         clips = []
         
         milestones = segment_analysis.development_milestones or []
         
         for idx, milestone in enumerate(milestones):
             # 중요한 마일스톤만 클립으로 생성
-            importance = milestone.get('importance', '').lower()
-            if importance not in ['high', 'medium', '높음', '중간']:
+            # present가 True인 것만 선택
+            if not milestone.get('present', False):
                 continue
             
-            # 클립 생성
-            clip_info = await self._extract_clip(
-                segment_analysis=segment_analysis,
-                event_data=milestone,
-                clip_index=idx,
-                category=ClipCategory.DEVELOPMENT
+            # frequency가 높은 것 우선
+            frequency = milestone.get('frequency', 0)
+            if frequency < 1:
+                continue
+            
+            # 비디오 URL (아카이브 영상 직접 사용)
+            video_url = f"/temp_videos/hls_buffer/{self.camera_id}/archive/{archive_video.name}"
+            
+            # 썸네일 URL
+            thumbnail_url = f"/temp_videos/hls_buffer/{self.camera_id}/archive/thumbnails/{thumbnail_path.name}"
+            if not thumbnail_path.exists():
+                thumbnail_url = ""
+            
+            # 제목 생성
+            title = milestone.get('name', '발달 행동')
+            category_name = milestone.get('category', '발달')
+            
+            clip = HighlightClip(
+                title=f"[{category_name}] {title}",
+                description=f"빈도: {frequency}회, 수준: {milestone.get('level', '관찰됨')}",
+                video_url=video_url,
+                thumbnail_url=thumbnail_url,
+                category=ClipCategory.DEVELOPMENT,
+                sub_category=category_name,
+                importance='high' if frequency >= 3 else 'medium',
+                duration_seconds=600,  # 10분 세그먼트
             )
             
-            if clip_info:
-                clip = HighlightClip(
-                    title=milestone.get('title', '발달 마일스톤'),
-                    description=milestone.get('description', ''),
-                    video_url=clip_info['video_url'],
-                    thumbnail_url=clip_info['thumbnail_url'],
-                    category=ClipCategory.DEVELOPMENT,
-                    sub_category=milestone.get('category', '발달'),
-                    importance=importance if importance in ['high', 'medium', 'low'] else 'medium',
-                    duration_seconds=clip_info['duration'],
-                )
-                
-                db.add(clip)
-                clips.append(clip)
+            db.add(clip)
+            clips.append(clip)
+            print(f"[클립 생성] ✅ 발달 클립 생성: {clip.title}")
         
         if clips:
             db.commit()
