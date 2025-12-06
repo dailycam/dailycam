@@ -188,11 +188,13 @@ export const useDashboard = () => {
             incidentCount: dashboardData?.incidentCount
         })
 
+        // ?? 연산자 사용 (0도 유효한 값으로 처리)
+        // 데이터가 없으면 0으로 표시
         return {
-            safetyScore: dashboardData?.safetyScore || 100,
-            developmentScore: dashboardData?.developmentScore || 50,
-            monitoringHours: dashboardData?.monitoringHours || 0,
-            incidentCount: dashboardData?.incidentCount || 0
+            safetyScore: dashboardData?.safetyScore ?? 0,
+            developmentScore: dashboardData?.developmentScore ?? 0,
+            monitoringHours: dashboardData?.monitoringHours ?? 0,
+            incidentCount: dashboardData?.incidentCount ?? 0
         }
     }, [dashboardData])
 

@@ -21,9 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.database.session import get_db
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.models.live_monitoring.models import SegmentAnalysis
-from app.models.analysis import AnalysisLog, DevelopmentEvent, DevelopmentCategory
 from app.services.gemini_service import GeminiService
-from app.services.analysis_service import AnalysisService
 
 
 class AnalysisWorker:
@@ -199,6 +197,8 @@ class AnalysisWorker:
             job.completed_at = datetime.now()
             
             # SegmentAnalysis 테이블에도 저장 (기존 시스템 호환성)
+            development_analysis = analysis_result.get('development_analysis', {})
+            
             segment_analysis = SegmentAnalysis(
                 camera_id=job.camera_id,
                 segment_start=job.segment_start,
@@ -208,32 +208,23 @@ class AnalysisWorker:
                 status='completed',
                 completed_at=datetime.now(),
                 safety_score=job.safety_score,
-                incident_count=job.incident_count
+                incident_count=job.incident_count,
+                # 발달 점수 추가
+                development_score=development_analysis.get('development_score', 0),
+                development_radar_scores=development_analysis.get('development_radar_scores', {}),
+                # 클립 생성용 데이터
+                safety_incidents=safety_analysis.get('incident_events', []),
+                development_milestones=development_analysis.get('skills', [])
             )
             db.add(segment_analysis)
-            db.flush()  # segment_analysis.id를 얻기 위해 flush
-            
-            # DevelopmentEvent 생성을 위한 AnalysisLog 생성
-            # camera_id로 user_id 매핑 (현재는 기본값 1, 추후 확장 가능)
-            user_id = self._get_user_id_from_camera(job.camera_id, db)
-            
-            # AnalysisService를 사용하여 AnalysisLog 및 관련 데이터(SafetyEvent, DevelopmentEvent, HighlightClip 등) 일괄 저장
-            # SegmentAnalysis의 ID를 AnalysisLog의 analysis_id로 사용하여 연결
-            # 이를 통해 대시보드, 리포트, 홈 화면에 데이터가 올바르게 표시됨
-            print(f"[워커 {self.worker_id}] 💾 AnalysisService를 통해 상세 결과 저장 중...")
-            AnalysisService.save_analysis_result(
-                db=db,
-                user_id=user_id,
-                video_path=job.video_path,
-                analysis_result=analysis_result,
-                analysis_id=segment_analysis.id
-            )
-            
             db.commit()
+            db.refresh(segment_analysis)
             
             print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}")
             print(f"  📊 안전 점수: {job.safety_score}")
             print(f"  🚨 사건 수: {job.incident_count}")
+            print(f"  🎯 발달 점수: {segment_analysis.development_score}")
+
             
             # 6. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
@@ -281,25 +272,6 @@ class AnalysisWorker:
             db.commit()
         finally:
             db.close()
-    
-    def _get_user_id_from_camera(self, camera_id: str, db) -> int:
-        """camera_id로 user_id 찾기 (현재는 기본값 1, 추후 확장 가능)"""
-        # TODO: camera_id와 user_id 매핑 테이블에서 조회
-        # 현재는 기본값 1 사용
-        return 1
-    
-    def _map_category_to_enum(self, category_str: str):
-        """스키마의 category 문자열을 DevelopmentCategory Enum으로 매핑"""
-        category_map = {
-            "대근육운동": DevelopmentCategory.GROSS_MOTOR,
-            "소근육운동": DevelopmentCategory.FINE_MOTOR,
-            "언어": DevelopmentCategory.LANGUAGE,
-            "인지": DevelopmentCategory.COGNITIVE,
-            "사회정서": DevelopmentCategory.SOCIAL,
-            # 하위 호환성
-            "운동": DevelopmentCategory.MOTOR,  # 구분 불가능할 때
-        }
-        return category_map.get(category_str)
 
 
 if __name__ == "__main__":

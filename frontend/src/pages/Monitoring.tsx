@@ -372,7 +372,7 @@ export default function Monitoring() {
       let playlistReady = false
       for (let i = 0; i < 20; i++) {
         try {
-          const checkResponse = await fetch(fullPlaylistUrl, { method: 'HEAD' })
+          const checkResponse = await fetch(fullPlaylistUrl, { method: 'GET' })
           if (checkResponse.ok) {
             playlistReady = true
             console.log(`HLS 플레이리스트 준비 완료 (${i + 1}초 후)`)

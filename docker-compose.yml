@@ -2,23 +2,25 @@ version: '3.8'
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mariadb:10.11  # MySQL 8.0 → MariaDB 10.11로 변경
     container_name: dailycam-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}
       MYSQL_DATABASE: dailycam
       MYSQL_USER: dailycam_user
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dailycam_pass_2024}
-      TZ: Asia/Seoul
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/scripts/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
       - ./backend/scripts/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      - ./backend/scripts/add_development_score_columns.sql:/docker-entrypoint-initdb.d/03_add_development_score_columns.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # MariaDB는 --default-authentication-plugin 옵션이 필요 없을 수 있음 (필요시 추가)
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}" ]
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}"]
+      # 또는: test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}"]
       timeout: 5s
       retries: 10
       interval: 10s

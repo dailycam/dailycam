@@ -585,7 +585,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
     console.log('✅ [Dashboard API] 백엔드 응답 받음:', data)
     console.log('📊 [Dashboard API] safetyScore:', data.safetyScore)
     console.log('📊 [Dashboard API] timelineEvents:', data.timelineEvents)
-    console.log('📊 [Dashboard API] hourlyStats:', data.hourly_stats)
+    console.log('📊 [Dashboard API] hourlyStats:', data.hourlyStats)
 
     // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
@@ -600,7 +600,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       risks: data.risks || [],
       recommendations: data.recommendations || [],
       timelineEvents: data.timelineEvents || [],
-      hourlyStats: data.hourly_stats || [],
+      hourlyStats: data.hourlyStats || [],
     }
   } catch (error: any) {
     console.error('대시보드 데이터 조회 실패:', error)
@@ -736,6 +736,62 @@ export async function getClipHighlights(
     throw error
   }
 }
+
+/**
+ * 세그먼트 분석 결과에서 클립 생성
+ */
+export async function generateClipsFromAnalysis(
+  cameraId: string,
+  segmentAnalysisId?: number
+): Promise<{ message: string; clips_created?: number; segment_analysis_id: number }> {
+  try {
+    const url = segmentAnalysisId
+      ? `${API_BASE_URL}/api/clips/generate/${cameraId}?segment_analysis_id=${segmentAnalysisId}`
+      : `${API_BASE_URL}/api/clips/generate/${cameraId}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '클립 생성 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('클립 생성 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 클립 삭제
+ */
+export async function deleteClip(clipId: number): Promise<{ message: string; clip_id: number }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/clips/${clipId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '클립 삭제 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('클립 삭제 실패:', error)
+    throw error
+  }
+}
+
 
 // ============================================================
 // Content Recommendation API (Gemini AI)
