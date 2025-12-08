@@ -3,7 +3,6 @@ import {
   TrendingUp,
   AlertTriangle,
   Activity,
-  Filter,
 } from 'lucide-react'
 import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
 import IncidentPieChart from '../components/Charts/IncidentPieChart'
@@ -14,7 +13,7 @@ export default function Analytics() {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
 
   // 데이터베이스에서 데이터 가져오기
   useEffect(() => {
@@ -330,29 +329,6 @@ function IncidentTypeItem({
       <div className={`w-3 h-3 rounded ${color}`}></div>
       <span className="text-sm text-gray-700 flex-1">{type}</span>
       <span className="text-sm font-semibold text-gray-900">{count}</span>
-    </div>
-  )
-}
-
-// Time Heatmap Bar Component
-function TimeHeatmapBar({ time, level }: { time: string; level: number }) {
-  const getColor = (level: number) => {
-    if (level >= 80) return 'bg-danger'
-    if (level >= 50) return 'bg-warning'
-    return 'bg-safe'
-  }
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-gray-600 w-24">{time}</span>
-      <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
-        <div
-          className={`h-full ${getColor(level)} transition-all duration-300 flex items-center justify-end pr-2`}
-          style={{ width: `${level}%` }}
-        >
-          <span className="text-xs text-white font-medium">{level}%</span>
-        </div>
-      </div>
     </div>
   )
 }

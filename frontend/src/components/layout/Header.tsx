@@ -1,7 +1,8 @@
-import { Bell, User, LogOut, ChevronDown, Menu, X } from 'lucide-react'
+import { Bell, User, LogOut, ChevronDown } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getAuthToken, removeAuthToken } from '../../lib/auth' // 이 줄만 남깁니다.
+import { getAuthToken, removeAuthToken } from '../../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 
 interface UserInfo {
@@ -97,7 +98,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
       }
 
       try {
-        const response = await fetch('http://localhost:8000/api/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -126,7 +127,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
 
     if (token) {
       try {
-        await fetch('http://localhost:8000/api/auth/logout-with-token', {
+        await fetch(`${API_BASE_URL}/api/auth/logout-with-token`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

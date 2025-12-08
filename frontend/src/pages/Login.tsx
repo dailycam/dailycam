@@ -1,9 +1,10 @@
 import { Camera } from 'lucide-react'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function Login() {
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트
-        window.location.href = 'http://localhost:8000/api/auth/google/login'
+        window.location.href = `${API_BASE_URL}/api/auth/google/login`
     }
 
     return (

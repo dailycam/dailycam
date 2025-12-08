@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { setAuthToken } from '../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function AuthCallback() {
     const [searchParams] = useSearchParams()
@@ -24,7 +25,7 @@ export default function AuthCallback() {
 
                 // 2. 사용자 정보 조회
                 setStatus('사용자 정보 확인 중...')
-                const response = await fetch('http://localhost:8000/api/auth/me', {
+                const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
@@ -66,16 +67,16 @@ export default function AuthCallback() {
                     setTimeout(() => {
                         console.log('[AuthCallback] AI 콘텐츠 미리 로드 시작')
                         Promise.all([
-                            fetch('http://localhost:8000/api/content/recommended-videos', {
+                            fetch(`${API_BASE_URL}/api/content/recommended-videos`, {
                                 headers: { Authorization: `Bearer ${token}` }
                             }),
-                            fetch('http://localhost:8000/api/content/recommended-blogs', {
+                            fetch(`${API_BASE_URL}/api/content/recommended-blogs`, {
                                 headers: { Authorization: `Bearer ${token}` }
                             }),
-                            fetch('http://localhost:8000/api/content/recommended-news', {
+                            fetch(`${API_BASE_URL}/api/content/recommended-news`, {
                                 headers: { Authorization: `Bearer ${token}` }
                             }),
-                            fetch('http://localhost:8000/api/content/trending', {
+                            fetch(`${API_BASE_URL}/api/content/trending`, {
                                 headers: { Authorization: `Bearer ${token}` }
                             })
                         ]).then(() => {

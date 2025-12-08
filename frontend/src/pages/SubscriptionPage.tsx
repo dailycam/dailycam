@@ -22,22 +22,65 @@ interface MeResponse {
 }
 
 // 🔥 백엔드 기본 URL (Vite .env에서 설정 가능)
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function SubscriptionPage() {
     const navigate = useNavigate()
     const [me, setMe] = useState<MeResponse | null>(null)
 
     useEffect(() => {
-        if (window.IMP) {
-            // .env: VITE_PORTONE_MERCHANT_ID=impXXXXXXX (포트원 가맹점 식별코드)
-            window.IMP.init(import.meta.env.VITE_PORTONE_MERCHANT_ID)
+        // PortOne 스크립트 로드 대기 및 초기화
+        let retryTimeout: NodeJS.Timeout | null = null
+        let retryCount = 0
+        const MAX_RETRIES = 50 // 5초 (50 * 100ms)
+        
+        const initPortOne = () => {
+            const merchantId = import.meta.env.VITE_PORTONE_MERCHANT_ID
+            
+            if (!merchantId) {
+                console.error('VITE_PORTONE_MERCHANT_ID가 설정되지 않았습니다.')
+                return
+            }
+
+            if (window.IMP) {
+                try {
+                    window.IMP.init(merchantId)
+                    console.log('PortOne 초기화 완료')
+                } catch (error) {
+                    console.error('PortOne 초기화 실패:', error)
+                }
+            } else {
+                // 스크립트가 아직 로드되지 않았으면 재시도
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++
+                    retryTimeout = setTimeout(initPortOne, 100)
+                } else {
+                    console.error('PortOne 스크립트 로드 실패: 시간 초과')
+                }
+            }
+        }
+
+        // 즉시 초기화 시도
+        initPortOne()
+
+        // 스크립트 로드 완료 대기
+        const handleLoad = () => {
+            retryCount = 0 // 리셋
+            initPortOne()
+        }
+        
+        if (document.readyState === 'complete') {
+            handleLoad()
+        } else {
+            window.addEventListener('load', handleLoad)
         }
 
         const fetchMe = async () => {
             const token = getAuthToken()
-            if (!token) return
+            if (!token) {
+                console.warn('토큰이 없습니다.')
+                return
+            }
 
             try {
                 const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
@@ -47,11 +90,14 @@ export default function SubscriptionPage() {
                 })
                 if (res.ok) {
                     const data = await res.json()
+                    console.log('사용자 정보 로드 완료:', data)
                     setMe({
                         id: data.id,
                         email: data.email,
                         name: data.name,
                     })
+                } else {
+                    console.error('사용자 정보 로드 실패:', res.status, res.statusText)
                 }
             } catch (e) {
                 console.error('failed to fetch /me', e)
@@ -59,12 +105,27 @@ export default function SubscriptionPage() {
         }
 
         fetchMe()
+
+        return () => {
+            if (retryTimeout) {
+                clearTimeout(retryTimeout)
+            }
+            window.removeEventListener('load', handleLoad)
+        }
     }, [])
 
     const handleBasicPlanPay = () => {
         const { IMP } = window
+        const merchantId = import.meta.env.VITE_PORTONE_MERCHANT_ID
+        
         if (!IMP) {
-            alert('결제 모듈이 로드되지 않았습니다.')
+            alert('결제 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.')
+            return
+        }
+
+        if (!merchantId) {
+            alert('결제 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.')
+            console.error('VITE_PORTONE_MERCHANT_ID가 설정되지 않았습니다.')
             return
         }
 

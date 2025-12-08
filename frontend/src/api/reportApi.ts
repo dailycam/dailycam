@@ -1,6 +1,5 @@
 import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import { API_BASE_URL } from '@/constants/api';
 
 export interface DailyReportResponse {
     date: string;
@@ -8,7 +7,7 @@ export interface DailyReportResponse {
 }
 
 export const fetchDailyReport = async (date: string): Promise<DailyReportResponse> => {
-    const response = await axios.get(`${API_BASE_URL}/reports/daily-summary`, {
+    const response = await axios.get(`${API_BASE_URL}/api/reports/daily-summary`, {
         params: { target_date: date }
     });
     return response.data;

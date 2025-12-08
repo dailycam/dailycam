@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getAuthHeader } from '../../../lib/auth';
 import { SafetyReportData, ChecklistItem } from '../types';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/constants/api';
 
 export const useSafetyReport = () => {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());

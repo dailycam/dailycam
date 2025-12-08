@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { getAuthToken } from '../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function ProtectedRoute() {
     const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
@@ -16,7 +17,7 @@ export default function ProtectedRoute() {
             }
 
             try {
-                const response = await fetch('http://localhost:8000/api/auth/me', {
+                const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },

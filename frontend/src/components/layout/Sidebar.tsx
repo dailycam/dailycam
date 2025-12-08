@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { getAuthToken } from '../../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 const navigation = [
   { name: '홈', href: '/home', icon: Home },
@@ -52,7 +53,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
       if (!token) return
 
       try {
-        const response = await fetch('http://localhost:8000/api/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

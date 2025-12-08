@@ -59,7 +59,7 @@ export const DevelopmentFrequencyChart = ({ dailyDevelopmentFrequency }: Develop
                                             }}
                                         />
                                         <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
-                                            {dailyDevelopmentFrequency.map((entry, index) => (
+                                            {dailyDevelopmentFrequency.map((_entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
                                             ))}
                                         </Bar>
