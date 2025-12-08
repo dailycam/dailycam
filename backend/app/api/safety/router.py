@@ -251,19 +251,20 @@ def get_safety_report_summary(
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     
     # 체크리스트 데이터 생성 (SafetyEvent 기반)
+    # 날짜 무관하게 전체 미해결 이슈를 조회 (항상 최신 상태 유지)
     checklist = []
     
-    # 최근 미해결 안전 이벤트 조회 (오늘 발생한 건만, 최대 50개 조회 후 중복 제거)
+    # 전체 기간의 미해결 안전 이벤트 조회 (위험도 높은 순으로 10개)
     recent_safety_events = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start,  # 오늘 발생한 건만 조회
+            # 날짜 필터 제거 - 전체 기간의 미해결 이슈 표시
             (SafetyEvent.resolved == False) | (SafetyEvent.resolved == None)  # 미해결 건만 조회
         )
         .order_by(SafetyEvent.event_timestamp.desc())
-        .limit(50)
+        .limit(50)  # 중복 제거 전 충분히 조회
         .all()
     )
 
