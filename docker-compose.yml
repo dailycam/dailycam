@@ -15,7 +15,6 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/scripts/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
       - ./backend/scripts/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
-      - ./backend/scripts/add_development_score_columns.sql:/docker-entrypoint-initdb.d/03_add_development_score_columns.sql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     # MariaDB는 --default-authentication-plugin 옵션이 필요 없을 수 있음 (필요시 추가)
     healthcheck:
@@ -56,6 +55,7 @@ services:
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
+      - ./backend:/app
     command: python run.py
     restart: unless-stopped
     networks:
@@ -82,6 +82,7 @@ services:
       - TZ=Asia/Seoul
     volumes:
       - ./backend/temp_videos:/app/temp_videos
+      - ./backend:/app
     command: python analysis_worker.py
     restart: unless-stopped
     networks:
@@ -108,6 +109,7 @@ services:
       - TZ=Asia/Seoul
     volumes:
       - ./backend/temp_videos:/app/temp_videos
+      - ./backend:/app
     command: python analysis_worker.py
     restart: unless-stopped
     networks:

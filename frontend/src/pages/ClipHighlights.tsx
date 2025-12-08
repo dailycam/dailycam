@@ -40,7 +40,7 @@ export default function ClipHighlights() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // 날짜 포맷팅
+  // 날짜 포맷팅 (KST 시간대로 표시)
   const formatDate = (dateStr: string | undefined): string => {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -49,7 +49,27 @@ export default function ClipHighlights() {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'Asia/Seoul', // KST로 변환
     })
+  }
+
+  // 클립 다운로드 함수
+  const handleDownload = async (clip: HighlightClip) => {
+    try {
+      // 비디오 파일 직접 다운로드 (정적 파일 서빙)
+      const videoUrl = `http://localhost:8000${clip.video_url}`
+
+      const a = document.createElement('a')
+      a.href = videoUrl
+      a.download = `${clip.title.replace(/[^a-zA-Z0-9가-힣]/g, '_')}_${clip.id}.mp4`
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch (error) {
+      console.error('다운로드 오류:', error)
+      alert('다운로드에 실패했습니다. 다시 시도해주세요.')
+    }
   }
 
   const renderClipCard = (clip: HighlightClip) => {
@@ -128,7 +148,13 @@ export default function ClipHighlights() {
           </div>
         </div>
         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
-          <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDownload(clip)
+            }}
+            className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2"
+          >
             <Download className="w-3 h-3" />
             다운로드
           </button>

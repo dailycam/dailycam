@@ -54,10 +54,7 @@ def get_development_summary(
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
     
-<<<<<<< HEAD
     # AnalysisLog에서 조회
-=======
->>>>>>> dda77d2c16b0511bc512a52eef66179833c51bdd
     today_logs = (
         db.query(AnalysisLog)
         .filter(
@@ -68,7 +65,6 @@ def get_development_summary(
         .all()
     )
     
-<<<<<<< HEAD
     # SegmentAnalysis에서도 조회 (HLS 스트리밍 시스템)
     camera_id = "camera-1"  # 추후 사용자별 카메라 매핑으로 변경
     today_segments = (
@@ -84,10 +80,6 @@ def get_development_summary(
     
     # 데이터가 없으면 기본값 반환
     if not today_logs and not today_segments:
-=======
-    if not today_logs:
-        # 데이터가 없으면 기본값 반환 (계산된 age_months 사용)
->>>>>>> dda77d2c16b0511bc512a52eef66179833c51bdd
         return {
             "age_months": age_months,
             "development_summary": "아직 분석된 데이터가 없습니다.",
@@ -105,7 +97,6 @@ def get_development_summary(
         }
     
     # 3. 오늘 분석된 영상들의 평균 발달 점수
-<<<<<<< HEAD
     # AnalysisLog + SegmentAnalysis 모두 포함
     today_dev_scores = []
     
@@ -125,12 +116,6 @@ def get_development_summary(
     print(f"[Development] 발달 점수 데이터: {today_dev_scores}")
     print(f"[Development] 평균 발달 점수: {avg_dev_score}")
     
-=======
-    today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
-    avg_dev_score = int(sum(today_dev_scores) / len(today_dev_scores)) if today_dev_scores else 0
-    
->>>>>>> dda77d2c16b0511bc512a52eef66179833c51bdd
-    
     # 4. 발달 오각형 점수 - 누적 추적 시스템 사용
     try:
         from app.services.development_tracking_service import DevelopmentTrackingService
@@ -147,10 +132,7 @@ def get_development_summary(
             "정서": []
         }
         
-<<<<<<< HEAD
         # AnalysisLog에서 수집
-=======
->>>>>>> dda77d2c16b0511bc512a52eef66179833c51bdd
         for log in today_logs:
             if log.development_radar_scores:
                 print(f"[Development] Log ID: {log.id}, Radar Scores: {log.development_radar_scores}")
@@ -159,7 +141,6 @@ def get_development_summary(
                     if score:
                         all_radar_scores[category].append(score)
         
-<<<<<<< HEAD
         # SegmentAnalysis에서도 수집
         for segment in today_segments:
             if segment.development_radar_scores:
@@ -168,9 +149,6 @@ def get_development_summary(
                     score = segment.development_radar_scores.get(category, 0)
                     if score:
                         all_radar_scores[category].append(score)
-        
-=======
->>>>>>> dda77d2c16b0511bc512a52eef66179833c51bdd
         # 카테고리별 평균 계산
         radar_scores = {}
         for category, scores in all_radar_scores.items():

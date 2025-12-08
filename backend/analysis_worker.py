@@ -212,8 +212,8 @@ class AnalysisWorker:
                 # 발달 점수 추가
                 development_score=development_analysis.get('development_score', 0),
                 development_radar_scores=development_analysis.get('development_radar_scores', {}),
-                # 클립 생성용 데이터
-                safety_incidents=safety_analysis.get('incident_events', []),
+                # 클립 생성용 데이터 (safety_events는 UI 표시용 title/description 포함)
+                safety_incidents=safety_analysis.get('safety_events', []),  # UI용 safety_events 사용
                 development_milestones=development_analysis.get('skills', [])
             )
             db.add(segment_analysis)
@@ -242,7 +242,29 @@ class AnalysisWorker:
             print(f"  🚨 사건 수: {job.incident_count}")
             print(f"  🎯 발달 점수: {segment_analysis.development_score}")
             
-            # 6. 파일 삭제 (옵션)
+            # 7. 하이라이트 클립 자동 생성
+            try:
+                from app.services.highlight_clip_service import HighlightClipService
+                
+                print(f"[워커 {self.worker_id}] 🎬 하이라이트 클립 생성 시작...")
+                clip_service = HighlightClipService(camera_id=job.camera_id)
+                clips = clip_service.create_clips_from_segment_analysis(
+                    segment_analysis=segment_analysis,
+                    db=db
+                )
+                
+                if clips:
+                    print(f"[워커 {self.worker_id}] ✅ 하이라이트 클립 {len(clips)}개 생성 완료")
+                    for clip in clips:
+                        print(f"  📹 {clip.get('video_url', 'N/A')}")
+                else:
+                    print(f"[워커 {self.worker_id}] ℹ️  생성된 클립 없음 (필터링 조건 미충족)")
+                    
+            except Exception as clip_error:
+                print(f"[워커 {self.worker_id}] ⚠️  클립 생성 실패 (분석은 완료됨): {clip_error}")
+                # 클립 생성 실패해도 분석은 성공으로 처리
+            
+            # 8. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
             if delete_after and video_path.exists():
                 try:

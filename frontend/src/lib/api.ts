@@ -695,6 +695,7 @@ export interface HighlightClip {
   description: string
   video_url: string
   thumbnail_url: string
+  download_url?: string  // 다운로드 URL
   category: string
   sub_category?: string
   importance?: string
