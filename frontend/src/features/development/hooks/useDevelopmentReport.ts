@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getDevelopmentData, DevelopmentData } from '../../../lib/api'
 import { getAuthToken } from '../../../lib/auth'
 import { RadarDataItem } from '../types'
+import { API_BASE_URL } from '@/constants/api'
 
 export const useDevelopmentReport = () => {
     const [date] = useState<Date>(new Date())
@@ -15,7 +16,7 @@ export const useDevelopmentReport = () => {
             if (!token) return
 
             try {
-                const response = await fetch('http://localhost:8000/api/auth/me', {
+                const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
                     headers: { Authorization: `Bearer ${token}` },
                 })
                 if (response.ok) {

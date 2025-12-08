@@ -17,6 +17,7 @@ import {
 import { motion } from 'motion/react'
 import Hls from 'hls.js'
 import { uploadVideoForStreaming, startHlsStream, stopHlsStream } from '../lib/api'
+import { API_BASE_URL } from '@/constants/api'
 
 interface RealtimeEvent {
   id: number
@@ -69,7 +70,7 @@ export default function Monitoring() {
     const checkAndConnectStream = async () => {
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/live-monitoring/stream-status/${selectedCamera}`
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
         )
         
         if (response.ok) {
@@ -79,7 +80,7 @@ export default function Monitoring() {
             console.log('서버에서 스트림 실행 중 감지, 자동 연결 시작...')
             
             // HLS 플레이어 연결
-            const fullPlaylistUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${data.playlist_url}`
+            const fullPlaylistUrl = `${API_BASE_URL}${data.playlist_url}`
             
             if (Hls.isSupported() && videoRef.current) {
               if (hlsRef.current) {
@@ -184,7 +185,7 @@ export default function Monitoring() {
     const fetchRealtimeEvents = async () => {
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/live-monitoring/events/${selectedCamera}/latest?limit=50`
+          `${API_BASE_URL}/api/live-monitoring/events/${selectedCamera}/latest?limit=50`
         )
         if (response.ok) {
           const data = await response.json()
@@ -260,7 +261,7 @@ export default function Monitoring() {
       // API URL이 상대 경로인 경우 절대 경로로 변환 (필요 시)
       const fullPlaylistUrl = playlistUrl.startsWith('http')
         ? playlistUrl
-        : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${playlistUrl}`
+        : `${API_BASE_URL}${playlistUrl}`
 
       if (Hls.isSupported()) {
         if (hlsRef.current) {
@@ -365,7 +366,7 @@ export default function Monitoring() {
       const playlistUrl = response.playlist_url
       const fullPlaylistUrl = playlistUrl.startsWith('http')
         ? playlistUrl
-        : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${playlistUrl}`
+        : `${API_BASE_URL}${playlistUrl}`
 
       // 플레이리스트가 생성될 때까지 최대 20초 대기
       console.log('HLS 플레이리스트 생성 대기 중...')

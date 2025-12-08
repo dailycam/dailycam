@@ -22,8 +22,7 @@ interface MeResponse {
 }
 
 // 🔥 백엔드 기본 URL (Vite .env에서 설정 가능)
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function SubscriptionPage() {
     const navigate = useNavigate()
