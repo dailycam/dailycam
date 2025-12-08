@@ -1,4 +1,4 @@
-import { Baby, Download, Calendar as CalendarIcon } from 'lucide-react'
+import { Baby, Download } from 'lucide-react'
 import { useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
@@ -16,7 +16,9 @@ export default function DevelopmentReport() {
   const reportRef = useRef<HTMLDivElement>(null)
 
   const {
-    date,
+    selectedDate,
+    handleDateChange,
+    availableDates,
     developmentData,
     radarData,
     strongestArea,
@@ -75,7 +77,7 @@ export default function DevelopmentReport() {
         const imgHeight = (canvas.height * imgWidth) / canvas.width
 
         pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
-        pdf.save(`발달리포트_${formatDate(date)}.pdf`)
+        pdf.save(`발달리포트_${formatDate(selectedDate)}.pdf`)
       }
     } catch (error) {
       console.error('PDF 다운로드 실패:', error)
@@ -92,9 +94,18 @@ export default function DevelopmentReport() {
         icon={Baby}
         actions={
           <>
-            <Button variant="secondary" icon={CalendarIcon}>
-              {formatDate(date)}
-            </Button>
+            {/* 날짜 선택 드롭다운 */}
+            <select
+              value={selectedDate.toISOString().split('T')[0]}
+              onChange={(e) => handleDateChange(new Date(e.target.value))}
+              className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {availableDates.map((date) => (
+                <option key={date.toISOString()} value={date.toISOString().split('T')[0]}>
+                  {formatDate(date)}
+                </option>
+              ))}
+            </select>
             <Button variant="primary" icon={Download} onClick={handleDownload}>
               리포트 다운로드
             </Button>

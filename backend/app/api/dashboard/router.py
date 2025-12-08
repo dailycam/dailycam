@@ -18,6 +18,7 @@ router = APIRouter()
 
 class DashboardSummaryRequest(BaseModel):
     range_days: int = 7
+    target_date: Optional[str] = None  # YYYY-MM-DD 형식
 
 
 @router.post("/summary")
@@ -29,16 +30,33 @@ def get_dashboard_summary(
     """
     대시보드용 요약 데이터 조회
     
-    오늘(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
+    특정 날짜(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
+    최근 7일 이내의 날짜만 조회 가능합니다.
     """
+    # 조회할 날짜 설정 (기본값: 오늘)
+    if request.target_date:
+        try:
+            query_date = datetime.strptime(request.target_date, "%Y-%m-%d")
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        query_date = datetime.now()
+    
+    # 최근 7일 이내인지 확인
+    days_ago = (datetime.now() - query_date).days
+    if days_ago < 0 or days_ago > 6:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Only data from the last 7 days can be queried")
+    
     # 1. 날짜 범위 설정
     range_days = request.range_days
     end_date = datetime.now()
     start_date = end_date - timedelta(days=range_days)
     
-    # 2. 오늘 날짜의 모든 분석 로그 조회 (일일 집계)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    # 2. 선택한 날짜의 모든 분석 로그 조회 (일일 집계)
+    today_start = query_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = query_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     print(f"[Dashboard] 오늘 날짜 범위: {today_start} ~ {today_end}")
     print(f"[Dashboard] User ID: {user_id}")
