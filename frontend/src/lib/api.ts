@@ -556,9 +556,10 @@ export interface DashboardData {
 
 /**
  * 대시보드 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
  * @param rangeDays 조회할 일수 (기본값: 7)
  */
-export async function getDashboardData(rangeDays: number = 7): Promise<DashboardData> {
+export async function getDashboardData(targetDate?: string, rangeDays: number = 7): Promise<DashboardData> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dashboard/summary`, {
       method: 'POST',
@@ -568,6 +569,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       },
       body: JSON.stringify({
         range_days: rangeDays,
+        target_date: targetDate,
       }),
     })
 
@@ -646,10 +648,15 @@ export interface DevelopmentData {
 
 /**
  * 발달 리포트 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
  */
-export async function getDevelopmentData(days: number = 7): Promise<DevelopmentData> {
+export async function getDevelopmentData(targetDate?: string): Promise<DevelopmentData> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/development/summary?days=${days}`, {
+    const url = targetDate
+      ? `${API_BASE_URL}/api/development/summary?target_date=${targetDate}`
+      : `${API_BASE_URL}/api/development/summary`
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         ...getAuthHeader(), // 인증 헤더 추가

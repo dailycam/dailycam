@@ -5,19 +5,20 @@ import { SafetyReportData, ChecklistItem } from '../types';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const useSafetyReport = () => {
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [periodType, setPeriodType] = useState<'week' | 'month'>('week');
     const [safetyData, setSafetyData] = useState<SafetyReportData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [date] = useState<Date>(new Date());
     const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>([]);
 
-    // 실제 데이터 가져오기
+    // 실제 데이터 가져오기 (선택한 날짜 기준)
     useEffect(() => {
         async function loadSafetyData() {
             try {
                 setLoading(true)
+                const dateStr = selectedDate.toISOString().split('T')[0]; // YYYY-MM-DD 형식
                 const response = await fetch(
-                    `${API_BASE_URL}/api/safety/summary?period_type=${periodType}`,
+                    `${API_BASE_URL}/api/safety/summary?target_date=${dateStr}&period_type=${periodType}`,
                     {
                         method: 'GET',
                         headers: {
@@ -77,7 +78,7 @@ export const useSafetyReport = () => {
         }
 
         loadSafetyData()
-    }, [periodType])
+    }, [selectedDate, periodType])
 
     // 데이터 로드 시 로컬 체크리스트 초기화
     useEffect(() => {
@@ -158,12 +159,31 @@ export const useSafetyReport = () => {
         };
     }, []);
 
+    // 날짜 변경 핸들러
+    const handleDateChange = (newDate: Date) => {
+        setSelectedDate(newDate);
+    };
+
+    // 사용 가능한 날짜 범위 (최근 7일)
+    const getAvailableDates = (): Date[] => {
+        const dates: Date[] = []
+        const today = new Date()
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() - i)
+            dates.push(date)
+        }
+        return dates
+    }
+
     return {
+        selectedDate,
+        handleDateChange,
+        availableDates: getAvailableDates(),
         periodType,
         setPeriodType,
         safetyData,
         loading,
-        date,
         localChecklist,
         handleCheck
     };
