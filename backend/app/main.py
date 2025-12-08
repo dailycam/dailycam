@@ -211,9 +211,14 @@ def create_app() -> FastAPI:
     )
 
     # 세션 미들웨어 추가 (OAuth에 필요)
+    # HTTPS 환경에서 쿠키 설정 추가
+    is_production = os.getenv("ENVIRONMENT") == "production"
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
+        same_site="lax",  # OAuth 리다이렉트를 위해 lax 사용
+        https_only=False,  # Nginx가 HTTPS를 처리하므로 False
+        max_age=3600,  # 세션 유효 시간 (1시간)
     )
 
     # ----------------------------------------------------
