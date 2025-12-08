@@ -38,7 +38,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
-    redirect_uri = request.url_for('google_callback')
+    # HTTPS 환경에서 올바른 redirect_uri 생성
+    # request.url_for()는 상대 경로를 반환하므로, 절대 URL로 변환
+    base_url = str(request.base_url).rstrip('/')
+    if base_url.startswith('http://'):
+        # Nginx가 HTTPS를 처리하므로, X-Forwarded-Proto 헤더 확인
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            base_url = base_url.replace('http://', 'https://', 1)
+    
+    callback_path = request.url_for('google_callback')
+    redirect_uri = f"{base_url}{callback_path}"
+    
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
