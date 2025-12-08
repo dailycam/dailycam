@@ -24,7 +24,7 @@ DailyCam의 영상 파일 저장소를 로컬 파일 시스템에서 AWS S3로 �
 
 ```bash
 # AWS CLI 설치 후
-aws s3 mb s3://dailycam-videos --region ap-northeast-2
+aws s3 mb s3://dailycam-hls-prod --region ap-northeast-2
 
 # 버킷 정책 설정 (공개 읽기)
 aws s3api put-bucket-policy --bucket dailycam-videos --policy file://bucket-policy.json
