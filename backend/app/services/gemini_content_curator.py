@@ -163,36 +163,39 @@ class GeminiContentCurator:
         
         return results if results else self._get_fallback_trending(child_age_months)
     
-    async def get_recommended_news(self, child_age_months: int) -> List[Dict[str, Any]]:
+    async def get_recommended_news(self, child_age_months: int, location: str = None) -> List[Dict[str, Any]]:
         """
         아이 개월 수에 맞는 육아 뉴스 추천
         
         Args:
             child_age_months: 아이 개월 수
+            location: 지역명 (예: "서울", "부산") - 제공되면 지역 뉴스 우선
             
         Returns:
             추천 뉴스 리스트
         """
         development_stage = get_development_stage(child_age_months)
         
-        # 뉴스 검색 쿼리 생성 (더 구체적으로)
+        # 뉴스 검색 쿼리 생성 (육아 관련성 강화)
         news_queries = [
-            '육아 뉴스',
-            '아기 건강 뉴스',
-            '육아 정책'
+            '육아 정책 뉴스',
+            '아기 건강 육아 뉴스',
+            '영유아 보육 뉴스',
+            '어린이집 유치원 뉴스'
         ]
         
         # 웹 검색으로 뉴스 찾기
         all_news = []
         for query in news_queries:  # 모든 쿼리 사용
-            news = self.web_tool.search_news(query, max_results=5)
+            news = self.web_tool.search_news(query, max_results=5, location=location)
             all_news.extend(news)
         
         if not all_news:
             return self._get_fallback_news(child_age_months)
         
         # 검색 결과를 뉴스 형식으로 변환
-        print("✅ [News] 검색 결과 그대로 반환 (빠른 응답)")
+        location_info = f" ({location} 지역)" if location else ""
+        print(f"✅ [News] 검색 결과 그대로 반환{location_info} (빠른 응답)")
         results = []
         for idx, news in enumerate(all_news):
             results.append({
