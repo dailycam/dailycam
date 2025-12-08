@@ -14,6 +14,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { getAuthToken, removeAuthToken } from '../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 interface UserInfo {
   id: number
@@ -90,7 +91,7 @@ export default function Settings() {
       }
 
       try {
-        const response = await fetch('http://localhost:8000/api/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -150,7 +151,7 @@ export default function Settings() {
         const token = getAuthToken()
 
         // 즉시 서버에 저장
-        const response = await fetch('http://localhost:8000/api/profile/setup', {
+        const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -167,7 +168,7 @@ export default function Settings() {
         }
 
         // 사용자 정보 다시 가져오기
-        const meResponse = await fetch('http://localhost:8000/api/auth/me', {
+        const meResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -208,7 +209,7 @@ export default function Settings() {
     try {
       setIsCancelling(true)
       const token = getAuthToken()
-      const res = await fetch('http://localhost:8000/api/payments/subscribe/basic/cancel', {
+      const res = await fetch(`${API_BASE_URL}/api/payments/subscribe/basic/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +284,7 @@ export default function Settings() {
       const token = getAuthToken()
 
       // 프로필 업데이트 API 호출
-      const response = await fetch('http://localhost:8000/api/profile/setup', {
+      const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -298,7 +299,7 @@ export default function Settings() {
       }
 
       // 사용자 정보 다시 가져오기
-      const meResponse = await fetch('http://localhost:8000/api/auth/me', {
+      const meResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

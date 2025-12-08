@@ -12,7 +12,6 @@ import {
   MapPin,
   Upload,
   X,
-  Settings,
 } from 'lucide-react'
 import { uploadVideoForStreaming, getStreamUrl, stopStream } from '../lib/api'
 
@@ -640,7 +639,7 @@ export default function LiveMonitoring() {
 
 // Camera Thumbnail Component
 function CameraThumbnail({
-  id,
+  id: _id,
   name,
   isActive,
   onClick,

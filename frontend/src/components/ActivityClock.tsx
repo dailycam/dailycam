@@ -22,7 +22,7 @@ export const ActivityClock: React.FC<ActivityClockProps> = ({
   events,
   currentScore = 89,
   developmentScore = 70,
-  safetyScore = 95
+  safetyScore: _safetyScore = 95
 }) => {
   // SVG 설정
   const size = 340;
@@ -66,9 +66,6 @@ export const ActivityClock: React.FC<ActivityClockProps> = ({
   const needleRad = (currentDegree - 90) * Math.PI / 180;
   const needleX = center + (radius.inner - 20) * Math.cos(needleRad);
   const needleY = center + (radius.inner - 20) * Math.sin(needleRad);
-
-  // 발달 점수를 원호로 변환 (0-100% -> 0-360도)
-  const devScoreAngle = (developmentScore / 100) * 360;
   
   // 안전 위험 시간대 필터링
   const safetyEvents = events.filter(e => e.type === 'safety');
