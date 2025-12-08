@@ -75,16 +75,12 @@ export default function SubscriptionPage() {
             window.addEventListener('load', handleLoad)
         }
 
-        return () => {
-            if (retryTimeout) {
-                clearTimeout(retryTimeout)
-            }
-            window.removeEventListener('load', handleLoad)
-        }
-
         const fetchMe = async () => {
             const token = getAuthToken()
-            if (!token) return
+            if (!token) {
+                console.warn('토큰이 없습니다.')
+                return
+            }
 
             try {
                 const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
@@ -94,11 +90,14 @@ export default function SubscriptionPage() {
                 })
                 if (res.ok) {
                     const data = await res.json()
+                    console.log('사용자 정보 로드 완료:', data)
                     setMe({
                         id: data.id,
                         email: data.email,
                         name: data.name,
                     })
+                } else {
+                    console.error('사용자 정보 로드 실패:', res.status, res.statusText)
                 }
             } catch (e) {
                 console.error('failed to fetch /me', e)
@@ -106,6 +105,13 @@ export default function SubscriptionPage() {
         }
 
         fetchMe()
+
+        return () => {
+            if (retryTimeout) {
+                clearTimeout(retryTimeout)
+            }
+            window.removeEventListener('load', handleLoad)
+        }
     }, [])
 
     const handleBasicPlanPay = () => {
