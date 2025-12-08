@@ -21,7 +21,6 @@ export const ActivityTable: React.FC<ActivityTableProps> = ({
         if (scrollContainerRef.current) {
             const currentHour = new Date().getHours()
             const columnWidth = 256 // w-64 = 16rem = 256px
-            const categoryWidth = 128 // w-32 = 8rem = 128px (첫 번째 컬럼)
 
             // (현재 시간 - 2) 위치로 이동. 최소 0시.
             const targetHour = Math.max(0, currentHour - 2)

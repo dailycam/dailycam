@@ -10,8 +10,8 @@ interface VideoPlayerProps {
 export default function VideoPlayer({ title, videoUrl, onClose }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(30) // Mock duration
+  const [currentTime] = useState(0)
+  const [duration] = useState(30) // Mock duration
 
   const progress = (currentTime / duration) * 100
 

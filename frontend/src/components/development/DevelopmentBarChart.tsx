@@ -38,7 +38,7 @@ export const DevelopmentBarChart = ({ data }: DevelopmentBarChartProps) => {
                     }}
                 />
                 <Bar dataKey="count" name="감지 횟수" radius={[8, 8, 0, 0]}>
-                    {data.map((entry, index) => (
+                    {data.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={`url(#gradient-${index})`} />
                     ))}
                 </Bar>
