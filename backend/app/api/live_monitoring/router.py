@@ -17,6 +17,8 @@ from app.services.live_monitoring.segment_analyzer import (
     start_segment_analysis_for_camera,
     stop_segment_analysis_for_camera
 )
+from app.utils.s3_utils import s3_client
+import os
 
 router = APIRouter()
 
@@ -35,35 +37,63 @@ async def upload_video_for_streaming(
     video: UploadFile = File(..., description="업로드할 비디오 파일")
 ):
     """
-    비디오 파일 업로드 (기존 영상 저장용)
-    업로드된 영상을 short 또는 medium 폴더에 저장
+    비디오 파일 업로드 (S3 또는 로컬 저장)
+    업로드된 영상을 S3에 저장하고, 로컬에도 백업 저장 (선택)
     """
     if not video.content_type or not video.content_type.startswith('video/'):
         raise HTTPException(status_code=400, detail="비디오 파일만 업로드 가능합니다")
     
-    # 비디오 길이에 따라 short 또는 medium 폴더에 저장
-    # 여기서는 기본적으로 short에 저장
-    video_dir = Path(f"videos/{camera_id}/short")
-    video_dir.mkdir(parents=True, exist_ok=True)
+    from app.utils.s3_utils import s3_client
+    import io
     
     # 타임스탬프를 포함한 파일명 생성
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"uploaded_{timestamp}_{video.filename}"
-    file_path = video_dir / filename
     
-    # 파일 저장
+    # 파일 내용 읽기
     content = await video.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_size_mb = len(content) / 1024 / 1024
     
-    print(f"[비디오 업로드] {camera_id}: {filename} ({len(content)/1024/1024:.2f}MB)")
+    # S3 키 생성 (videos/{camera_id}/short/{filename})
+    s3_key = f"videos/{camera_id}/short/{filename}"
+    
+    video_url = None
+    local_path = None
+    
+    # S3에 업로드 시도
+    if s3_client.is_enabled():
+        try:
+            # BytesIO로 변환하여 업로드
+            file_obj = io.BytesIO(content)
+            video_url = s3_client.upload_fileobj(
+                file_obj,
+                s3_key,
+                content_type=video.content_type,
+                make_public=True  # 공개 읽기 권한
+            )
+            print(f"[비디오 업로드] S3 업로드 완료: {camera_id}: {filename} ({file_size_mb:.2f}MB) -> {video_url}")
+        except Exception as e:
+            print(f"[비디오 업로드] S3 업로드 실패: {e}, 로컬 저장소로 폴백")
+    
+    # 로컬에도 저장 (S3 실패 시 또는 백업용)
+    if not video_url or os.getenv('SAVE_VIDEO_LOCALLY', 'true').lower() == 'true':
+        video_dir = Path(f"videos/{camera_id}/short")
+        video_dir.mkdir(parents=True, exist_ok=True)
+        local_path = video_dir / filename
+        
+        with open(local_path, "wb") as f:
+            f.write(content)
+        print(f"[비디오 업로드] 로컬 저장 완료: {camera_id}: {filename} ({file_size_mb:.2f}MB)")
     
     return {
         "camera_id": camera_id,
-        "video_path": str(file_path),
         "filename": filename,
+        "video_url": video_url,  # S3 URL (있으면)
+        "video_path": str(local_path) if local_path else None,  # 로컬 경로 (있으면)
+        "s3_key": s3_key if s3_client.is_enabled() else None,
         "message": "비디오 업로드 완료",
-        "stream_url": f"/api/live-monitoring/stream/{camera_id}"
+        "stream_url": f"/api/live-monitoring/stream/{camera_id}",
+        "storage": "s3" if video_url else "local"
     }
 
 

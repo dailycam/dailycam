@@ -25,3 +25,10 @@ passlib[bcrypt]>=1.7.4
 tavily-python>=0.3.0
 beautifulsoup4>=4.12.0
 duckduckgo-search>=6.0.0
+
+# AWS S3
+boto3>=1.34.0
+botocore>=1.34.0
+
+# 마이그레이션 스크립트용 (선택사항)
+tqdm>=4.66.0
