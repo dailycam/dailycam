@@ -21,6 +21,7 @@ export interface HourlyStat {
     safetyScore: number
     developmentScore: number
     eventCount: number
+    analysisCount?: number  // VLM 분석 횟수 (시간대별)
 }
 
 export interface DailyStats {

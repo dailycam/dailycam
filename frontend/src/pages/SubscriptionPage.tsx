@@ -103,7 +103,7 @@ export default function SubscriptionPage() {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+                                    Authorization: `Bearer ${getAuthToken()}`,
                                 },
                                 body: JSON.stringify({
                                     imp_uid: rsp.imp_uid,
@@ -129,7 +129,7 @@ export default function SubscriptionPage() {
                         try {
                             const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
                                 headers: {
-                                    Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+                                    Authorization: `Bearer ${getAuthToken()}`,
                                 },
                             })
                             if (meRes.ok) {

@@ -8,10 +8,44 @@ from sqlalchemy.orm import Session
 from app.models.analysis import AnalysisLog, SafetyEvent, DevelopmentEvent, SeverityLevel, DevelopmentCategory
 from app.models.clip import HighlightClip, ClipCategory
 
+import os
+import subprocess
+from pathlib import Path
 
 class AnalysisService:
     """분석 결과 저장 서비스"""
     
+    @staticmethod
+    def _generate_thumbnail(video_path: str, output_path: str, time_offset: int = 0) -> str:
+        """FFmpeg를 사용하여 비디오에서 썸네일 추출"""
+        try:
+            # 윈도우 환경 등에서 FFmpeg 경로 문제 생길 수 있으므로 절대 경로 확인 또는 환경 변수 의존
+            # Docker 내부에서는 ffmpeg가 PATH에 있음
+            
+            # 썸네일 저장 디렉토리 생성
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # 이미 존재하면 건너뜀 (중복 생성 방지)
+            if os.path.exists(output_path):
+                return output_path
+
+            # FFmpeg 명령어: 해당 시간(-ss)의 프레임 하나(-vframes 1)를 추출
+            # -y: 덮어쓰기 허용
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", str(time_offset),
+                "-i", video_path,
+                "-vframes", "1",
+                "-q:v", "5",  # 품질 (1-31, 낮을수록 좋음)
+                output_path
+            ]
+            
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return output_path
+        except Exception as e:
+            print(f"❌ 썸네일 생성 실패: {e}")
+            return ""
+
     @staticmethod
     def save_analysis_result(
         db: Session,
@@ -74,6 +108,26 @@ class AnalysisService:
         
         db.add(analysis_log)
         db.flush()  # ID를 얻기 위해 flush
+        # ============================================================
+        # video_path를 웹 접근 가능한 URL로 변환
+        # Docker 내부 경로: /app/videos/... -> 웹 경로: /videos/...
+        # ============================================================
+        web_video_url = video_path
+        if video_path.startswith("/app/videos"):
+            web_video_url = video_path.replace("/app/videos", "/videos")
+        elif video_path.startswith("videos"): # 상대 경로일 경우
+             web_video_url = "/" + video_path
+        
+        # 윈도우 로컬 테스트 환경 대응 (c:\Users... -> /videos/...)
+        if "videos" in video_path and "\\" in video_path:
+             # 윈도우 경로를 분리해서 videos 이후 부분만 추출
+             try:
+                 parts = video_path.split("videos")
+                 if len(parts) > 1:
+                     web_video_url = "/videos" + parts[1].replace("\\", "/")
+             except:
+                 pass
+
         
         # SafetyEvent 저장
         safety_events_data = safety_analysis.get("safety_events", [])
@@ -105,12 +159,30 @@ class AnalysisService:
         development_events_data = development_analysis.get("development_events", [])
         for event_data in development_events_data:
             category_str = event_data.get("category", "운동")
-            try:
-                category = DevelopmentCategory(category_str)
-            except ValueError:
-                # 알 수 없는 값이면 "운동"으로 기본값 설정
-                category = DevelopmentCategory.MOTOR
-                print(f"⚠️ 알 수 없는 category 값: {category_str}, '운동'으로 설정")
+            
+            # 한글 카테고리 매핑
+            category_map = {
+                "대근육": DevelopmentCategory.GROSS_MOTOR,
+                "소근육": DevelopmentCategory.FINE_MOTOR,
+                "대근육운동": DevelopmentCategory.GROSS_MOTOR,
+                "소근육운동": DevelopmentCategory.FINE_MOTOR,
+                "언어": DevelopmentCategory.LANGUAGE,
+                "인지": DevelopmentCategory.COGNITIVE,
+                "사회성": DevelopmentCategory.SOCIAL,
+                "정서": DevelopmentCategory.SOCIAL,  # "사회정서"로 통합
+                "사회정서": DevelopmentCategory.SOCIAL,
+                "적응": DevelopmentCategory.SOCIAL,  # "사회정서"로 통합
+            }
+            
+            if category_str in category_map:
+                category = category_map[category_str]
+            else:
+                try:
+                    category = DevelopmentCategory(category_str)
+                except ValueError:
+                    # 알 수 없는 값이면 "운동"으로 기본값 설정
+                    category = DevelopmentCategory.MOTOR
+                    print(f"⚠️ 알 수 없는 category 값: {category_str}, '운동'으로 설정")
             
             development_event = DevelopmentEvent(
                 analysis_log_id=analysis_log.id,
@@ -121,52 +193,186 @@ class AnalysisService:
             )
             db.add(development_event)
         
-        # HighlightClip 저장
-        highlight_clips_data = analysis_result.get("highlight_clips", [])
-        for clip_data in highlight_clips_data:
-            category_str = clip_data.get("category", "발달")
-            try:
-                category = ClipCategory(category_str)
-            except ValueError:
-                # 알 수 없는 값이면 "발달"으로 기본값 설정
-                category = ClipCategory.DEVELOPMENT
-                print(f"⚠️ 알 수 없는 category 값: {category_str}, '발달'으로 설정")
+        # ============================================================
+        # HighlightClip 자동 생성 (이벤트 기반)
+        # ============================================================
+        # 사용자의 요청에 따라 특정 조건의 이벤트만 클립으로 저장합니다.
+        
+        # 1. 안전 이벤트 처리 (사고/위험/주의)
+        # VLM의 safety_events 리스트를 순회하며 클립 생성
+        for event_data in safety_events_data:
+            severity_str = event_data.get("severity", "권장")
             
-            # timestamp_range에서 duration_seconds 계산
-            duration_seconds = None
-            timestamp_range = clip_data.get("timestamp_range")
-            if timestamp_range and "-" in timestamp_range:
-                try:
-                    start_str, end_str = timestamp_range.split("-")
-                    # HH:MM:SS 형식을 초로 변환
-                    def time_to_seconds(time_str):
-                        parts = time_str.strip().split(":")
+            # 클립 생성 조건: 사고/위험/주의 단계일 때만 (권장 제외)
+            if severity_str in ["사고", "사고발생", "위험", "주의"]:
+                # timestamp_range 파싱
+                duration_seconds = 0
+                timestamp_range = event_data.get("timestamp_range", "")
+                if timestamp_range and "-" in timestamp_range:
+                    try:
+                        start_str, end_str = timestamp_range.split("-")
+                        def time_to_seconds(time_str):
+                            parts = time_str.strip().split(":")
+                            if len(parts) == 3:
+                                h, m, s = map(int, parts)
+                                return h * 3600 + m * 60 + s
+                            return 0
+                        duration_seconds = time_to_seconds(end_str) - time_to_seconds(start_str)
+                    except:
+                        pass
+                
+                # 중요도 매핑
+                importance_map = {
+                    "사고": "high", "사고발생": "high",
+                    "위험": "high",
+                    "주의": "warning",
+                    "권장": "medium"
+                }
+                
+                # 썸네일 생성
+                thumbnail_url = ""
+                # 시작 시간 계산 (초)
+                start_seconds = 0
+                if timestamp_range and "-" in timestamp_range:
+                    try:
+                        start_str = timestamp_range.split("-")[0].strip()
+                        parts = start_str.split(":")
                         if len(parts) == 3:
-                            h, m, s = map(int, parts)
-                            return h * 3600 + m * 60 + s
-                        return 0
+                            start_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                    except:
+                        pass
+                
+                # 썸네일 파일 경로 설정 (public/thumbnails/...)
+                # Docker 내부 경로 기준: /app/videos/... -> /app/videos/thumbnails/...
+                # video_path 예: /app/videos/camera-1/short/video.mp4
+                try:
+                    video_dir = os.path.dirname(video_path)
+                    video_name = os.path.basename(video_path)
+                    thumb_filename = f"thumb_{video_name}_{start_seconds}_{severity_str}.jpg"
+                    thumb_path = os.path.join(video_dir, "thumbnails", thumb_filename)
                     
-                    start_sec = time_to_seconds(start_str)
-                    end_sec = time_to_seconds(end_str)
-                    duration_seconds = end_sec - start_sec
+                    # 실제 생성 실행 (시작 시간에서 1초 뒤 장면 추출)
+                    if AnalysisService._generate_thumbnail(video_path, thumb_path, start_seconds + 1):
+                         # DB에 저장할 URL
+                         # thumb_path: /app/videos/camera-1/thumbnails/thumb.jpg
+                         # URL: /videos/camera-1/thumbnails/thumb.jpg
+                         if thumb_path.startswith("/app/videos"):
+                             thumbnail_url = thumb_path.replace("/app/videos", "/videos")
+                         elif "videos" in thumb_path:
+                             # 윈도우 등 기타 환경 대응
+                             try:
+                                 # videos 디렉토리 뒷부분만 따서 URL화
+                                 rel_path = thumb_path[thumb_path.find("videos"):]
+                                 thumbnail_url = "/" + rel_path.replace("\\", "/")
+                                 if thumbnail_url.startswith("/videos/videos"): # 중복 방지
+                                     thumbnail_url = thumbnail_url.replace("/videos/videos", "/videos")
+                             except:
+                                 pass
                 except Exception as e:
-                    print(f"⚠️ timestamp_range 파싱 실패: {timestamp_range}, {e}")
+                    print(f"⚠️ 썸네일 경로 설정 실패: {e}")
+
+                safety_clip = HighlightClip(
+                    title=f"[안전] {event_data.get('title', '안전 이벤트')}",
+                    description=event_data.get("description"),
+                    video_url=web_video_url,  # 웹 접근 가능한 URL 사용
+                    thumbnail_url=thumbnail_url,
+                    category=ClipCategory.SAFETY,
+                    sub_category=severity_str,
+                    importance=importance_map.get(severity_str, "medium"),
+                    duration_seconds=duration_seconds,
+                    analysis_log_id=analysis_log.id
+                )
+                db.add(safety_clip)
+                print(f"🎬 [Clip] 안전 클립 생성됨: {safety_clip.title} ({severity_str})")
+
+        # 2. 발달 이벤트 처리 (최초발생/다음단계징후)
+        
+        # (A) 일반 발달 이벤트 중 '최초' 키워드가 있는 경우
+        for event_data in development_events_data:
+            title = event_data.get("title", "")
+            description = event_data.get("description", "")
             
-            # video_url: VLM이 제공하지 않으므로 분석의 video_path 사용
-            video_url = clip_data.get("video_url") or video_path
+            # 단순 키워드 매칭으로 '최초' 감지
+            # TODO: 프롬프트 개선을 통해 flags 필드를 추가하면 더 정확해짐
+            is_new_skill = any(keyword in title for keyword in ["최초", "처음", "성공", "새로운"])
             
-            highlight_clip = HighlightClip(
-                title=clip_data.get("title", ""),
-                description=clip_data.get("description"),
-                video_url=video_url,
-                thumbnail_url=clip_data.get("thumbnail_url"),
-                category=category,
-                sub_category=clip_data.get("sub_category"),
-                importance=clip_data.get("importance", "medium"),
-                duration_seconds=duration_seconds,
-                analysis_log_id=analysis_log.id,  # 관계 연결
-            )
-            db.add(highlight_clip)
+            if is_new_skill:
+                # 발달 썸네일 (이벤트 발생 시점은 보통 앞부분)
+                thumbnail_url = ""
+                try:
+                    video_dir = os.path.dirname(video_path)
+                    video_name = os.path.basename(video_path)
+                    # 발달은 정확한 타임스탬프가 없을 수 있으므로 5초 지점(또는 10%) 추출
+                    # TODO: DevelopmentEvent에도 timestamp_range가 있으면 그걸 써야 함
+                    capture_time = 5 
+                    thumb_filename = f"thumb_{video_name}_dev_{title[:5]}.jpg"
+                    thumb_path = os.path.join(video_dir, "thumbnails", thumb_filename)
+                    
+                    if AnalysisService._generate_thumbnail(video_path, thumb_path, capture_time):
+                        if thumb_path.startswith("/app/videos"):
+                            thumbnail_url = thumb_path.replace("/app/videos", "/videos")
+                        elif "videos" in thumb_path:
+                            try:
+                                rel_path = thumb_path[thumb_path.find("videos"):]
+                                thumbnail_url = "/" + rel_path.replace("\\", "/")
+                                if thumbnail_url.startswith("/videos/videos"):
+                                     thumbnail_url = thumbnail_url.replace("/videos/videos", "/videos")
+                            except:
+                                pass
+                except:
+                    pass
+
+                dev_clip = HighlightClip(
+                    title=f"[발달] {title}",
+                    description=description,
+                    video_url=web_video_url,
+                    thumbnail_url=thumbnail_url,
+                    category=ClipCategory.DEVELOPMENT,
+                    sub_category="최초발생",
+                    importance="high",  # 발달 이정표는 중요함
+                    analysis_log_id=analysis_log.id
+                )
+                db.add(dev_clip)
+                print(f"🎬 [Clip] 발달 클립(최초) 생성됨: {title}")
+
+        # (B) 다음 단계 징후 (next_stage_signs) 처리
+        next_stage_signs = development_analysis.get("next_stage_signs", [])
+        for sign_data in next_stage_signs:
+            # sign_data 구조: { "name": ..., "present": true/false, ... }
+            if sign_data.get("present") is True:
+                # 발달 징후 썸네일
+                thumbnail_url = ""
+                try:
+                    video_dir = os.path.dirname(video_path)
+                    video_name = os.path.basename(video_path)
+                    thumb_filename = f"thumb_{video_name}_sign_{sign_data.get('name', 'sign')[:5]}.jpg"
+                    thumb_path = os.path.join(video_dir, "thumbnails", thumb_filename)
+                    if AnalysisService._generate_thumbnail(video_path, thumb_path, 10): # 10초 지점
+                        if thumb_path.startswith("/app/videos"):
+                            thumbnail_url = thumb_path.replace("/app/videos", "/videos")
+                        elif "videos" in thumb_path:
+                            try:
+                                rel_path = thumb_path[thumb_path.find("videos"):]
+                                thumbnail_url = "/" + rel_path.replace("\\", "/")
+                                if thumbnail_url.startswith("/videos/videos"):
+                                     thumbnail_url = thumbnail_url.replace("/videos/videos", "/videos")
+                            except:
+                                pass
+                except:
+                    pass
+
+                sign_clip = HighlightClip(
+                    title=f"[발달징후] {sign_data.get('name', '다음 단계 징후')}",
+                    description=sign_data.get('comment', '다음 발달 단계의 징후가 관찰되었습니다.'),
+                    video_url=web_video_url,
+                    thumbnail_url=thumbnail_url,
+                    category=ClipCategory.DEVELOPMENT,
+                    sub_category="다음단계징후",
+                    importance="medium",
+                    analysis_log_id=analysis_log.id
+                )
+                db.add(sign_clip)
+                print(f"🎬 [Clip] 발달 클립(징후) 생성됨: {sign_clip.title}")
         
         db.commit()
         db.refresh(analysis_log)

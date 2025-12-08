@@ -78,9 +78,9 @@ export const DevelopmentFrequencyChart = ({ dailyDevelopmentFrequency }: Develop
                                             <span className="ml-auto text-sm font-bold" style={{ color: item.color }}>{item.count}회</span>
                                         </div>
                                         <p className="text-sm text-gray-600 leading-relaxed">
-                                            {index === 0 && `오늘 ${item.category} 발달 활동이 ${item.count}회 관찰되었어요. 다양한 소리와 대화로 계속 자극해주세요.`}
-                                            {index === 1 && `${item.category} 능력이 활발하게 발달 중이에요. 안전한 환경에서 자유롭게 움직일 기회를 주세요.`}
-                                            {index === 2 && `${item.category} 발달에 좋은 텐포를 보이고 있어요. 호기심을 자극하는 놀이를 추천해요.`}
+                                            {index === 0 && `오늘 ${item.category} 관련 활동이 ${item.count}회 관찰되었어요. 일상 속에서 자연스럽게 경험을 늘려주세요.`}
+                                            {index === 1 && `${item.category} 영역이 고르게 발달하고 있어요. 아이가 스스로 탐색할 수 있는 시간을 충분히 주세요.`}
+                                            {index === 2 && `${item.category} 발달에 좋은 흐름을 보이고 있어요. 아이가 즐거워하는 놀이를 반복해주는 것만으로도 큰 도움이 됩니다.`}
                                         </p>
                                     </div>
                                 ))}

@@ -4,7 +4,9 @@ import { ActivityTable } from '../features/dashboard/components/ActivityTable'
 import { StatsGrid } from '../features/dashboard/components/StatsGrid'
 import { EventModal } from '../features/dashboard/components/EventModal'
 import { useDashboard } from '../features/dashboard/hooks/useDashboard'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, FileText } from 'lucide-react'
+import { useState } from 'react'
+import { DailyReportModal } from '../features/reports/DailyReportModal'
 
 export const Dashboard = () => {
     const {
@@ -24,17 +26,32 @@ export const Dashboard = () => {
         closeModal
     } = useDashboard()
 
+    // State for Report Modal
+    const [showReportModal, setShowReportModal] = useState(false);
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
     // 에러만 표시, 로딩 중에도 UI는 표시
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>
 
     return (
         <div className="p-6 max-w-[1600px] mx-auto space-y-6">
             {/* Page Header */}
-            <div className="flex items-center gap-3 mb-2">
-                <LayoutDashboard className="w-8 h-8 text-primary-600" />
-                <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
-                    대시보드
-                </h1>
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                    <LayoutDashboard className="w-8 h-8 text-primary-600" />
+                    <h1 className="bg-gradient-to-r from-primary-500 via-primary-600 to-primary-700 bg-clip-text text-transparent text-3xl font-bold">
+                        대시보드
+                    </h1>
+                </div>
+
+                {/* 데일리 리포트 버튼 */}
+                <button
+                    onClick={() => setShowReportModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-medium transition-colors"
+                >
+                    <FileText className="w-5 h-5" />
+                    오늘의 육아 리포트
+                </button>
             </div>
             <p className="text-gray-600 mb-6">오늘 하루를 한눈에 확인하세요</p>
 
@@ -82,6 +99,13 @@ export const Dashboard = () => {
                 events={modalEvents}
                 timeRange={modalTimeRange}
                 category={modalCategory}
+            />
+
+            {/* 데일리 리포트 모달 */}
+            <DailyReportModal
+                isOpen={showReportModal}
+                onClose={() => setShowReportModal(false)}
+                date={today}
             />
         </div>
     )

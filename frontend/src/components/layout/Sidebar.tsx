@@ -6,7 +6,7 @@ import {
   Shield,
   Film,
   Settings,
-  TestTube,
+  ScanEye,
   Home,
   ChevronLeft,
   ChevronRight,
@@ -21,7 +21,7 @@ const navigation = [
   { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
   { name: '안전 리포트', href: '/safety-report', icon: Shield },
   { name: '클립 하이라이트', href: '/clip-highlights', icon: Film },
-  { name: 'AI 분석 테스트', href: '/video-analysis-test', icon: TestTube },
+  { name: 'AI 행동 관찰', href: '/video-analysis-test', icon: ScanEye },
   { name: '설정', href: '/settings', icon: Settings },
 ]
 

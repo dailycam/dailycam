@@ -55,11 +55,11 @@ class HLSStreamGenerator:
         
         # 10분 단위 아카이브 설정
         self.archive_duration_minutes = 10
-        self.target_fps = 5.0
+        self.target_fps = 30.0  # 5 → 30으로 변경 (부드러운 스트리밍)
         self.target_width = 640
         self.target_height = 480
         
-        self.current_archive_writer = None
+        self.current_archive_process = None  # FFmpeg 프로세스 (아카이브용)
         self.current_archive_path = None
         self.current_archive_start = None
         self.current_archive_frame_count = 0
@@ -80,34 +80,46 @@ class HLSStreamGenerator:
         from app.services.live_monitoring.video_queue import VideoQueue
         from app.services.live_monitoring.realtime_detector import RealtimeEventDetector
         import shutil
+        import platform
         
         # FFmpeg 설치 확인 (여러 경로 시도)
         ffmpeg_path = None
+        is_docker = os.path.exists('/.dockerenv') or os.getenv('DOCKER_CONTAINER') == 'true'
         
-        # 0. 프로젝트 내부 bin 폴더 확인 (최우선)
-        # backend/app/services/live_monitoring/hls_stream_generator.py -> backend/
-        backend_dir = Path(__file__).resolve().parents[3]
-        local_ffmpeg = backend_dir / "bin" / "ffmpeg.exe"
+        # Docker 환경에서는 시스템 FFmpeg 우선 사용
+        if is_docker:
+            ffmpeg_path = shutil.which('ffmpeg')
+            if ffmpeg_path:
+                self.ffmpeg_path = ffmpeg_path
+                print(f"[HLS 스트림] ✅ Docker 환경: 시스템 FFmpeg 사용 ({ffmpeg_path})")
         
-        if local_ffmpeg.exists():
-            ffmpeg_path = str(local_ffmpeg)
-            print(f"[HLS 스트림] ✅ 프로젝트 내부 bin에서 찾음: {ffmpeg_path}")
+        # 0. 프로젝트 내부 bin 폴더 확인 (Windows 환경에서만)
+        if not ffmpeg_path and platform.system() == 'Windows':
+            backend_dir = Path(__file__).resolve().parents[3]
+            local_ffmpeg = backend_dir / "bin" / "ffmpeg.exe"
+            
+            if local_ffmpeg.exists():
+                ffmpeg_path = str(local_ffmpeg)
+                self.ffmpeg_path = ffmpeg_path  # 인스턴스 변수로 저장
+                print(f"[HLS 스트림] ✅ 프로젝트 내부 bin에서 찾음: {ffmpeg_path}")
         
         # 1. 환경 변수에서 직접 경로 확인
         if not ffmpeg_path:
             env_path = os.getenv('FFMPEG_PATH')
             if env_path and Path(env_path).exists():
                 ffmpeg_path = env_path
+                self.ffmpeg_path = ffmpeg_path  # 인스턴스 변수로 저장
                 print(f"[HLS 스트림] ✅ FFMPEG_PATH 환경 변수에서 찾음: {ffmpeg_path}")
         
         # 2. PATH에서 찾기
         if not ffmpeg_path:
             ffmpeg_path = shutil.which('ffmpeg')
             if ffmpeg_path:
+                self.ffmpeg_path = ffmpeg_path  # 인스턴스 변수로 저장
                 print(f"[HLS 스트림] ✅ PATH에서 찾음: {ffmpeg_path}")
         
-        # 3. PATH에서 못 찾으면 일반적인 경로들 시도
-        if not ffmpeg_path:
+        # 3. PATH에서 못 찾으면 일반적인 경로들 시도 (Windows만)
+        if not ffmpeg_path and platform.system() == 'Windows':
             common_paths = [
                 r"C:\ffmpeg\ffmpeg-8.0.1-essentials_build\ffmpeg-8.0.1-essentials_build\bin\ffmpeg.exe",
                 r"C:\ffmpeg\bin\ffmpeg.exe",
@@ -119,6 +131,7 @@ class HLSStreamGenerator:
             for path in common_paths:
                 if Path(path).exists():
                     ffmpeg_path = path
+                    self.ffmpeg_path = ffmpeg_path  # 인스턴스 변수로 저장
                     print(f"[HLS 스트림] ✅ FFmpeg를 일반 경로에서 찾음: {ffmpeg_path}")
                     break
         
@@ -202,18 +215,26 @@ class HLSStreamGenerator:
             stderr_thread = threading.Thread(target=read_stderr, daemon=True)
             stderr_thread.start()
             
-            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 5초)
+            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 15초)
             print(f"[HLS 스트림] HLS 플레이리스트 생성 대기 중...")
             playlist_created = False
-            for _ in range(50):  # 0.1초씩 50번 = 5초
+            for i in range(150):  # 0.1초씩 150번 = 15초
                 if playlist_path.exists():
                     playlist_created = True
                     print(f"[HLS 스트림] ✅ HLS 플레이리스트 생성 완료: {playlist_path}")
                     break
                 await asyncio.sleep(0.1)
+                # 5초, 10초마다 진행 상황 출력
+                if (i + 1) % 50 == 0:
+                    print(f"[HLS 스트림] 대기 중... ({(i+1)/10}초 경과)")
             
             if not playlist_created:
                 print(f"[HLS 스트림] ⚠️ 경고: HLS 플레이리스트가 생성되지 않았습니다. 계속 진행합니다...")
+                print(f"[HLS 스트림] 플레이리스트 경로: {playlist_path}")
+                print(f"[HLS 스트림] 디렉토리 존재 여부: {self.hls_dir.exists()}")
+                if self.hls_dir.exists():
+                    files = list(self.hls_dir.glob("*"))
+                    print(f"[HLS 스트림] 디렉토리 파일 목록: {[f.name for f in files]}")
             
             frame_count = 0
             detection_frame_interval = 30  # 30프레임마다 탐지
@@ -296,23 +317,51 @@ class HLSStreamGenerator:
                             traceback.print_exc()
                             break
                         
-                        # 10분 단위 아카이브에 저장
-                        if self.current_archive_writer:
-                            self.current_archive_writer.write(frame)
-                            self.current_archive_frame_count += 1
+                        # 10분 단위 아카이브에 저장 (FFmpeg 파이프)
+                        if self.current_archive_process and self.current_archive_process.poll() is None:
+                            try:
+                                self.current_archive_process.stdin.write(frame_bytes)  # frame_bytes는 이미 위에서 생성됨
+                                self.current_archive_frame_count += 1
+                                
+                                # 첫 10프레임과 1000프레임마다 로그
+                                if self.current_archive_frame_count <= 10 or self.current_archive_frame_count % 1000 == 0:
+                                    print(f"[HLS 아카이브] 프레임 저장: {self.current_archive_frame_count}개")
+                            except Exception as e:
+                                print(f"[HLS 아카이브] ❌ 프레임 쓰기 오류: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                # FFmpeg 프로세스 오류 발생 시 비활성화
+                                if self.current_archive_process:
+                                    try:
+                                        self.current_archive_process.stdin.close()
+                                        self.current_archive_process.terminate()
+                                    except:
+                                        pass
+                                    self.current_archive_process = None
+                        elif self.current_archive_process is None:
+                            # 아카이브 프로세스가 없으면 경고 (한 번만)
+                            if not hasattr(self, '_archive_warning_shown'):
+                                print(f"[HLS 아카이브] ⚠️ 아카이브 프로세스가 없습니다")
+                                self._archive_warning_shown = True
                         
-                        # 실시간 이벤트 탐지
-                        if detector and frame_count % detection_frame_interval == 0:
+                        # 실시간 이벤트 탐지 (Gemini 분석 비활성화)
+                        # 주의: Gemini 실시간 분석은 너무 무거워서 스트림을 블로킹함
+                        # 10분 단위 VLM 분석만 사용
+                        if False and detector and frame_count % detection_frame_interval == 0:
                             try:
                                 events = detector.process_frame(frame)
                                 if events:
                                     detector.save_events(events)
                                 
+                                # Gemini 분석은 별도 스레드에서 실행 (메인 루프 블로킹 방지)
                                 if detector.should_run_gemini_analysis() and self.event_loop:
-                                    asyncio.run_coroutine_threadsafe(
-                                        self._run_gemini_analysis(detector, frame.copy()),
-                                        self.event_loop
-                                    )
+                                    frame_copy = frame.copy()
+                                    # 별도 스레드에서 비동기 실행
+                                    def run_async_gemini():
+                                        asyncio.run(self._run_gemini_analysis_in_thread(detector, frame_copy))
+                                    
+                                    gemini_thread = threading.Thread(target=run_async_gemini, daemon=True)
+                                    gemini_thread.start()
                             except Exception as e:
                                 print(f"[실시간 탐지] 오류: {e}")
                         
@@ -413,35 +462,69 @@ class HLSStreamGenerator:
         return frame
     
     def _start_new_archive(self):
-        """새 10분 단위 아카이브 시작"""
+        """새 10분 단위 아카이브 시작 (FFmpeg 직접 사용)"""
         now = datetime.now()
         self.current_archive_start = self._get_segment_start_time(now)
         filename = f"archive_{self.current_archive_start.strftime('%Y%m%d_%H%M%S')}.mp4"
         self.current_archive_path = self.archive_dir / filename
         self.current_archive_frame_count = 0
         
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        self.current_archive_writer = cv2.VideoWriter(
-            str(self.current_archive_path),
-            fourcc,
-            self.target_fps,
-            (self.target_width, self.target_height)
-        )
-        
-        if self.current_archive_writer.isOpened():
+        # FFmpeg를 사용하여 MP4 파일 직접 생성 (moov atom 최적화)
+        try:
+            ffmpeg_archive_cmd = [
+                str(self.ffmpeg_path),
+                '-y',  # 덮어쓰기
+                '-f', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{self.target_width}x{self.target_height}',
+                '-r', str(self.target_fps),
+                '-i', 'pipe:',
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '23',
+                '-movflags', '+faststart',  # moov atom 최적화
+                str(self.current_archive_path)
+            ]
+            
+            self.current_archive_process = subprocess.Popen(
+                ffmpeg_archive_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
             print(f"[HLS 아카이브] 새 10분 구간 시작: {filename}")
+        except Exception as e:
+            print(f"[HLS 아카이브] ❌ FFmpeg 프로세스 시작 실패: {e}")
+            self.current_archive_process = None
     
     def _finalize_current_archive(self):
-        """현재 10분 단위 아카이브 완료"""
-        if self.current_archive_writer:
-            self.current_archive_writer.release()
-            self.current_archive_writer = None
-            
-            if self.current_archive_path and self.current_archive_path.exists():
-                file_size = self.current_archive_path.stat().st_size / (1024 * 1024)
-                duration_minutes = self.current_archive_frame_count / (self.target_fps * 60)
-                print(f"[HLS 아카이브] 10분 구간 저장 완료: {self.current_archive_path.name}")
-                print(f"  크기: {file_size:.2f}MB, 프레임 수: {self.current_archive_frame_count}, 실제 길이: {duration_minutes:.1f}분")
+        """현재 10분 단위 아카이브 완료 (FFmpeg 프로세스 종료)"""
+        if self.current_archive_process:
+            try:
+                # FFmpeg stdin 닫기 (파일 finalize)
+                self.current_archive_process.stdin.close()
+                # 프로세스 종료 대기
+                self.current_archive_process.wait(timeout=10)
+                self.current_archive_process = None
+                
+                # 파일 생성 확인
+                if self.current_archive_path and self.current_archive_path.exists():
+                    file_size = self.current_archive_path.stat().st_size / (1024 * 1024)
+                    duration_minutes = self.current_archive_frame_count / (self.target_fps * 60)
+                    print(f"[HLS 아카이브] 10분 구간 저장 완료: {self.current_archive_path.name}")
+                    print(f"  크기: {file_size:.2f}MB, 프레임 수: {self.current_archive_frame_count}, 실제 길이: {duration_minutes:.1f}분")
+                else:
+                    print(f"[HLS 아카이브] ⚠️ 파일 생성 실패: {self.current_archive_path}")
+            except Exception as e:
+                print(f"[HLS 아카이브] ❌ 종료 중 오류: {e}")
+                if self.current_archive_process:
+                    try:
+                        self.current_archive_process.terminate()
+                    except:
+                        pass
+                    self.current_archive_process = None
     
     def _get_segment_start_time(self, now: datetime) -> datetime:
         """현재 시간을 10분 단위로 내림"""
@@ -449,13 +532,33 @@ class HLSStreamGenerator:
         return now.replace(minute=minute, second=0, microsecond=0)
     
     async def _run_gemini_analysis(self, detector, frame):
-        """Gemini 분석 실행"""
+        """Gemini 분석 실행 (기존 메서드 - 호환성 유지)"""
         try:
-            events = await detector.analyze_with_gemini(frame)
-            if events:
-                detector.save_events(events)
+            event = await detector.analyze_with_gemini(frame)
+            if event:
+                detector.save_events([event])  # 리스트로 감싸기
         except Exception as e:
             print(f"[Gemini 분석] 오류: {e}")
+    
+    async def _run_gemini_analysis_in_thread(self, detector, frame):
+        """
+        Gemini 분석을 별도 스레드에서 실행
+        메인 스트리밍 루프를 블로킹하지 않도록 함
+        """
+        try:
+            print(f"[Gemini 분석] 시작 (별도 스레드)...")
+            event = await detector.analyze_with_gemini(frame)
+            if event:
+                # DB 세션이 닫히기 전에 필요한 속성 미리 가져오기
+                event_title = event.title if hasattr(event, 'title') else "이벤트"
+                detector.save_events([event])
+                print(f"[Gemini 분석] 완료: {event_title}")
+        except Exception as e:
+            # DetachedInstanceError는 무시 (이미 저장됨)
+            if "DetachedInstanceError" not in str(type(e).__name__):
+                print(f"[Gemini 분석] 오류: {e}")
+                import traceback
+                traceback.print_exc()
     
     def stop_streaming(self):
         """스트리밍 중지"""

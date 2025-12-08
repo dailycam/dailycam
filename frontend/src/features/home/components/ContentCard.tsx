@@ -28,6 +28,39 @@ const typeConfig = {
 export const ContentCard = ({ link, showViews = false }: { link: RecommendedLink; showViews?: boolean }) => {
     const config = typeConfig[link.type]
 
+    // 썸네일 URL 검증 및 수정
+    const getThumbnailUrl = (url?: string): string | undefined => {
+        if (!url) return undefined
+
+        // 이미 http/https로 시작하면 그대로 사용
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            return url
+        }
+
+        // //로 시작하면 https: 추가
+        if (url.startsWith('//')) {
+            return `https:${url}`
+        }
+
+        // 그 외의 경우 https:// 추가
+        if (url.includes('.')) {
+            return `https://${url}`
+        }
+
+        // 유효하지 않은 URL
+        return undefined
+    }
+
+    // 블로그 타입일 때 썸네일이 없으면 기본 이미지 사용
+    const getDefaultThumbnail = (type: string): string | undefined => {
+        if (type === 'blog') {
+            return '/images/blog-thumbnail.svg'
+        }
+        return undefined
+    }
+
+    const thumbnailUrl = getThumbnailUrl(link.thumbnail) || getDefaultThumbnail(link.type)
+
     return (
         <a
             href={link.url}
@@ -38,10 +71,10 @@ export const ContentCard = ({ link, showViews = false }: { link: RecommendedLink
             {/* 썸네일 영역 */}
             <div className={`relative bg-gradient-to-br ${config.gradientFrom} ${config.gradientTo} h-40 flex items-center justify-center overflow-hidden`}>
                 {/* 썸네일 이미지 */}
-                {link.thumbnail ? (
+                {thumbnailUrl ? (
                     <>
                         <img
-                            src={link.thumbnail}
+                            src={thumbnailUrl}
                             alt={link.title}
                             className="absolute inset-0 w-full h-full object-cover thumbnail-image"
                             onError={(e) => {

@@ -271,7 +271,7 @@ export default function ClipHighlights() {
                     controls
                     autoPlay
                     className="w-full h-full object-contain"
-                    src={clip.video_url}
+                    src={`${clip.video_url}#t=0,${clip.duration_seconds || ''}`}
                   >
                     브라우저가 비디오 태그를 지원하지 않습니다.
                   </video>

@@ -198,6 +198,30 @@ async def start_hls_stream(
     }
 
 
+@router.get("/stream-status/{camera_id}")
+async def get_stream_status(camera_id: str):
+    """HLS 스트림 상태 확인"""
+    is_active = camera_id in active_hls_streams
+    
+    if is_active:
+        generator = active_hls_streams[camera_id]
+        return {
+            "camera_id": camera_id,
+            "is_active": True,
+            "is_running": generator.is_running,
+            "playlist_url": f"/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8",
+            "message": "스트림 실행 중"
+        }
+    else:
+        return {
+            "camera_id": camera_id,
+            "is_active": False,
+            "is_running": False,
+            "playlist_url": None,
+            "message": "스트림 중지됨"
+        }
+
+
 @router.post("/stop-hls-stream/{camera_id}")
 async def stop_hls_stream(camera_id: str):
     """HLS 스트림 중지"""

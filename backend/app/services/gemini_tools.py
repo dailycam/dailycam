@@ -9,6 +9,8 @@ from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
 
+import re
+
 class YouTubeSearchTool:
     """YouTube 영상 검색 도구"""
     
@@ -119,9 +121,9 @@ class YouTubeSearchTool:
                     # 조회수 확인 (DDG 결과에 statistics가 있는 경우)
                     view_count = 0
                     if 'statistics' in r and 'viewCount' in r['statistics']:
-                        view_count = r['statistics']['viewCount']
+                        view_count = r['statistics']['viewCount'] or 0
                     elif 'views' in r: # 일부 버전에서는 views로 옴
-                        view_count = r['views']
+                        view_count = r['views'] or 0
                         
                     videos.append({
                         'video_id': r.get('id', ''), # DDG는 ID를 직접 주지 않을 수 있음
@@ -167,28 +169,65 @@ class WebSearchTool:
         else:
             return self._search_with_ddg(query, max_results)
 
+    def _is_safe_content(self, title: str, description: str) -> bool:
+        """콘텐츠 안전성 및 관련성 검사"""
+        # 금지어 목록 (스팸, 도박, 성인, 과도한 광고)
+        blacklist = [
+            '도박', '카지노', '바카라', '토토', '성인', '19금', '야동',
+            '대출', '금리', '수익', '투자', '주식', '코인', '분양', '매매',
+            '가입코드', '추천인', '이벤트', '당첨', '무료', '쿠폰'
+        ]
+        
+        text = (title + " " + description).lower()
+        
+        # 0. 한국어 포함 여부 확인 (중국어/영어 스팸 필터링)
+        # 한글이 하나도 없으면 외국 사이트(중국어 등)로 간주하고 필터링
+        if not re.search('[가-힣]', text):
+            # print(f"🚫 [Filter] 한글 없음: {title[:30]}...")
+            return False
+        
+        # 1. 금지어 포함 여부 확인
+        for word in blacklist:
+            if word in text:
+                return False
+                
+        # 2. 육아 관련성 확인 (선택적 - 너무 엄격하면 결과가 없을 수 있음)
+        # keywords = ['육아', '아기', '아이', '베이비', '맘', '부모', '교육', '발달', '놀이']
+        # if not any(k in text for k in keywords):
+        #     return False
+            
+        return True
+
     def _search_with_tavily(self, query: str, max_results: int) -> List[Dict[str, Any]]:
         try:
+            # 검색어에 광고 제외 키워드 추가
+            safe_query = f"{query} 육아 팁 -광고 -협찬 -판매"
+            
             response = self.client.search(
-                query=query + " 육아 블로그",
+                query=safe_query,
                 search_depth="advanced",
-                max_results=max_results,
-                include_domains=[
-                    "blog.naver.com",
-                    "brunch.co.kr",
-                    "tistory.com",
-                    "velog.io"
-                ]
+                max_results=max_results * 4  # 필터링을 고려해 더 많이 요청 (4배수)
             )
             
             blogs = []
             for result in response.get('results', []):
+                title = result.get('title', '')
+                description = result.get('content', '')[:200]
+                url = result.get('url', '')
+                
+                # 안전성 검사
+                if not self._is_safe_content(title, description):
+                    continue
+                    
                 blogs.append({
-                    'title': result.get('title', ''),
-                    'description': result.get('content', '')[:200],
-                    'url': result.get('url', ''),
+                    'title': title,
+                    'description': description,
+                    'url': url,
                     'score': result.get('score', 0.0)
                 })
+                
+                if len(blogs) >= max_results:
+                    break
             
             return blogs
             
@@ -200,18 +239,18 @@ class WebSearchTool:
         """DuckDuckGo를 사용한 블로그 검색 (API 키 없을 때)"""
         try:
             with DDGS() as ddgs:
-                # 한국 블로그 위주로 검색
-                search_query = f"{query} (site:blog.naver.com OR site:brunch.co.kr OR site:tistory.com)"
+                # 블로그 키워드 추가 및 광고 제외 (중국 사이트 제외 추가)
+                search_query = f"{query} 육아 블로그 -광고 -협찬 -쿠팡파트너스 -site:.cn -중국"
+                
                 results = ddgs.text(
                     keywords=search_query,
                     region="kr-kr",
                     safesearch="moderate",
-                    max_results=max_results
+                    max_results=max_results * 5  # 필터링 고려하여 5배수 요청
                 )
                 
                 blogs = []
                 import json
-                import re
                 
                 for r in results:
                     # description 안전하게 처리
@@ -219,31 +258,49 @@ class WebSearchTool:
                     if not isinstance(desc, str):
                         desc = str(desc) if desc else ''
                     
-                    # DuckDuckGo JSON 아티팩트 처리
+                    # DuckDuckGo JSON 아티팩트 처리 (기존 로직 유지)
                     if desc.strip().startswith('{"title":'):
-                        # 1. JSON 파싱 시도
                         try:
                             parsed = json.loads(desc)
                             desc = parsed.get('snippet', parsed.get('body', ''))
                         except:
-                            # 2. 파싱 실패 시 정규식으로 snippet 추출 시도
                             match = re.search(r'"snippet":"(.*?)(?:"[,}]|$)', desc)
                             if match:
                                 desc = match.group(1).replace('\\"', '"').replace('\\n', ' ')
                             else:
-                                # 3. 추출 실패 시 JSON 덩어리를 보여주느니 차라리 빈칸으로 처리
                                 desc = ''
                     
                     # HTML 태그 및 남은 특수문자 제거
                     desc = re.sub(r'<[^>]+>', '', desc)
                     desc = desc.replace('{"title":', '').replace('"source":', '')
                     
+                    title = r.get('title', '')
+                    
+                    # URL 추출 (여러 키 시도)
+                    url = r.get('href') or r.get('link') or r.get('url', '')
+                    
+                    # 0. 도메인 필터링 (중국 사이트 강력 차단)
+                    if any(domain in url for domain in ['.cn', 'zhihu.com', 'baidu.com', '163.com', 'qq.com', 'bilibili.com']):
+                        print(f"🚫 [Filter] 중국 도메인 차단: {url}")
+                        continue
+
+                    # 안전성 검사 (한글 포함 여부 등)
+                    if not self._is_safe_content(title, desc):
+                        continue
+                    
+                    # 디버그 로깅
+                    print(f"📝 [Blog] 제목: {title[:50]}")
+                    print(f"🔗 [Blog] URL: {url}")
+                    
                     blogs.append({
-                        'title': r.get('title', ''),
+                        'title': title,
                         'description': desc.strip()[:200],
-                        'url': r.get('href', ''),
+                        'url': url,
                         'score': 0.0
                     })
+                    
+                    if len(blogs) >= max_results:
+                        break
                     
                 return blogs
         except Exception as e:

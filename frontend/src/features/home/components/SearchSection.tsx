@@ -33,10 +33,10 @@ export const SearchSection = ({
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="mb-10"
             >
-                <div className="card p-6 bg-gradient-to-br from-white to-green-50 border-0 shadow-md">
+                <div className="card p-6 bg-gradient-to-br from-white to-primary-50 border-0 shadow-md">
                     {/* 큰 검색창 */}
                     <div className="relative mb-4">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-emerald-400" />
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-primary-400" />
                         <input
                             type="text"
                             placeholder="육아 정보 검색... (예: 모유 수유, 이유식, 수면교육)"
@@ -47,7 +47,7 @@ export const SearchSection = ({
                                     handleSearch()
                                 }
                             }}
-                            className="w-full pl-16 pr-6 py-4 text-lg border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-white/80 hover:bg-white transition-colors shadow-sm"
+                            className="w-full pl-16 pr-6 py-4 text-lg border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-300 bg-white/80 hover:bg-white transition-colors shadow-sm"
                         />
                     </div>
 
@@ -84,7 +84,7 @@ export const SearchSection = ({
                 >
                     <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center shadow-sm">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-300 to-primary-400 flex items-center justify-center shadow-sm">
                                 <Search className="w-6 h-6 text-white" />
                             </div>
                             <div>

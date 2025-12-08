@@ -12,13 +12,14 @@ export const QuickStartSection = () => {
             <h2 className="text-xl font-bold mb-4 text-gray-700">빠른 시작</h2>
             <div className="grid lg:grid-cols-3 gap-4">
                 <a
-                    href="/video-analysis"
+                    href="/video-analysis-test"
                     className="card p-6 bg-gradient-to-br from-cyan-100 to-blue-100 border-0 hover:shadow-lg transition-all group"
                 >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-cyan-700 mb-1">분석하기</p>
-                            <h3 className="text-xl font-bold text-cyan-800">영상 분석</h3>
+                            <h3 className="text-xl font-bold text-cyan-800">AI 행동 관찰</h3>
+                            <p className="text-xs text-cyan-600 mt-1">우리 아이 행동 패턴 분석</p>
                         </div>
                         <Video className="w-8 h-8 text-cyan-600 group-hover:scale-110 transition-transform" />
                     </div>
