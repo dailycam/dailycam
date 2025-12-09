@@ -1,6 +1,7 @@
 """1시간 단위 분석 스케줄러"""
 
 import asyncio
+import pytz
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -30,7 +31,8 @@ class HourlyAnalysisScheduler:
         while self.is_running:
             # 매 시간 정각 + 5분에 실행 (예: 14:05, 15:05, 16:05...)
             # 5분 여유를 두어 1시간 분량 비디오가 완전히 저장되도록 함
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             next_analysis_time = (now.replace(minute=5, second=0, microsecond=0) + 
                                  timedelta(hours=1))
             
@@ -60,7 +62,8 @@ class HourlyAnalysisScheduler:
         
         try:
             # 1. 이전 시간대 정의 (예: 현재가 15:05이면 14:00-15:00)
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             hour_start = (now.replace(minute=0, second=0, microsecond=0) - 
                          timedelta(hours=1))
             hour_end = hour_start + timedelta(hours=1)
@@ -114,7 +117,8 @@ class HourlyAnalysisScheduler:
             
             hourly_analysis.analysis_result = analysis_result
             hourly_analysis.status = 'completed'
-            hourly_analysis.completed_at = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            hourly_analysis.completed_at = datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None)
             hourly_analysis.safety_score = safety_analysis.get('safety_score', 100)
             hourly_analysis.incident_count = len(safety_analysis.get('incident_events', []))
             
@@ -137,7 +141,8 @@ class HourlyAnalysisScheduler:
             if 'hourly_analysis' in locals():
                 hourly_analysis.status = 'failed'
                 hourly_analysis.error_message = str(e)
-                hourly_analysis.completed_at = datetime.now()
+                kst = pytz.timezone('Asia/Seoul')
+                hourly_analysis.completed_at = datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None)
                 db.commit()
         finally:
             db.close()

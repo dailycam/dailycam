@@ -36,7 +36,8 @@ class SegmentAnalysisScheduler:
         while self.is_running:
             # 10분마다 실행 (예: 14:00, 14:10, 14:20...)
             # 30초 여유를 두어 10분 분량 비디오가 완전히 저장되도록 함
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             
             # 다음 10분 단위 시간 계산 (서버 시간 기준)
             current_minutes = now.minute
@@ -55,12 +56,9 @@ class SegmentAnalysisScheduler:
             
             wait_seconds = (next_analysis_time - now).total_seconds()
 
-            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력
-            kst_offset = timedelta(hours=9)
-            next_analysis_time_kst = next_analysis_time + kst_offset
-            
+            # 이미 한국 시간(KST) 기준
             if wait_seconds > 0:
-                print(f"[10분 분석 스케줄러] 다음 분석 시간(한국 시각): {next_analysis_time_kst.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
+                print(f"[10분 분석 스케줄러] 다음 분석 시간(한국 시각): {next_analysis_time.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
                 await asyncio.sleep(wait_seconds)
             
             if self.is_running:
@@ -143,8 +141,9 @@ class SegmentAnalysisScheduler:
     def _get_segment_video(self, segment_start: datetime) -> Optional[Path]:
         """해당 구간의 비디오 파일 경로 반환"""
         # segment_start가 timezone-aware인 경우 naive datetime으로 변환
+        # ⚠️ 중요: KST 시간을 유지하고 tzinfo만 제거 (UTC 변환 X)
         if segment_start.tzinfo is not None:
-            segment_start_naive = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
+            segment_start_naive = segment_start.replace(tzinfo=None)
         else:
             segment_start_naive = segment_start
         

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import pytz
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -133,7 +134,8 @@ class HourlyAggregator:
             existing.development_insights = aggregated_text.get('development_insights', [])
             existing.recommended_activities = aggregated_text.get('recommended_activities', [])
             existing.segment_analyses_ids = [s.id for s in segments]
-            existing.updated_at = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            existing.updated_at = datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None)
             hourly_report = existing
         else:
             db.add(hourly_report)
@@ -386,7 +388,8 @@ class HourlyAggregatorScheduler:
         while self.is_running:
             # 매 시간 정각 + 5분에 실행 (예: 14:05, 15:05, 16:05...)
             # 5분 여유를 두어 마지막 10분 세그먼트가 완료되도록 함
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             next_aggregation_time = (now.replace(minute=5, second=0, microsecond=0) + 
                                     timedelta(hours=1))
             
