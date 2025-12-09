@@ -213,12 +213,13 @@ def create_app() -> FastAPI:
     # 세션 미들웨어 추가 (OAuth에 필요)
     # HTTPS 환경에서 쿠키 설정 추가
     # OAuth 리다이렉트는 크로스 사이트 요청이므로 same_site="none" 필요
+    # same_site="none"을 사용하려면 반드시 Secure 플래그가 필요하므로 https_only=True 설정
     is_production = os.getenv("ENVIRONMENT") == "production"
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
         same_site="none",  # 크로스 사이트 OAuth 리다이렉트를 위해 none 사용
-        https_only=False,  # Nginx가 HTTPS를 처리하므로 False (쿠키는 Secure 플래그 필요)
+        https_only=True,  # Secure 플래그 필수 (same_site="none" 사용 시)
         max_age=3600,  # 세션 유효 시간 (1시간)
     )
 

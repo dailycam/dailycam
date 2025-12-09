@@ -70,6 +70,11 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     사용자 정보를 받아서 데이터베이스에 저장하고 JWT 토큰 생성
     """
     try:
+        # 디버깅: 세션 및 쿠키 확인
+        print(f"[OAuth Callback] Session keys: {list(request.session.keys())}")
+        print(f"[OAuth Callback] Cookies: {request.cookies}")
+        print(f"[OAuth Callback] Query params: {dict(request.query_params)}")
+        
         # Google에서 토큰 받기
         token = await oauth.google.authorize_access_token(request)
         
