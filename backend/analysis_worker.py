@@ -8,7 +8,6 @@ analysis_jobs 테이블을 폴링하여 PENDING 상태의 Job을 처리
 import asyncio
 import time
 import signal
-import signal
 import sys
 import os
 from pathlib import Path
@@ -215,6 +214,7 @@ class AnalysisWorker:
             
             # 5. 결과 저장
             safety_analysis = analysis_result.get('safety_analysis', {})
+            development_analysis = analysis_result.get('development_analysis', {})
             
             job.analysis_result = analysis_result
             job.safety_score = safety_analysis.get('safety_score', 100)
@@ -232,7 +232,13 @@ class AnalysisWorker:
                 status='completed',
                 completed_at=datetime.now(),
                 safety_score=job.safety_score,
-                incident_count=job.incident_count
+                incident_count=job.incident_count,
+                # 발달 점수 추가
+                development_score=development_analysis.get('development_score', 0),
+                development_radar_scores=development_analysis.get('development_radar_scores', {}),
+                # 클립 생성용 데이터 (safety_events는 UI 표시용 title/description 포함)
+                safety_incidents=safety_analysis.get('safety_events', []),  # UI용 safety_events 사용
+                development_milestones=development_analysis.get('skills', [])
             )
             db.add(segment_analysis)
             db.flush()  # segment_analysis.id를 얻기 위해 flush
@@ -258,8 +264,31 @@ class AnalysisWorker:
             print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}")
             print(f"  📊 안전 점수: {job.safety_score}")
             print(f"  🚨 사건 수: {job.incident_count}")
+            print(f"  🎯 발달 점수: {segment_analysis.development_score}")
             
-            # 6. 파일 삭제 (옵션)
+            # 7. 하이라이트 클립 자동 생성
+            try:
+                from app.services.highlight_clip_service import HighlightClipService
+                
+                print(f"[워커 {self.worker_id}] 🎬 하이라이트 클립 생성 시작...")
+                clip_service = HighlightClipService(camera_id=job.camera_id)
+                clips = clip_service.create_clips_from_segment_analysis(
+                    segment_analysis=segment_analysis,
+                    db=db
+                )
+                
+                if clips:
+                    print(f"[워커 {self.worker_id}] ✅ 하이라이트 클립 {len(clips)}개 생성 완료")
+                    for clip in clips:
+                        print(f"  📹 {clip.get('video_url', 'N/A')}")
+                else:
+                    print(f"[워커 {self.worker_id}] ℹ️  생성된 클립 없음 (필터링 조건 미충족)")
+                    
+            except Exception as clip_error:
+                print(f"[워커 {self.worker_id}] ⚠️  클립 생성 실패 (분석은 완료됨): {clip_error}")
+                # 클립 생성 실패해도 분석은 성공으로 처리
+            
+            # 8. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
             if delete_after and video_path.exists():
                 try:
@@ -290,15 +319,14 @@ class AnalysisWorker:
                 job.status = JobStatus.FAILED
                 job.error_message = str(e)
                 job.completed_at = datetime.now()
-                job.completed_at = datetime.now()
                 print(f"[워커 {self.worker_id}] ❌ Job 최종 실패 (재시도 {job.max_retries}회 초과)")
                 
                 # 최종 실패 시에도 파일 삭제 (불필요한 용량 차지 방지)
                 delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
-                if delete_after and video_path.exists():
+                if delete_after and Path(job.video_path).exists():
                     try:
-                        os.remove(video_path)
-                        print(f"[워커 {self.worker_id}] 🗑️ 실패한 파일 삭제함: {video_path.name}")
+                        os.remove(job.video_path)
+                        print(f"[워커 {self.worker_id}] 🗑️ 실패한 파일 삭제함: {Path(job.video_path).name}")
                     except Exception as de:
                         print(f"[워커 {self.worker_id}] ⚠️ 파일 삭제 실패: {de}")
             
@@ -341,4 +369,3 @@ if __name__ == "__main__":
     
     worker = AnalysisWorker(worker_id=worker_id)
     worker.start()
-

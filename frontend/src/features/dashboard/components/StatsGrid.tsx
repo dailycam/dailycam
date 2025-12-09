@@ -31,8 +31,13 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
             label: '안전 점수',
             value: safetyScore.toString(),
             unit: '점',
+<<<<<<< HEAD
             change: safetyScore === 0 ? '' : '+3',
             changeLabel: safetyScore === 0 ? '분석된 결과가 없습니다' : '지난주 대비',
+=======
+            change: safetyScore > 0 ? '+3' : '',
+            changeLabel: safetyScore > 0 ? '지난주 대비' : '',
+>>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
             icon: Shield,
             color: safetyScore === 0 ? 'text-gray-400' : 'text-safe',
             bgColor: safetyScore === 0 ? 'bg-gray-50' : 'bg-safe-50',
@@ -42,8 +47,13 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
             label: '발달 점수',
             value: developmentScore.toString(),
             unit: '점',
+<<<<<<< HEAD
             change: developmentScore === 0 ? '' : '+7',
             changeLabel: developmentScore === 0 ? '분석된 결과가 없습니다' : '지난주 대비',
+=======
+            change: developmentScore > 0 ? '+7' : '',
+            changeLabel: developmentScore > 0 ? '지난주 대비' : '',
+>>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
             icon: Baby,
             color: developmentScore === 0 ? 'text-gray-400' : 'text-primary-600',
             bgColor: developmentScore === 0 ? 'bg-gray-50' : 'bg-primary-50',

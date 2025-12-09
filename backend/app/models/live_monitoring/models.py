@@ -68,6 +68,14 @@ class SegmentAnalysis(Base):
     safety_score = Column(Integer)
     incident_count = Column(Integer)
     
+    # 발달 점수 추가
+    development_score = Column(Integer)  # 발달 점수 (0-100)
+    development_radar_scores = Column(JSON)  # 발달 오각형 점수 {"언어": 80, "운동": 90, ...}
+    
+    # 클립 생성용 데이터
+    safety_incidents = Column(JSON)  # 안전 이벤트 리스트
+    development_milestones = Column(JSON)  # 발달 마일스톤 리스트
+    
     def __repr__(self):
         return f"<SegmentAnalysis(id={self.id}, camera={self.camera_id}, segment={self.segment_start}, status={self.status})>"
 

@@ -18,9 +18,10 @@ export default function AppHome() {
     const [searchQuery, setSearchQuery] = useState<string>('')
 
     // 검색 결과 state
+    // 전체를 없애기 위해 기본값을 'youtube'로 변경합니다.
     const [searchResults, setSearchResults] = useState<RecommendedLink[]>([])
     const [isSearching, setIsSearching] = useState(false)
-    const [searchFilter, setSearchFilter] = useState<'all' | 'youtube' | 'blog'>('all')
+    const [searchFilter, setSearchFilter] = useState<'youtube' | 'blog' | 'news'>('youtube')
 
     // AI 추천 콘텐츠 state
     const [recommendedBlogs, setRecommendedBlogs] = useState<RecommendedLink[]>([])
@@ -96,7 +97,7 @@ export default function AppHome() {
             // 이전 검색 결과 초기화 (검색 중 표시를 위해)
             setSearchResults([])
             setIsSearching(true)
-            setSearchFilter('all')
+            setSearchFilter('youtube')
 
             // 아기/육아 관련 키워드 자동 추가
             const enhancedQuery = `${targetQuery.trim()} 아기 육아`
@@ -166,22 +167,33 @@ export default function AppHome() {
                 </div>
 
                 {/* 리스트 형식으로 변경 */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100 overflow-hidden">
                     {recommendedNews.slice(0, visibleNewsCount).map((link) => (
                         <a
                             key={link.id}
                             href={link.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group"
+                            className="flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group"
                         >
                             <div className="flex-1 min-w-0 pr-4">
-                                <h3 className="text-sm font-medium text-gray-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                        뉴스
+                                    </span>
+                                    <span className="text-xs text-gray-500">{link.category}</span>
+                                </div>
+                                <h3 className="text-base font-medium text-gray-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
                                     {link.title}
                                 </h3>
-                                <p className="text-xs text-gray-500 mt-1">{link.category}</p>
+                                <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                                    {link.description || link.title}
+                                </p>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-primary-600 flex-shrink-0 transition-colors" />
+                            <div className="flex items-center text-gray-400 group-hover:text-primary-600 transition-colors">
+                                <span className="text-sm mr-2 opacity-0 group-hover:opacity-100 transition-opacity">이동</span>
+                                <ArrowRight className="w-5 h-5 flex-shrink-0" />
+                            </div>
                         </a>
                     ))}
                 </div>
