@@ -56,7 +56,8 @@ class HLSStreamGenerator:
         
         # 10분 단위 아카이브 설정
         self.archive_duration_minutes = 10
-        self.target_fps = 30.0  # 5 → 30으로 변경 (부드러운 스트리밍)
+        self.target_fps = 30.0  # HLS 스트림용 (부드러운 스트리밍)
+        self.archive_fps = 5.0  # 아카이브(분석)용 낮은 FPS (10→5, 용량 대폭 절약)
         self.target_width = 640
         self.target_height = 480
         
@@ -474,6 +475,7 @@ class HLSStreamGenerator:
         self.current_archive_frame_count = 0
         
         # FFmpeg를 사용하여 MP4 파일 직접 생성 (moov atom 최적화)
+        # AI 분석용 최적화: 매우 낮은 FPS + 강력한 압축
         try:
             ffmpeg_archive_cmd = [
                 str(self.ffmpeg_path),
@@ -481,11 +483,12 @@ class HLSStreamGenerator:
                 '-f', 'rawvideo',
                 '-pix_fmt', 'bgr24',
                 '-s', f'{self.target_width}x{self.target_height}',
-                '-r', str(self.target_fps),
+                '-r', str(self.target_fps),  # 입력 FPS (30)
                 '-i', 'pipe:',
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '23',
+                '-preset', 'medium',        # 더 나은 압축
+                '-crf', '32',               # 28 → 32 (강력한 압축, AI 분석엔 충분)
+                '-r', str(self.archive_fps),  # 출력 FPS (5) - 대폭 샘플링
                 '-movflags', '+faststart',  # moov atom 최적화
                 str(self.current_archive_path)
             ]
@@ -504,7 +507,7 @@ class HLSStreamGenerator:
             self.current_archive_process = None
     
     def _finalize_current_archive(self):
-        """현재 10분 단위 아카이브 완료 (FFmpeg 프로세스 종료)"""
+        """현재 10분 단위 아카이브 완료 (FFmpeg 프로세스 종료 + S3 업로드)"""
         if self.current_archive_process:
             try:
                 # FFmpeg stdin 닫기 (파일 finalize)
@@ -519,6 +522,9 @@ class HLSStreamGenerator:
                     duration_minutes = self.current_archive_frame_count / (self.target_fps * 60)
                     print(f"[HLS 아카이브] 10분 구간 저장 완료: {self.current_archive_path.name}")
                     print(f"  크기: {file_size:.2f}MB, 프레임 수: {self.current_archive_frame_count}, 실제 길이: {duration_minutes:.1f}분")
+                    
+                    # S3에 업로드
+                    self._upload_archive_to_s3()
                 else:
                     print(f"[HLS 아카이브] ⚠️ 파일 생성 실패: {self.current_archive_path}")
             except Exception as e:
@@ -529,6 +535,37 @@ class HLSStreamGenerator:
                     except:
                         pass
                     self.current_archive_process = None
+    
+    def _upload_archive_to_s3(self):
+        """아카이브 영상을 S3에 업로드 (로컬 파일은 VLM 분석 후 삭제)"""
+        if not self.current_archive_path or not self.current_archive_path.exists():
+            return
+        
+        try:
+            from app.services.s3_service import S3Service
+            
+            s3_service = S3Service()
+            if not s3_service.is_enabled():
+                print(f"[HLS 아카이브] ℹ️ S3가 비활성화되어 있습니다. 로컬에만 저장됩니다.")
+                return
+            
+            # S3에 업로드 (로컬 파일은 유지)
+            s3_url = s3_service.upload_archive(
+                file_path=self.current_archive_path,
+                camera_id=self.camera_id,
+                segment_start=self.current_archive_start
+            )
+            
+            if s3_url:
+                print(f"[HLS 아카이브] ✅ S3 업로드 완료: {s3_url}")
+                print(f"[HLS 아카이브] 📁 로컬 파일 유지 (VLM 분석용): {self.current_archive_path.name}")
+            else:
+                print(f"[HLS 아카이브] ⚠️ S3 업로드 실패, 로컬 파일 유지: {self.current_archive_path.name}")
+                
+        except Exception as e:
+            print(f"[HLS 아카이브] ❌ S3 업로드 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _get_segment_start_time(self, now: datetime) -> datetime:
         """현재 시간을 10분 단위로 내림"""

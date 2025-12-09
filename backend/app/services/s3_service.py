@@ -1,4 +1,4 @@
-"""AWS S3 서비스 - 클립 하이라이트 저장 및 관리"""
+"""AWS S3 서비스 - 클립 하이라이트 및 아카이브 영상 저장 및 관리"""
 
 import os
 import boto3
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 
 class S3Service:
-    """S3 클립 하이라이트 관리 서비스"""
+    """S3 클립 하이라이트 및 아카이브 영상 관리 서비스"""
     
     def __init__(self):
         self.bucket_name = os.getenv("S3_BUCKET_NAME")
@@ -181,6 +181,72 @@ class S3Service:
         except Exception as e:
             print(f"[S3Service] ❌ URL 기반 삭제 실패: {e}")
             return False
+    
+    def upload_archive(
+        self, 
+        file_path: Path, 
+        camera_id: str,
+        segment_start: datetime
+    ) -> Optional[str]:
+        """
+        10분 아카이브 영상을 S3에 업로드 (1일 후 자동 삭제)
+        
+        Args:
+            file_path: 업로드할 아카이브 파일 경로
+            camera_id: 카메라 ID
+            segment_start: 세그먼트 시작 시간
+        
+        Returns:
+            S3 URL (성공 시) 또는 None (실패 시)
+        """
+        if not self.is_enabled():
+            print(f"[S3Service] ⚠️ S3가 비활성화되어 있습니다. 아카이브 업로드 스킵: {file_path.name}")
+            return None
+        
+        if not file_path.exists():
+            print(f"[S3Service] ❌ 아카이브 파일이 존재하지 않습니다: {file_path}")
+            return None
+        
+        try:
+            # S3 키 생성: archives/{camera_id}/{YYYY}/{MM}/{DD}/archive_{timestamp}.mp4
+            s3_key = f"archives/{camera_id}/{segment_start.strftime('%Y/%m/%d')}/{file_path.name}"
+            
+            # 파일 업로드
+            file_size_mb = file_path.stat().st_size / (1024 * 1024)
+            print(f"[S3Service] 📤 아카이브 업로드 시작: {file_path.name} ({file_size_mb:.2f}MB) → s3://{self.bucket_name}/{s3_key}")
+            
+            self.s3_client.upload_file(
+                str(file_path),
+                self.bucket_name,
+                s3_key,
+                ExtraArgs={
+                    'ContentType': 'video/mp4',
+                    'StorageClass': 'STANDARD',  # Lifecycle Policy로 자동 전환됨
+                    'Metadata': {
+                        'camera_id': camera_id,
+                        'segment_start': segment_start.isoformat(),
+                        'uploaded_at': datetime.now(timezone.utc).isoformat(),
+                        'type': 'archive'
+                    }
+                }
+            )
+            
+            # URL 생성
+            if self.cloudfront_domain:
+                url = f"https://{self.cloudfront_domain}/{s3_key}"
+            else:
+                url = f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{s3_key}"
+            
+            print(f"[S3Service] ✅ 아카이브 업로드 완료: {url}")
+            
+            return url
+            
+        except ClientError as e:
+            print(f"[S3Service] ❌ 아카이브 S3 업로드 실패: {e}")
+            return None
+        except Exception as e:
+            print(f"[S3Service] ❌ 아카이브 업로드 중 오류 발생: {e}")
+            return None
     
     def _get_content_type(self, extension: str) -> str:
         """파일 확장자에 따른 Content-Type 반환"""

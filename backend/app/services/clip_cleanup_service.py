@@ -31,8 +31,10 @@ class ClipCleanupService:
         Returns:
             삭제 결과 통계
         """
+        should_close_db = False
         if db is None:
             db = next(get_db())
+            should_close_db = True
         
         try:
             # 삭제 기준 날짜 계산
@@ -110,7 +112,7 @@ class ClipCleanupService:
                 db.rollback()
             raise
         finally:
-            if db:
+            if should_close_db and db:
                 db.close()
     
     async def run_periodic_cleanup(self, interval_hours: int = 24):

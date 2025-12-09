@@ -201,7 +201,7 @@ def create_app() -> FastAPI:
         print("   - 하이라이트 클립: 30일 후")
         print("   - 실행 시간: 매일 새벽 3시")
 
-        # ✅ 4) 클립 하이라이트 자동 정리 스케줄러 시작 (24시간마다)
+        # ✅ 5) 클립 하이라이트 자동 정리 스케줄러 시작 (24시간마다)
         async def clip_cleanup_worker():
             """7일 이상 된 클립을 자동으로 삭제하는 워커"""
             from .services.clip_cleanup_service import ClipCleanupService

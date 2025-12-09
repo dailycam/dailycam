@@ -86,8 +86,14 @@ services:
       - WORKER_ID=worker-1
       - DELETE_VIDEO_AFTER_ANALYSIS=false
       - ENVIRONMENT=production
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
     volumes:
       - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
     command: python app/workers/analysis_worker.py
     restart: unless-stopped
     networks:
@@ -111,8 +117,14 @@ services:
       - WORKER_ID=worker-2
       - DELETE_VIDEO_AFTER_ANALYSIS=false
       - ENVIRONMENT=production
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
     volumes:
       - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
     command: python app/workers/analysis_worker.py
     restart: unless-stopped
     networks:
