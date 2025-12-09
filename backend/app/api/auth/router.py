@@ -68,6 +68,28 @@ async def google_login(request: Request):
     print(f"[OAuth Login] Response headers: {dict(response.headers)}")
     print(f"[OAuth Login] Session keys after: {list(request.session.keys())}")
     
+    # 응답 헤더에 Set-Cookie가 없으면 세션 쿠키를 수동으로 추가
+    if 'set-cookie' not in [k.lower() for k in response.headers.keys()]:
+        print(f"[OAuth Login] Set-Cookie header missing, attempting to add manually")
+        # 세션 데이터가 있으면 쿠키를 수동으로 설정
+        if request.session:
+            # Starlette의 SessionMiddleware가 사용하는 쿠키 이름 확인
+            # 기본값은 "session"이지만, 확인이 필요함
+            session_cookie_name = "session"
+            # 기존 쿠키가 있으면 재사용, 없으면 새로 생성
+            if session_cookie_name in request.cookies:
+                # 기존 쿠키 재사용
+                response.set_cookie(
+                    key=session_cookie_name,
+                    value=request.cookies[session_cookie_name],
+                    max_age=3600,
+                    httponly=True,
+                    secure=True,
+                    samesite="none",
+                    path="/"
+                )
+                print(f"[OAuth Login] Reused existing session cookie")
+    
     return response
 
 

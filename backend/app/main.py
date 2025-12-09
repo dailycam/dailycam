@@ -17,6 +17,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles  # 👈 추가
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import RedirectResponse
+from starlette.requests import Request
 
 from .api.homecam import router as homecam_router
 from .api.live_monitoring import router as live_monitoring_router
@@ -223,6 +226,31 @@ def create_app() -> FastAPI:
         https_only=True,  # Secure 플래그 필수 (X-Forwarded-Proto 헤더로 HTTPS 판단)
         max_age=3600,  # 세션 유효 시간 (1시간)
     )
+    
+    # 리다이렉트 응답에서 세션 쿠키가 설정되도록 보장하는 커스텀 미들웨어
+    class SessionCookieMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            response = await call_next(request)
+            # 리다이렉트 응답이고 세션이 있으면 쿠키를 명시적으로 설정
+            if isinstance(response, RedirectResponse) and hasattr(request, 'session') and request.session:
+                # 응답 헤더에 Set-Cookie가 없으면 추가
+                if 'set-cookie' not in [k.lower() for k in response.headers.keys()]:
+                    # 세션 쿠키 이름 (SessionMiddleware 기본값)
+                    session_cookie_name = "session"
+                    # 기존 쿠키가 있으면 재사용
+                    if session_cookie_name in request.cookies:
+                        response.set_cookie(
+                            key=session_cookie_name,
+                            value=request.cookies[session_cookie_name],
+                            max_age=3600,
+                            httponly=True,
+                            secure=True,
+                            samesite="none",
+                            path="/"
+                        )
+            return response
+    
+    app.add_middleware(SessionCookieMiddleware)
 
     # ----------------------------------------------------
     # 라우터 등록
