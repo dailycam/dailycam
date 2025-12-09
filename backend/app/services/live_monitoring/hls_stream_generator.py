@@ -11,6 +11,7 @@ import shutil
 import os
 import threading
 import time
+import pytz
 
 class HLSStreamGenerator:
     """
@@ -463,7 +464,8 @@ class HLSStreamGenerator:
     
     def _start_new_archive(self):
         """새 10분 단위 아카이브 시작 (FFmpeg 직접 사용)"""
-        now = datetime.now()
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
         self.current_archive_start = self._get_segment_start_time(now)
         filename = f"archive_{self.current_archive_start.strftime('%Y%m%d_%H%M%S')}.mp4"
         self.current_archive_path = self.archive_dir / filename

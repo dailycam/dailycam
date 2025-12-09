@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { Play, Download, Share2, TrendingUp, Shield, Calendar, Clock, Film } from 'lucide-react'
-import { getClipHighlights, HighlightClip } from '../lib/api'
+import { Play, Download, Trash2, TrendingUp, Shield, Calendar, Clock, Film } from 'lucide-react'
+import { getClipHighlights, deleteClip, HighlightClip } from '../lib/api'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function ClipHighlights() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null)
@@ -10,12 +11,28 @@ export default function ClipHighlights() {
   const [safetyClips, setSafetyClips] = useState<HighlightClip[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 날짜 선택 state
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [availableDates, setAvailableDates] = useState<Date[]>([])
+
+  // 사용 가능한 날짜 목록 생성 (최근 7일)
+  useEffect(() => {
+    const dates: Date[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      dates.push(date)
+    }
+    setAvailableDates(dates)
+  }, [])
+
   // API에서 클립 데이터 가져오기
   useEffect(() => {
     const fetchClips = async () => {
       try {
         setLoading(true)
-        const response = await getClipHighlights('all', 50)
+        const targetDate = selectedDate.toISOString().split('T')[0] // YYYY-MM-DD
+        const response = await getClipHighlights('all', 50, targetDate)
 
         const devClips = response.clips.filter(clip => clip.category === '발달')
         const safeClips = response.clips.filter(clip => clip.category === '안전')
@@ -30,7 +47,7 @@ export default function ClipHighlights() {
     }
 
     fetchClips()
-  }, [])
+  }, [selectedDate]) // selectedDate가 변경될 때마다 재조회
 
   // 재생 시간 포맷팅
   const formatDuration = (seconds: number | undefined): string => {
@@ -40,7 +57,7 @@ export default function ClipHighlights() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // 날짜 포맷팅
+  // 날짜 포맷팅 (KST 시간대로 표시)
   const formatDate = (dateStr: string | undefined): string => {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -49,7 +66,50 @@ export default function ClipHighlights() {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'Asia/Seoul', // KST로 변환
     })
+  }
+
+  // 클립 다운로드 함수
+  const handleDownload = async (clip: HighlightClip) => {
+    try {
+      // 비디오 파일 직접 다운로드 (정적 파일 서빙)
+      const videoUrl = `${API_BASE_URL}${clip.video_url}`
+
+      const a = document.createElement('a')
+      a.href = videoUrl
+      a.download = `${clip.title.replace(/[^a-zA-Z0-9가-힣]/g, '_')}_${clip.id}.mp4`
+      a.target = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch (error) {
+      console.error('다운로드 오류:', error)
+      alert('다운로드에 실패했습니다. 다시 시도해주세요.')
+    }
+  }
+
+  // 클립 삭제 함수
+  const handleDelete = async (clip: HighlightClip) => {
+    if (!confirm(`"${clip.title}" 클립을 삭제하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      await deleteClip(clip.id)
+      alert('클립이 삭제되었습니다.')
+
+      // 클립 목록 새로고침 (선택된 날짜 기준)
+      const targetDate = selectedDate.toISOString().split('T')[0]
+      const response = await getClipHighlights('all', 50, targetDate)
+      const devClips = response.clips.filter(c => c.category === '발달')
+      const safeClips = response.clips.filter(c => c.category === '안전')
+      setDevelopmentClips(devClips)
+      setSafetyClips(safeClips)
+    } catch (error) {
+      console.error('삭제 오류:', error)
+      alert('클립 삭제에 실패했습니다. 다시 시도해주세요.')
+    }
   }
 
   const renderClipCard = (clip: HighlightClip) => {
@@ -74,9 +134,30 @@ export default function ClipHighlights() {
         onClick={() => setSelectedClip(clip.id.toString())}
       >
         <div className="flex gap-4">
-          <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl">
-            {clip.thumbnail_url ? (
-              <img src={clip.thumbnail_url} alt={clip.title} className="w-full h-full object-cover rounded-lg" />
+          <div className="flex-shrink-0 w-24 h-24 bg-gray-900 rounded-lg flex items-center justify-center text-4xl overflow-hidden">
+            {clip.video_url ? (
+              <video
+                className="w-full h-full object-cover rounded-lg"
+                src={`${API_BASE_URL}${clip.video_url}#t=5`}
+                preload="metadata"
+                muted
+                playsInline
+                onError={(e) => {
+                  // 비디오 로드 실패 시 기본 이모지 표시
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.parentElement!.innerHTML = clip.category === '발달' ? '🎯' : '⚠️'
+                }}
+              />
+            ) : clip.thumbnail_url ? (
+              <img
+                src={`${API_BASE_URL}${clip.thumbnail_url}`}
+                alt={clip.title}
+                className="w-full h-full object-cover rounded-lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.parentElement!.innerHTML = clip.category === '발달' ? '🎯' : '⚠️'
+                }}
+              />
             ) : (
               clip.category === '발달' ? '🎯' : '⚠️'
             )}
@@ -107,13 +188,25 @@ export default function ClipHighlights() {
           </div>
         </div>
         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
-          <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDownload(clip)
+            }}
+            className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2"
+          >
             <Download className="w-3 h-3" />
             다운로드
           </button>
-          <button className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2">
-            <Share2 className="w-3 h-3" />
-            공유
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDelete(clip)
+            }}
+            className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+            삭제
           </button>
         </div>
       </div>
@@ -134,9 +227,23 @@ export default function ClipHighlights() {
   return (
     <div className="p-8">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <Film className="w-8 h-8 text-primary-600" />
-          <h1 className="text-3xl font-bold text-gray-900">클립 하이라이트</h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <Film className="w-8 h-8 text-primary-600" />
+            <h1 className="text-3xl font-bold text-gray-900">클립 하이라이트</h1>
+          </div>
+          {/* 날짜 선택 드롭다운 */}
+          <select
+            value={selectedDate.toISOString().split('T')[0]}
+            onChange={(e) => setSelectedDate(new Date(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            {availableDates.map((date) => (
+              <option key={date.toISOString()} value={date.toISOString().split('T')[0]}>
+                {date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </option>
+            ))}
+          </select>
         </div>
         <p className="text-gray-600">중요한 순간들을 확인하세요</p>
       </motion.div>
@@ -271,7 +378,16 @@ export default function ClipHighlights() {
                     controls
                     autoPlay
                     className="w-full h-full object-contain"
-                    src={`${clip.video_url}#t=0,${clip.duration_seconds || ''}`}
+                    src={`${API_BASE_URL}${clip.video_url}`}
+                    onError={(e) => {
+                      console.error('비디오 로드 실패:', clip.video_url)
+                      e.currentTarget.parentElement!.innerHTML = `
+                        <div class="text-white text-center">
+                          <p class="text-red-400 mb-2">⚠️ 영상을 불러올 수 없습니다</p>
+                          <p class="text-sm text-gray-400">${clip.video_url}</p>
+                        </div>
+                      `
+                    }}
                   >
                     브라우저가 비디오 태그를 지원하지 않습니다.
                   </video>

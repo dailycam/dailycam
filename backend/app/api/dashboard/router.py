@@ -6,12 +6,12 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+import pytz
 
 from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
 from app.models.analysis import AnalysisLog, SafetyEvent, DevelopmentEvent
 from app.models.live_monitoring.models import SegmentAnalysis, HourlyReport
-from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -54,33 +54,41 @@ def get_dashboard_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=range_days)
     
-    # 2. 선택한 날짜의 모든 분석 로그 조회 (일일 집계)
-    today_start = query_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = query_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    # 2. 오늘 날짜의 모든 분석 로그 조회 (일일 집계)
+    # KST 기준 오늘 날짜
+    kst = pytz.timezone('Asia/Seoul')
+    now_kst = datetime.now(kst)
+    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end_kst = now_kst.replace(hour=23, minute=59, second=59, microsecond=999999)
     
-    print(f"[Dashboard] 오늘 날짜 범위: {today_start} ~ {today_end}")
+    # UTC로 변환 (데이터베이스는 UTC로 저장됨)
+    today_start_utc = today_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    today_end_utc = today_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    
+    print(f"[Dashboard] 오늘 날짜 범위 (KST): {today_start_kst} ~ {today_end_kst}")
+    print(f"[Dashboard] 오늘 날짜 범위 (UTC): {today_start_utc} ~ {today_end_utc}")
     print(f"[Dashboard] User ID: {user_id}")
     
-    # AnalysisLog와 SegmentAnalysis 모두 조회 (실시간 수치 데이터)
+    # AnalysisLog 조회
     today_logs = (
         db.query(AnalysisLog)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start,
-            AnalysisLog.created_at <= today_end
+            AnalysisLog.created_at >= today_start_utc,
+            AnalysisLog.created_at <= today_end_utc
         )
         .all()
     )
     
-    # SegmentAnalysis도 조회 (10분 단위 분석 결과)
+    # SegmentAnalysis 조회 (실시간 수치 데이터)
     # TODO: user_id와 camera_id 매핑 필요 (현재는 camera-1 고정)
     camera_id = "camera-1"  # 추후 사용자별 카메라 매핑으로 변경
     today_segments = (
         db.query(SegmentAnalysis)
         .filter(
             SegmentAnalysis.camera_id == camera_id,
-            SegmentAnalysis.segment_start >= today_start,
-            SegmentAnalysis.segment_start <= today_end,
+            SegmentAnalysis.segment_start >= today_start_utc,
+            SegmentAnalysis.segment_start <= today_end_utc,
             SegmentAnalysis.status == 'completed'
         )
         .all()
@@ -95,26 +103,30 @@ def get_dashboard_summary(
     today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
     
     today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
-    # SegmentAnalysis에는 development_score가 없으므로 AnalysisLog만 사용
+    today_dev_scores.extend([s.development_score for s in today_segments if s.development_score is not None])
     
     print(f"[Dashboard] 안전 점수들: {today_safety_scores}")
+    print(f"[Dashboard] 발달 점수들: {today_dev_scores}")
     
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     print(f"[Dashboard] 평균 안전 점수: {avg_safety_score}")
     avg_dev_score = int(sum(today_dev_scores) / len(today_dev_scores)) if today_dev_scores else 0
+    print(f"[Dashboard] 평균 발달 점수: {avg_dev_score}")
     
-    # 2-2. 최신 로그 (요약 텍스트용)
+    # 2-2. 최신 로그 및 세그먼트 (요약 텍스트용)
     latest_log = today_logs[0] if today_logs else None
+    latest_segment = today_segments[0] if today_segments else None
     
     # 3. 기간 내 안전 점수 평균 및 이벤트 수
     stats = (
         db.query(
-            func.avg(AnalysisLog.safety_score).label("avg_safety"),
-            func.count(AnalysisLog.id).label("total_logs")
+            func.avg(SegmentAnalysis.safety_score).label("avg_safety"),
+            func.count(SegmentAnalysis.id).label("total_logs")
         )
         .filter(
-            AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= start_date
+            SegmentAnalysis.camera_id == camera_id,
+            SegmentAnalysis.segment_start >= start_date,
+            SegmentAnalysis.status == 'completed'
         )
         .first()
     )
@@ -126,8 +138,8 @@ def get_dashboard_summary(
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start,
-            AnalysisLog.created_at <= today_end,
+            AnalysisLog.created_at >= today_start_utc,
+            AnalysisLog.created_at <= today_end_utc,
             SafetyEvent.severity.in_(["위험", "주의"])
         )
         .count()
@@ -145,13 +157,14 @@ def get_dashboard_summary(
         
         day_stats = (
             db.query(
-                func.avg(AnalysisLog.safety_score).label("avg_safety"),
-                func.count(AnalysisLog.id).label("total_logs")
+                func.avg(SegmentAnalysis.safety_score).label("avg_safety"),
+                func.count(SegmentAnalysis.id).label("total_logs")
             )
             .filter(
-                AnalysisLog.user_id == user_id,
-                AnalysisLog.created_at >= day_start,
-                AnalysisLog.created_at < day_end
+                SegmentAnalysis.camera_id == camera_id,
+                SegmentAnalysis.segment_start >= day_start,
+                SegmentAnalysis.segment_start < day_end,
+                SegmentAnalysis.status == 'completed'
             )
             .first()
         )
@@ -205,7 +218,25 @@ def get_dashboard_summary(
     
     # 7. 추천 사항
     recommendations: List[Dict[str, Any]] = []
-    if latest_log and latest_log.recommendations:
+    
+    # 최신 HourlyReport에서 추천 활동 가져오기
+    latest_hourly_report = (
+        db.query(HourlyReport)
+        .filter(HourlyReport.camera_id == camera_id)
+        .order_by(HourlyReport.hour_start.desc())
+        .first()
+    )
+    
+    if latest_hourly_report and latest_hourly_report.recommended_activities:
+        if isinstance(latest_hourly_report.recommended_activities, list):
+            for rec in latest_hourly_report.recommended_activities[:3]:  # 최대 3개
+                if isinstance(rec, dict):
+                    recommendations.append({
+                        "priority": "medium",
+                        "title": rec.get("title", "추천 활동"),
+                        "description": rec.get("description", "") or rec.get("benefit", "")
+                    })
+    elif latest_log and latest_log.recommendations:
         if isinstance(latest_log.recommendations, list):
             for rec in latest_log.recommendations:
                 if isinstance(rec, dict):
@@ -220,12 +251,10 @@ def get_dashboard_summary(
         recommendations.append({
             "priority": "high",
             "title": "분석을 시작해보세요",
-            "description": "영상을 업로드하면 AI가 분석합니다."
+            "description": "스트리밍을 시작하면 AI가 자동으로 분석합니다."
         })
 
-    
     # 8. 타임라인 이벤트 (AnalysisLog + SegmentAnalysis 모두 포함)
-    
     timeline_events: List[Dict[str, Any]] = []
     
     # AnalysisLog의 이벤트들을 타임라인에 추가
@@ -238,9 +267,10 @@ def get_dashboard_summary(
         )
         
         for event in safety_events:
-            # 발달 이벤트와 동일하게 처리: log.created_at 사용
-            time_str = log.created_at.strftime("%H:%M")
-            hour = log.created_at.hour
+            # UTC를 KST로 변환
+            log_time_kst = log.created_at.replace(tzinfo=pytz.UTC).astimezone(kst)
+            time_str = log_time_kst.strftime("%H:%M")
+            hour = log_time_kst.hour
             
             # severity를 severity level로 매핑
             severity_map = {
@@ -251,7 +281,7 @@ def get_dashboard_summary(
             severity = severity_map.get(event.severity.value if hasattr(event.severity, 'value') else str(event.severity), "info")
             
             timeline_events.append({
-                "time": time_str or log.created_at.strftime("%H:%M"),
+                "time": time_str or log_time_kst.strftime("%H:%M"),
                 "hour": hour,
                 "type": "safety",
                 "severity": severity,
@@ -272,9 +302,10 @@ def get_dashboard_summary(
         )
         
         for event in development_events:
-            # created_at에서 시간 추출
-            time_str = log.created_at.strftime("%H:%M")
-            hour = log.created_at.hour
+            # UTC를 KST로 변환
+            log_time_kst = log.created_at.replace(tzinfo=pytz.UTC).astimezone(kst)
+            time_str = log_time_kst.strftime("%H:%M")
+            hour = log_time_kst.hour
             
             # category를 한글로 매핑
             category_map = {
@@ -297,47 +328,121 @@ def get_dashboard_summary(
                 "development_score": log.development_score  # 해당 시간대의 실제 발달 점수
             })
     
-    # SegmentAnalysis의 발달 이벤트도 타임라인에 추가
+    # SegmentAnalysis의 이벤트들을 타임라인에 추가
     for segment in today_segments:
-        segment_hour = segment.segment_start.hour
-        time_str = segment.segment_start.strftime("%H:%M")
+        # UTC를 KST로 변환
+        segment_start_kst = segment.segment_start.replace(tzinfo=pytz.UTC).astimezone(kst)
+        segment_hour = segment_start_kst.hour
+        time_str = segment_start_kst.strftime("%H:%M")
         
-        # SegmentAnalysis의 analysis_result에서 발달 데이터 추출
+        # SegmentAnalysis의 analysis_result에서 데이터 추출
         analysis_result = segment.analysis_result
-        if analysis_result:
-            development_analysis = analysis_result.get('development_analysis', {})
-            skills = development_analysis.get('skills', [])
+        if not analysis_result:
+            continue
             
-            # 각 skill을 발달 이벤트로 추가
-            for skill in skills:
-                if not skill.get('present', False):
-                    continue
-                
-                category_str = skill.get('category', '')
-                # category 매핑
-                category_map = {
-                    "대근육운동": "대근육운동 발달",
-                    "소근육운동": "소근육운동 발달",
-                    "언어": "언어 발달",
-                    "인지": "인지 발달",
-                    "사회정서": "사회성 발달"
-                }
-                category = category_map.get(category_str, "발달")
-                
-                timeline_events.append({
-                    "time": time_str,
-                    "hour": segment_hour,
-                    "type": "development",
-                    "title": skill.get('name', '발달 행동'),
-                    "description": f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
-                    "hasClip": False,
-                    "category": category,
-                    "isSleep": False,
-                    "development_score": None  # SegmentAnalysis에는 development_score가 없음
-                })
+        # 안전 이벤트 추가
+        safety_analysis = analysis_result.get('safety_analysis', {})
+        safety_incidents = safety_analysis.get('incident_events', [])
+        
+        for incident in safety_incidents:
+            severity_raw = incident.get('severity', '')
+            
+            # severity 매핑 (한글 → 영문)
+            severity_map = {
+                "사고": "danger",
+                "사고발생": "danger",
+                "위험": "danger",
+                "주의": "warning",
+                "권장": "info"
+            }
+            
+            # 대소문자 구분 없이 매핑
+            mapped_severity = severity_map.get(severity_raw, severity_map.get(severity_raw.lower(), "info"))
+            
+            # category는 risk_type에서 가져오기 (없으면 severity 기반으로 설정)
+            risk_type = incident.get('risk_type', '')
+            if risk_type:
+                category = risk_type
+            elif severity_raw in ["사고", "사고발생", "위험"]:
+                category = "위험"
+            elif severity_raw == "주의":
+                category = "주의"
+            elif severity_raw == "권장":
+                category = "권장"
+            else:
+                category = "안전"
+            
+            # title 처리: title이 없으면 description 사용, 둘 다 없으면 기본값
+            title = incident.get('title', '').strip()
+            description = incident.get('description', '').strip()
+            
+            if not title:
+                if description:
+                    title = description[:50]
+                else:
+                    title = f"{severity_raw} 이벤트"
+            
+            if not description:
+                description = title
+            
+            timeline_events.append({
+                "time": time_str,
+                "hour": segment_hour,
+                "type": "safety",
+                "severity": mapped_severity,
+                "title": title,
+                "description": description,
+                "resolved": False,
+                "hasClip": False,
+                "category": category,
+                "timestamp_range": incident.get('timestamp_range', ''),
+                "safety_score": segment.safety_score
+            })
+        
+        # 발달 이벤트 추가
+        development_analysis = analysis_result.get('development_analysis', {})
+        skills = development_analysis.get('skills', [])
+        
+        for skill in skills:
+            if not skill.get('present', False):
+                continue
+            
+            category_str = skill.get('category', '')
+            # category 매핑
+            category_map = {
+                "대근육운동": "대근육운동 발달",
+                "소근육운동": "소근육운동 발달",
+                "언어": "언어 발달",
+                "인지": "인지 발달",
+                "사회정서": "사회성 발달"
+            }
+            category = category_map.get(category_str, "발달")
+            
+            timeline_events.append({
+                "time": time_str,
+                "hour": segment_hour,
+                "type": "development",
+                "title": skill.get('name', '발달 행동'),
+                "description": f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
+                "hasClip": False,
+                "category": category,
+                "isSleep": False,
+                "development_score": segment.development_score
+            })
     
     # 시간순으로 정렬 (최신순)
     timeline_events.sort(key=lambda x: x["hour"], reverse=True)
+    
+    # 디버깅: 안전 이벤트 개수 확인
+    safety_events = [e for e in timeline_events if e["type"] == "safety"]
+    danger_events = [e for e in safety_events if e["severity"] == "danger"]
+    warning_events = [e for e in safety_events if e["severity"] == "warning"]
+    info_events = [e for e in safety_events if e["severity"] == "info"]
+    
+    print(f"[Dashboard] 타임라인 이벤트 총 {len(timeline_events)}개")
+    print(f"[Dashboard] 안전 이벤트: {len(safety_events)}개 (위험: {len(danger_events)}, 주의: {len(warning_events)}, 정보: {len(info_events)})")
+    if safety_events:
+        print(f"[Dashboard] 샘플 안전 이벤트: severity={safety_events[0]['severity']}, title={safety_events[0]['title'][:50]}, category={safety_events[0]['category']}")
     
     # 9. 시간대별 통계 (hourly_stats) 생성
     hourly_stats: List[Dict[str, Any]] = []
@@ -353,7 +458,9 @@ def get_dashboard_summary(
     
     # AnalysisLog를 시간대별로 집계
     for log in today_logs:
-        hour = log.created_at.hour
+        # UTC를 KST로 변환
+        log_time_kst = log.created_at.replace(tzinfo=pytz.UTC).astimezone(kst)
+        hour = log_time_kst.hour
         
         # 해당 시간대에 이벤트가 있으면 점수 업데이트
         if log.safety_score is not None:
@@ -372,16 +479,20 @@ def get_dashboard_summary(
     
     # SegmentAnalysis도 시간대별로 집계 (실시간 VLM 분석 결과)
     for segment in today_segments:
-        hour = segment.segment_start.hour
+        # UTC를 KST로 변환
+        segment_start_kst = segment.segment_start.replace(tzinfo=pytz.UTC).astimezone(kst)
+        hour = segment_start_kst.hour
         
         # 해당 시간대에 세그먼트가 있으면 점수 업데이트
         if segment.safety_score is not None:
             if hourly_data[hour]["analysisCount"] == 0:
                 hourly_data[hour]["safetyScore"] = segment.safety_score
+                hourly_data[hour]["developmentScore"] = segment.development_score or 0
             else:
                 # 평균 계산
                 count = hourly_data[hour]["analysisCount"]
                 hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * count + segment.safety_score) / (count + 1))
+                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * count + (segment.development_score or 0)) / (count + 1))
         
         hourly_data[hour]["analysisCount"] += 1
         # SegmentAnalysis의 incident_count도 이벤트로 카운트
@@ -396,12 +507,12 @@ def get_dashboard_summary(
     # 현재 시간 기준 가장 최근 완료된 1시간 리포트 조회
     now = datetime.now()
     current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-    previous_hour_start = current_hour_start - timedelta(hours=1)
     
     # 최신 HourlyReport 조회 (현재 시간 이전의 가장 최근 리포트)
     latest_hourly_report = (
         db.query(HourlyReport)
         .filter(
+            HourlyReport.camera_id == camera_id,
             HourlyReport.hour_start < current_hour_start
         )
         .order_by(HourlyReport.hour_start.desc())
@@ -412,6 +523,11 @@ def get_dashboard_summary(
     summary_text = "아직 분석된 데이터가 없습니다."
     if latest_hourly_report and latest_hourly_report.safety_summary:
         summary_text = latest_hourly_report.safety_summary
+    elif latest_segment and latest_segment.analysis_result:
+        # SegmentAnalysis의 analysis_result에서 요약 추출
+        safety_analysis = latest_segment.analysis_result.get('safety_analysis', {})
+        if safety_analysis.get('summary'):
+            summary_text = safety_analysis.get('summary')
     elif latest_log and latest_log.safety_summary:
         summary_text = latest_log.safety_summary
     
@@ -422,13 +538,49 @@ def get_dashboard_summary(
         "safetyScore": avg_safety_score,  # 오늘 분석된 모든 영상의 평균 안전 점수 (실시간)
         "developmentScore": avg_dev_score,  # 오늘 분석된 모든 영상의 평균 발달 점수 (실시간)
         "incidentCount": incident_count,  # 오늘 분석된 모든 영상의 이벤트 카운트 (실시간)
-        "monitoringHours": float(len(today_logs) + len(today_segments)) * 0.1,  # 분석된 영상 개수 * 10분 (실시간)
+        "monitoringHours": float(len(today_logs) + len(today_segments)) * 0.17,  # 분석된 영상 개수 * 10분 (실시간)
         "totalAnalysisCount": len(today_logs) + len(today_segments),  # 총 분석 횟수 (실시간)
-        "activityPattern": latest_log.main_activity if latest_log and latest_log.main_activity else "데이터 없음",
+        "activityPattern": "모니터링 중" if (today_logs or today_segments) else "데이터 없음",
         "weeklyTrend": weekly_trend,
         "risks": risks,
         "recommendations": recommendations,
         "timelineEvents": timeline_events,  # 오늘 분석된 모든 이벤트 (실시간)
-        "hourly_stats": hourly_stats  # 시간대별 통계 추가 (실시간)
+        "hourlyStats": hourly_stats  # 시간대별 통계 추가 (실시간) - camelCase로 변경
     }
 
+
+@router.post("/fix-development-scores")
+def fix_development_scores(db: Session = Depends(get_db)):
+    """기존 SegmentAnalysis의 development_score 업데이트"""
+    try:
+        segments = db.query(SegmentAnalysis).filter(
+            SegmentAnalysis.status == 'completed',
+            SegmentAnalysis.analysis_result.isnot(None)
+        ).all()
+        
+        updated_count = 0
+        for segment in segments:
+            try:
+                result = segment.analysis_result
+                if not result:
+                    continue
+                
+                dev_analysis = result.get('development_analysis', {})
+                dev_score = dev_analysis.get('development_score')
+                
+                if dev_score is not None and (segment.development_score is None or segment.development_score == 0):
+                    segment.development_score = dev_score
+                    segment.development_radar_scores = dev_analysis.get('development_radar_scores', {})
+                    
+                    safety_analysis = result.get('safety_analysis', {})
+                    segment.safety_incidents = safety_analysis.get('incident_events', [])
+                    
+                    updated_count += 1
+            except Exception as e:
+                print(f"Error updating segment {segment.id}: {e}")
+                continue
+        
+        db.commit()
+        return {"success": True, "updated": updated_count, "message": f"{updated_count}개 레코드 업데이트 완료"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

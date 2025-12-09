@@ -1,4 +1,3 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   MonitorPlay,
@@ -6,34 +5,34 @@ import {
   Shield,
   Film,
   Settings,
-  ScanEye,
   Home,
   ChevronLeft,
   ChevronRight,
+  Video,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { getAuthToken } from '../../lib/auth'
 import { API_BASE_URL } from '@/constants/api'
 
-const navigation = [
-  { name: '홈', href: '/home', icon: Home },
-  { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
-  { name: '모니터링', href: '/monitoring', icon: MonitorPlay },
-  { name: '발달 리포트', href: '/development-report', icon: TrendingUp },
-  { name: '안전 리포트', href: '/safety-report', icon: Shield },
-  { name: '클립 하이라이트', href: '/clip-highlights', icon: Film },
-  { name: 'AI 행동 관찰', href: '/video-analysis-test', icon: ScanEye },
-  { name: '설정', href: '/settings', icon: Settings },
-]
-
-type MeResponse = {
-  id: number
+interface MeResponse {
+  user_id: number
   email: string
-  name: string
-  is_subscribed: boolean | number
-  next_billing_at?: string | null
-  subscription_plan?: string | null
+  is_subscribed: boolean
+  subscription_plan: string | null
+  next_billing_at: string | null
 }
+
+const navigation = [
+  { name: '홈', icon: Home, href: '/home' },
+  { name: '대시보드', icon: LayoutDashboard, href: '/dashboard' },
+  { name: '모니터링', icon: MonitorPlay, href: '/monitoring' },
+  { name: '발달 리포트', icon: TrendingUp, href: '/development-report' },
+  { name: '안전 리포트', icon: Shield, href: '/safety-report' },
+  { name: '클립 하이라이트', icon: Film, href: '/clip-highlights' },
+  { name: '비디오 분석', icon: Video, href: '/video-analysis-test' },
+  { name: '설정', icon: Settings, href: '/settings' },
+]
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -41,8 +40,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
-  const navigate = useNavigate()
-
+  const location = useLocation()
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [daysLeft, setDaysLeft] = useState<number | null>(null)
   const [plan, setPlan] = useState<string | null>(null)
@@ -147,22 +145,24 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
           </Link>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-6 space-y-1">
-            {navigation.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.href}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 py-3 px-4 rounded-lg text-sm font-medium transition-colors ${isActive
+          <nav className="flex-1 px-2 py-6 space-y-1 overflow-y-auto scrollbar-thin">
+            {navigation.map((item) => {
+              const isActive = location.pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-50'
-                  }`
-                }
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                <span>{item.name}</span>
-              </NavLink>
-            ))}
+                    }`}
+                  title={item.name}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span>{item.name}</span>
+                </Link>
+              )
+            })}
           </nav>
 
           {/* Subscription Info */}
@@ -183,27 +183,23 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                     style={{ width: progressWidth }}
                   />
                 </div>
-                <button
-                  className="w-full text-xs text-primary-700 font-medium hover:text-primary-800"
-                  onClick={() =>
-                    navigate('/settings', {
-                      state: { section: 'subscription' },
-                    })
-                  }
+                <Link
+                  to="/subscription"
+                  className="block text-center text-xs text-primary-700 font-medium hover:text-primary-800"
                 >
                   플랜 관리 →
-                </button>
+                </Link>
               </div>
             ) : (
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-sm font-semibold text-gray-900 mb-1">
-                  구독중인 플랜이 없습니다
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-xs text-gray-600 mb-2">
+                  프리미엄 기능을 이용하려면
                 </p>
                 <Link
                   to="/subscription"
-                  className="block w-full py-2 bg-primary-600 text-white text-xs font-bold rounded-lg hover:bg-primary-700 transition-colors text-center"
+                  className="block text-center text-xs bg-primary-600 text-white py-2 rounded-lg font-medium hover:bg-primary-700"
                 >
-                  구독하러 가기
+                  구독하기
                 </Link>
               </div>
             )}

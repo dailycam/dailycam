@@ -51,6 +51,27 @@ def create_app() -> FastAPI:
     )
 
     # ----------------------------------------------------
+    # CORS 설정 (라우터 등록 전에 먼저 설정해야 함)
+    # ----------------------------------------------------
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],  # Vite 개발 서버
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+
+    # 세션 미들웨어 추가 (OAuth에 필요)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
+    )
+
+    # ----------------------------------------------------
     # 🔥 startup: DB 초기화 + 자동결제 워커 시작
     # ----------------------------------------------------
     @app.on_event("startup")
@@ -196,25 +217,6 @@ def create_app() -> FastAPI:
                 "analyze_video": "/api/homecam/analyze-video",
             },
         }
-
-    # ----------------------------------------------------
-    # CORS 설정 (프론트엔드에서 접근 가능하도록)
-    # ----------------------------------------------------
-    # 환경 변수에서 허용할 origin 가져오기 (프로덕션용)
-    allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    # 세션 미들웨어 추가 (OAuth에 필요)
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
-    )
 
     # ----------------------------------------------------
     # 라우터 등록

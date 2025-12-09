@@ -269,31 +269,42 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
 
                 {/* --- [4단계: 모니터링 구간 레이어 (가장 바깥쪽)] --- */}
                 {monitoringRanges.map((range, idx) => {
-                    const [startH] = range.start.split(':').map(Number)
-                    const [endH] = range.end.split(':').map(Number)
+                    const [startH, startM] = range.start.split(':').map(Number)
+                    const [endH, endM] = range.end.split(':').map(Number)
 
-                    const startHour12 = startH % 12
-                    const endHour12 = endH % 12
+                    // 시작 시간과 종료 시간을 분 단위로 변환
+                    const startTotalMinutes = startH * 60 + startM
+                    const endTotalMinutes = endH * 60 + endM
 
-                    const startAngle = startHour12 * 30
-                    let endAngle = (endHour12 + 1) * 30
+                    // 모니터링 구간에 포함되는 모든 시간대를 찾기
+                    const coveredHours: number[] = []
+                    for (let h = startH; h <= endH; h++) {
+                        coveredHours.push(h)
+                    }
 
-                    return (
-                        <g
-                            key={`mon-${idx}`}
-                            onMouseEnter={() => setHoveredMonitoring(range)}
-                            onMouseLeave={() => setHoveredMonitoring(null)}
-                            className="cursor-pointer"
-                        >
-                            {/* 모니터링 띠 (가장 바깥쪽: radius + 52 ~ + 58) */}
-                            <path
-                                d={describeDonutSlice(center, center, radius + 52, radius + 58, startAngle, endAngle)}
-                                fill={COLORS.monitoring}
-                                opacity={hoveredMonitoring === range ? "1" : "0.6"}
-                                className="transition-opacity duration-200"
-                            />
-                        </g>
-                    )
+                    // 각 시간대를 12시간 형식으로 변환하여 arc 그리기
+                    return coveredHours.map((hour, hourIdx) => {
+                        const hour12 = hour % 12
+                        const startAngle = hour12 * 30
+                        const endAngle = startAngle + 30
+
+                        return (
+                            <g
+                                key={`mon-${idx}-${hourIdx}`}
+                                onMouseEnter={() => setHoveredMonitoring(range)}
+                                onMouseLeave={() => setHoveredMonitoring(null)}
+                                className="cursor-pointer"
+                            >
+                                {/* 모니터링 띠 (가장 바깥쪽: radius + 52 ~ + 58) */}
+                                <path
+                                    d={describeDonutSlice(center, center, radius + 52, radius + 58, startAngle, endAngle)}
+                                    fill={COLORS.monitoring}
+                                    opacity={hoveredMonitoring === range ? "1" : "0.6"}
+                                    className="transition-opacity duration-200"
+                                />
+                            </g>
+                        )
+                    })
                 })}
 
                 {/* --- [1단계: 시계 바늘 레이어] --- */}
@@ -358,8 +369,9 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                         exit={{ opacity: 0, y: 10, scale: 0.9 }}
                         className="absolute z-50 bg-gray-900/90 text-white p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-700 pointer-events-none"
                         style={{
-                            left: mousePos.x + 20,
-                            top: mousePos.y - 20,
+                            left: mousePos.x,
+                            top: mousePos.y,
+                            transform: 'translate(-50%, -120%)',
                             minWidth: '220px',
                             maxWidth: '260px'
                         }}

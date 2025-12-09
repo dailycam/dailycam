@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from sqlalchemy.orm import Session
+import pytz
 
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.database.session import get_db
@@ -80,10 +81,11 @@ class SegmentAnalysisScheduler:
         db = next(get_db())
         
         try:
-            # 1. 분석할 구간 정의 (현재 시간 기준 10분 전 구간)
-            now = datetime.now()
+            # 1. 분석할 구간 정의 (한국 시간 기준)
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             
-            # 현재 시간을 10분 단위로 내림 (서버 시간 기준)
+            # 현재 시간을 10분 단위로 내림 (한국 시간 기준)
             current_minutes = (now.minute // 10) * 10
             current_segment_end = now.replace(minute=current_minutes, second=0, microsecond=0)
             
@@ -91,14 +93,9 @@ class SegmentAnalysisScheduler:
             segment_end = current_segment_end - timedelta(minutes=10)
             segment_start = segment_end - timedelta(minutes=10)
 
-            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력 (실제 계산은 서버 시간 기준)
-            kst_offset = timedelta(hours=9)
-            now_kst = now + kst_offset
-            segment_start_kst = segment_start + kst_offset
-            segment_end_kst = segment_end + kst_offset
-            
-            print(f"[Job 등록] 📅 현재 시간(한국 시각): {now_kst.strftime('%H:%M:%S')}")
-            print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start_kst.strftime('%H:%M:%S')} ~ {segment_end_kst.strftime('%H:%M:%S')}")
+            # 로그 출력 (이미 한국 시간)
+            print(f"[Job 등록] 📅 현재 시간(한국 시각): {now.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
             
             # 2. 해당 구간의 비디오 파일 찾기
             video_path = self._get_segment_video(segment_start)
@@ -118,12 +115,15 @@ class SegmentAnalysisScheduler:
                 print(f"[Job 등록] ⏭️ 이미 등록됨 (상태: {existing_job.status}): {segment_start.strftime('%H:%M:%S')}")
                 return
             
-            # 4. 분석 Job 등록 (빠르게 완료)
+            # 4. 분석 Job 등록 (DB에는 UTC로 저장)
+            segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
+            segment_end_utc = segment_end.astimezone(pytz.UTC).replace(tzinfo=None)
+            
             analysis_job = AnalysisJob(
                 camera_id=self.camera_id,
                 video_path=str(video_path),
-                segment_start=segment_start,
-                segment_end=segment_end,
+                segment_start=segment_start_utc,
+                segment_end=segment_end_utc,
                 status=JobStatus.PENDING
             )
             db.add(analysis_job)
