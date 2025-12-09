@@ -145,7 +145,7 @@ class AnalysisWorker:
             
             # 3. 파일 크기 검증
             file_size = video_path.stat().st_size
-            min_size_mb = 10
+            min_size_mb = 1
             
             if file_size < min_size_mb * 1024 * 1024:
                 raise ValueError(f"비디오 파일이 너무 작음: {file_size / (1024 * 1024):.2f}MB (최소 {min_size_mb}MB 필요)")

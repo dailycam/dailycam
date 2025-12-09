@@ -111,6 +111,10 @@ async def upload_camera_video(
     - 개별 파일: 최대 500MB
     - 사용자 전체: 최대 5GB
     """
+    # camera_id 검증
+    if not camera_id or camera_id.strip() == "":
+        raise HTTPException(status_code=400, detail="camera_id가 필요합니다.")
+    
     # 비디오 파일 검증
     if not video.content_type or not video.content_type.startswith('video/'):
         raise HTTPException(status_code=400, detail="비디오 파일만 업로드 가능합니다")
