@@ -237,8 +237,10 @@ def create_app() -> FastAPI:
                 if 'set-cookie' not in [k.lower() for k in response.headers.keys()]:
                     # 세션 쿠키 이름 (SessionMiddleware 기본값)
                     session_cookie_name = "session"
-                    # 기존 쿠키가 있으면 재사용
+                    
+                    # 기존 쿠키가 있으면 재사용, 없으면 새로 생성
                     if session_cookie_name in request.cookies:
+                        # 기존 쿠키 재사용
                         response.set_cookie(
                             key=session_cookie_name,
                             value=request.cookies[session_cookie_name],
@@ -248,6 +250,39 @@ def create_app() -> FastAPI:
                             samesite="none",
                             path="/"
                         )
+                    else:
+                        # 세션 데이터가 있으면 새 쿠키 생성
+                        session_data = dict(request.session)
+                        if session_data:
+                            # Starlette의 SessionMiddleware가 사용하는 형식으로 쿠키 생성
+                            import json
+                            import base64
+                            import hmac
+                            import hashlib
+                            from datetime import datetime
+                            
+                            secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+                            data = json.dumps(session_data, separators=(',', ':'))
+                            timestamp = str(int(datetime.utcnow().timestamp()))
+                            payload = f"{data}:{timestamp}"
+                            encoded = base64.urlsafe_b64encode(payload.encode()).decode().rstrip('=')
+                            signature = hmac.new(
+                                secret_key.encode(),
+                                encoded.encode(),
+                                hashlib.sha256
+                            ).hexdigest()
+                            cookie_value = f"{encoded}.{signature}"
+                            
+                            response.set_cookie(
+                                key=session_cookie_name,
+                                value=cookie_value,
+                                max_age=3600,
+                                httponly=True,
+                                secure=True,
+                                samesite="none",
+                                path="/"
+                            )
+                            print(f"[SessionCookieMiddleware] Created new session cookie")
             return response
     
     app.add_middleware(SessionCookieMiddleware)
