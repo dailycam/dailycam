@@ -715,22 +715,22 @@ export interface ClipHighlightsResponse {
 }
 
 /**
- * 하이라이트 클립 목록 조회
+ * 하이라이트 클립 목록 조회 (인증 불필요)
  */
 export async function getClipHighlights(
   category: string = 'all',
-  limit: number = 20
+  limit: number = 20,
+  targetDate?: string  // YYYY-MM-DD 형식
 ): Promise<ClipHighlightsResponse> {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/clips/list?category=${category}&limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          ...getAuthHeader(), // 인증 헤더 추가
-        },
-      }
-    )
+    let url = `${API_BASE_URL}/api/clips/list?category=${category}&limit=${limit}`
+    if (targetDate) {
+      url += `&target_date=${targetDate}`
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+    })
 
     if (!response.ok) {
       throw new Error('클립 데이터를 가져오는 중 오류가 발생했습니다.')
