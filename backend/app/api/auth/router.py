@@ -20,6 +20,7 @@ oauth = OAuth(config)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+BACKEND_URL = os.getenv("BACKEND_URL")  # OAuth 리다이렉트 URI용
 
 # Google OAuth 클라이언트 등록
 oauth.register(
@@ -38,16 +39,26 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
-    # HTTPS 환경에서 올바른 redirect_uri 생성
-    # request.url_for()는 상대 경로를 반환하므로, 절대 URL로 변환
-    base_url = str(request.base_url).rstrip('/')
-    if base_url.startswith('http://'):
-        # Nginx가 HTTPS를 처리하므로, X-Forwarded-Proto 헤더 확인
-        if request.headers.get('X-Forwarded-Proto') == 'https':
-            base_url = base_url.replace('http://', 'https://', 1)
+    # 리다이렉트 URI 생성
+    if BACKEND_URL:
+        # 환경 변수로 명시적으로 설정된 경우 사용
+        redirect_uri = f"{BACKEND_URL.rstrip('/')}/api/auth/google/callback"
+    else:
+        # 동적 생성 (fallback)
+        base_url = str(request.base_url).rstrip('/')
+        if base_url.startswith('http://'):
+            # Nginx가 HTTPS를 처리하므로, X-Forwarded-Proto 헤더 확인
+            if request.headers.get('X-Forwarded-Proto') == 'https':
+                base_url = base_url.replace('http://', 'https://', 1)
+        
+        callback_path = request.url_for('google_callback')
+        redirect_uri = f"{base_url}{callback_path}"
     
-    callback_path = request.url_for('google_callback')
-    redirect_uri = f"{base_url}{callback_path}"
+    # 디버깅을 위한 로그 (프로덕션에서는 제거하거나 로그 레벨 조정)
+    print(f"[OAuth] Generated redirect_uri: {redirect_uri}")
+    print(f"[OAuth] BACKEND_URL env: {BACKEND_URL}")
+    print(f"[OAuth] Request base_url: {request.base_url}")
+    print(f"[OAuth] X-Forwarded-Proto: {request.headers.get('X-Forwarded-Proto')}")
     
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
