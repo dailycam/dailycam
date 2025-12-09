@@ -38,8 +38,18 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
-    redirect_uri = request.url_for('google_callback')
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    try:
+        # BACKEND_URL을 사용하여 명시적으로 redirect_uri 생성
+        BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
+        
+        return await oauth.google.authorize_redirect(request, redirect_uri)
+    except Exception as e:
+        print(f"Google 로그인 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
+        )
 
 
 @router.get("/google/callback")
