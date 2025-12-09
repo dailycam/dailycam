@@ -13,7 +13,7 @@ if exist "venv\Scripts\activate.bat" (
 )
 
 REM 워커 실행
-python analysis_worker.py
+python app/workers/analysis_worker.py
 
 pause
 

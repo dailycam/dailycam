@@ -340,95 +340,165 @@ def get_dashboard_summary(
         if not analysis_result:
             continue
             
-        # 안전 이벤트 추가
-        safety_analysis = analysis_result.get('safety_analysis', {})
-        safety_incidents = safety_analysis.get('incident_events', [])
+            # Development Analysis extraction
+            development_analysis = analysis_result.get('development_analysis', {})
+            skills = development_analysis.get('skills', [])
+
+            # 각 skill을 발달 이벤트로 추가
+            for skill in skills:
+                if not skill.get('present', False):
+                    continue
+                
+                category_str = skill.get('category', '')
+                # category 매핑
+                category_map = {
+                    "대근육운동": "대근육운동 발달",
+                    "소근육운동": "소근육운동 발달",
+                    "언어": "언어 발달",
+                    "인지": "인지 발달",
+                    "사회정서": "사회성 발달"
+                }
+                category = category_map.get(category_str, "발달")
+                
+                timeline_events.append({
+                    "time": time_str,
+                    "hour": segment_hour,
+                    "type": "development",
+                    "title": skill.get('name', '발달 행동'),
+                    "description": f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
+                    "hasClip": False,
+                    "category": category,
+                    "isSleep": False,
+                    "development_score": None  # SegmentAnalysis에는 development_score가 없음
+                })
         
-        for incident in safety_incidents:
-            severity_raw = incident.get('severity', '')
+        # [추가] SegmentAnalysis의 안전 이벤트도 타임라인에 추가
+        if analysis_result:
+            safety_analysis = analysis_result.get('safety_analysis', {})
+            has_safety_event = False
             
-            # severity 매핑 (한글 → 영문)
-            severity_map = {
-                "사고": "danger",
-                "사고발생": "danger",
-                "위험": "danger",
-                "주의": "warning",
-                "권장": "info"
-            }
+            # 1. safety_events (UI 표시용 안전 이벤트 - 우선 사용)
+            ui_safety_events = safety_analysis.get('safety_events', [])
             
-            # 대소문자 구분 없이 매핑
-            mapped_severity = severity_map.get(severity_raw, severity_map.get(severity_raw.lower(), "info"))
+            if isinstance(ui_safety_events, list) and len(ui_safety_events) > 0:
+                for event in ui_safety_events:
+                    if not isinstance(event, dict): 
+                        continue
+                        
+                    severity_kr = event.get('severity', '권장')
+                    # severity 매핑
+                    severity_map = {
+                        "위험": "danger",
+                        "주의": "warning",
+                        "권장": "info",
+                        "안전": "info",
+                        "사고": "danger",
+                        "사고발생": "danger"
+                    }
+                    severity = severity_map.get(severity_kr, "info")
+                    
+                    # 카테고리 설정 (location 활용)
+                    category = event.get('location', '안전')
+                    
+                    timeline_events.append({
+                        "time": time_str, # 세그먼트 시작 시간
+                        "hour": segment_hour,
+                        "type": "safety",
+                        "severity": severity,
+                        "title": event.get('title', '안전 이벤트'),
+                        "description": event.get('description', ''),
+                        "hasClip": False,
+                        "category": category,
+                        "safety_score": segment.safety_score
+                    })
+                    has_safety_event = True
             
-            # category는 risk_type에서 가져오기 (없으면 severity 기반으로 설정)
-            risk_type = incident.get('risk_type', '')
-            if risk_type:
-                category = risk_type
-            elif severity_raw in ["사고", "사고발생", "위험"]:
-                category = "위험"
-            elif severity_raw == "주의":
-                category = "주의"
-            elif severity_raw == "권장":
-                category = "권장"
-            else:
-                category = "안전"
+            # 2. incident_events (감점용 이벤트 - safety_events가 없을 때 Fallback)
+            elif 'incident_events' in safety_analysis: 
+                incident_events = safety_analysis.get('incident_events', [])
+                if isinstance(incident_events, list):
+                    for event in incident_events:
+                        if not isinstance(event, dict): 
+                            continue
+                            
+                        severity_kr = event.get('severity', '권장')
+                        severity_map = { "위험": "danger", "주의": "warning", "권장": "info", "안전": "info", "사고": "danger", "사고발생": "danger" }
+                        severity = severity_map.get(severity_kr, "info")
+                        
+                        # 권장/확인 카테고리 구분
+                        category = "안전"
+                        if severity == 'info':
+                            if '권장' in event.get('description', '') or '권장' in severity_kr:
+                                category = '안전 권장'
+                            else:
+                                category = '안전 확인'
+                        
+                        # Title 생성 (description 활용)
+                        title = event.get('description', '안전 이벤트')
+                        if len(title) > 20:
+                            title = title[:20] + "..."
+                        
+                        timeline_events.append({
+                            "time": time_str,
+                            "hour": segment_hour,
+                            "type": "safety",
+                            "severity": severity,
+                            "title": title,
+                            "description": event.get('description', ''),
+                            "hasClip": False,
+                            "category": category,
+                            "safety_score": segment.safety_score
+                        })
+                        has_safety_event = True
+
+            # 3. environment_risks (환경 위험 요소)
+            env_risks = safety_analysis.get('environment_risks', [])
+            if isinstance(env_risks, list):
+                for risk in env_risks:
+                    if not isinstance(risk, dict): 
+                        continue
+                        
+                    severity_kr = risk.get('severity', '주의')
+                    severity_map = {
+                        "위험": "danger",
+                        "주의": "warning",
+                        "권장": "info"
+                    }
+                    severity = severity_map.get(severity_kr, "warning")
+                    
+                    # Title 생성: risk_type + environment_factor
+                    risk_type = risk.get('risk_type', '환경 위험')
+                    env_factor = risk.get('environment_factor', '')
+                    title = risk_type
+                    if env_factor:
+                        title = f"{risk_type} ({env_factor})"
+                    
+                    timeline_events.append({
+                        "time": time_str,
+                        "hour": segment_hour,
+                        "type": "safety",
+                        "severity": severity,
+                        "title": title,
+                        "description": risk.get('comment', risk.get('description', '위험 요소가 감지되었습니다.')),
+                        "hasClip": False,
+                        "category": "환경 안전",
+                        "safety_score": segment.safety_score
+                    })
+                    has_safety_event = True
             
-            # title 처리: title이 없으면 description 사용, 둘 다 없으면 기본값
-            title = incident.get('title', '').strip()
-            description = incident.get('description', '').strip()
-            
-            if not title:
-                if description:
-                    title = description[:50]
-                else:
-                    title = f"{severity_raw} 이벤트"
-            
-            if not description:
-                description = title
-            
-            timeline_events.append({
-                "time": time_str,
-                "hour": segment_hour,
-                "type": "safety",
-                "severity": mapped_severity,
-                "title": title,
-                "description": description,
-                "resolved": False,
-                "hasClip": False,
-                "category": category,
-                "timestamp_range": incident.get('timestamp_range', ''),
-                "safety_score": segment.safety_score
-            })
-        
-        # 발달 이벤트 추가
-        development_analysis = analysis_result.get('development_analysis', {})
-        skills = development_analysis.get('skills', [])
-        
-        for skill in skills:
-            if not skill.get('present', False):
-                continue
-            
-            category_str = skill.get('category', '')
-            # category 매핑
-            category_map = {
-                "대근육운동": "대근육운동 발달",
-                "소근육운동": "소근육운동 발달",
-                "언어": "언어 발달",
-                "인지": "인지 발달",
-                "사회정서": "사회성 발달"
-            }
-            category = category_map.get(category_str, "발달")
-            
-            timeline_events.append({
-                "time": time_str,
-                "hour": segment_hour,
-                "type": "development",
-                "title": skill.get('name', '발달 행동'),
-                "description": f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
-                "hasClip": False,
-                "category": category,
-                "isSleep": False,
-                "development_score": segment.development_score
-            })
+            # 4. 이벤트가 없으면 '안전함' 이벤트 추가
+            if not has_safety_event:
+                timeline_events.append({
+                    "time": time_str,
+                    "hour": segment_hour,
+                    "type": "safety",
+                    "severity": "info",
+                    "title": "안전하게 활동 중",
+                    "description": "특이사항 없이 안전한 상태입니다.",
+                    "hasClip": False,
+                    "category": "안전 확인",
+                    "safety_score": segment.safety_score or 100
+                })
     
     # 시간순으로 정렬 (최신순)
     timeline_events.sort(key=lambda x: x["hour"], reverse=True)
@@ -502,6 +572,75 @@ def get_dashboard_summary(
     # 리스트로 변환
     hourly_stats = list(hourly_data.values())
     
+    # 10. 실제 모니터링 분석된 시간 구간 (Monitoring Ranges) 계산
+    # SegmentAnalysis와 AnalysisLog의 시간 구간을 합쳐서 계산
+    raw_ranges = []
+    
+    # 10-1. SegmentAnalysis 구간 추가
+    for segment in today_segments:
+        # segment_end가 있으면 사용, 없으면 start + 10분
+        s_start = segment.segment_start
+        s_end = segment.segment_end if segment.segment_end else s_start + timedelta(minutes=10)
+        raw_ranges.append((s_start, s_end))
+        
+    # 10-2. AnalysisLog 구간 추가
+    # AnalysisLog는 duration이 없으므로, 이벤트가 있으면 이벤트 범위, 없으면 created_at + 10분으로 추정
+    for log in today_logs:
+        # 연결된 이벤트들 조회
+        log_events_timestamps = []
+        
+        # SafetyEvent
+        s_events = db.query(SafetyEvent.event_timestamp).filter(SafetyEvent.analysis_log_id == log.id).all()
+        for e in s_events:
+            if e.event_timestamp:
+                log_events_timestamps.append(e.event_timestamp)
+                
+        # DevelopmentEvent
+        d_events = db.query(DevelopmentEvent.event_timestamp).filter(DevelopmentEvent.analysis_log_id == log.id).all()
+        for e in d_events:
+            if e.event_timestamp:
+                log_events_timestamps.append(e.event_timestamp)
+        
+        if log_events_timestamps:
+            log_start = min(log_events_timestamps)
+            log_end = max(log_events_timestamps)
+            # 종료 시간이 시작 시간과 같으면 최소 5분 추가
+            if log_end == log_start:
+                log_end = log_start + timedelta(minutes=5)
+            raw_ranges.append((log_start, log_end))
+        else:
+            # 이벤트가 없으면 created_at ~ 10분 후로 가정
+            l_start = log.created_at
+            l_end = l_start + timedelta(minutes=10)
+            raw_ranges.append((l_start, l_end))
+            
+    # 10-3. 구간 병합 수행
+    merged_ranges = []
+    if raw_ranges:
+        # 시작 시간 순으로 정렬
+        raw_ranges.sort(key=lambda x: x[0])
+        
+        current_start, current_end = raw_ranges[0]
+        
+        for i in range(1, len(raw_ranges)):
+            next_start, next_end = raw_ranges[i]
+            
+            # 구간이 겹치거나 연결되면 병합 (1분 정도의 오차는 허용해서 연결 - timedelta)
+            if next_start <= current_end + timedelta(minutes=1): 
+                current_end = max(current_end, next_end)
+            else:
+                merged_ranges.append({
+                    "start": current_start.strftime("%H:%M"),
+                    "end": current_end.strftime("%H:%M")
+                })
+                current_start, current_end = next_start, next_end
+        
+        # 마지막 구간 추가
+        merged_ranges.append({
+            "start": current_start.strftime("%H:%M"),
+            "end": current_end.strftime("%H:%M")
+        })
+    
     
     # 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
     # 현재 시간 기준 가장 최근 완료된 1시간 리포트 조회
@@ -545,7 +684,8 @@ def get_dashboard_summary(
         "risks": risks,
         "recommendations": recommendations,
         "timelineEvents": timeline_events,  # 오늘 분석된 모든 이벤트 (실시간)
-        "hourlyStats": hourly_stats  # 시간대별 통계 추가 (실시간) - camelCase로 변경
+        "hourlyStats": hourly_stats,  # 시간대별 통계 추가 (실시간)
+        "monitoringRanges": merged_ranges # 실제 분석된 시간 구간 (start, end)
     }
 
 

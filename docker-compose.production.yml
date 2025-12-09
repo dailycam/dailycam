@@ -11,7 +11,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
     ports:
-      - "127.0.0.1:3306:3306"  # 외부 접근 제한
+      - "127.0.0.1:3306:3306" # 외부 접근 제한
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/scripts/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
@@ -30,7 +30,7 @@ services:
     build: ./backend
     container_name: dailycam-fastapi-prod
     ports:
-      - "127.0.0.1:8000:8000"  # Nginx를 통해서만 접근
+      - "127.0.0.1:8000:8000" # Nginx를 통해서만 접근
     depends_on:
       mysql:
         condition: service_healthy
@@ -50,6 +50,7 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
@@ -146,7 +147,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro  # SSL 인증서
+      - /etc/letsencrypt:/etc/letsencrypt:ro # SSL 인증서
     depends_on:
       - fastapi
     restart: unless-stopped
@@ -160,4 +161,3 @@ volumes:
 networks:
   dailycam-network:
     driver: bridge
-

@@ -23,13 +23,24 @@ def check_and_install_ffmpeg():
     
     try:
         # download_ffmpeg 모듈 import 및 실행
-        sys.path.insert(0, str(backend_dir))
+        # download_ffmpeg 모듈 import 및 실행
+        # download_ffmpeg 모듈 import 및 실행
+        # download_ffmpeg 모듈 import 및 실행
+        
+        # We should invoke it properly, but here we just need to find the module.
+        # It's now in app.commands.system.download_ffmpeg
+        # But that's a module.
+        # Let's just point sys.path to backend dir and import as module if possible, 
+        # or point to the file dir.
+        
+        system_commands_dir = backend_dir / "app" / "commands" / "system"
+        sys.path.insert(0, str(system_commands_dir))
         from download_ffmpeg import download_ffmpeg
         download_ffmpeg()
         print("[서버] FFmpeg 설치 완료")
     except Exception as e:
         print(f"[서버] FFmpeg 자동 설치 실패: {e}")
-        print("[서버] 수동으로 설치하려면: python backend/download_ffmpeg.py")
+        print("[서버] 수동으로 설치하려면: python -m app.commands.system.download_ffmpeg")
         print("[서버] 계속 진행합니다...")
 
 if __name__ == "__main__":

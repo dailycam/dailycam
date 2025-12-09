@@ -10,8 +10,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
-# .env 파일 경로 확인 (선택사항)
-env_path = Path(__file__).parent.parent.parent / '.env'
+# .env 파일 경로 확인 (루트 디렉토리)
+env_path = Path(__file__).parent.parent.parent.parent / '.env'
 if env_path.exists():
     load_dotenv(dotenv_path=env_path, override=True)
 

@@ -34,9 +34,9 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
             change: safetyScore > 0 ? '+3' : '',
             changeLabel: safetyScore > 0 ? '지난주 대비' : '',
             icon: Shield,
-            color: 'text-safe',
-            bgColor: 'bg-safe-50',
-            trend: 'up'
+            color: safetyScore === 0 ? 'text-gray-400' : 'text-safe',
+            bgColor: safetyScore === 0 ? 'bg-gray-50' : 'bg-safe-50',
+            trend: safetyScore === 0 ? 'neutral' : 'up'
         },
         {
             label: '발달 점수',
@@ -45,30 +45,30 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
             change: developmentScore > 0 ? '+7' : '',
             changeLabel: developmentScore > 0 ? '지난주 대비' : '',
             icon: Baby,
-            color: 'text-primary-600',
-            bgColor: 'bg-primary-50',
-            trend: 'up'
+            color: developmentScore === 0 ? 'text-gray-400' : 'text-primary-600',
+            bgColor: developmentScore === 0 ? 'bg-gray-50' : 'bg-primary-50',
+            trend: developmentScore === 0 ? 'neutral' : 'up'
         },
         {
             label: '모니터링 시간',
             value: monitoringHours.toFixed(1),
             unit: '시간',
-            change: '오늘',
-            changeLabel: '누적',
+            change: monitoringHours === 0 ? '' : '오늘',
+            changeLabel: monitoringHours === 0 ? '분석된 결과가 없습니다' : '누적',
             icon: Eye,
-            color: 'text-safe',
-            bgColor: 'bg-safe-50',
+            color: monitoringHours === 0 ? 'text-gray-400' : 'text-safe',
+            bgColor: monitoringHours === 0 ? 'bg-gray-50' : 'bg-safe-50',
             trend: 'neutral'
         },
         {
             label: '이벤트 감지',
             value: incidentCount.toString(),
             unit: '건',
-            change: incidentCount === 0 ? '안전함' : '확인 필요',
-            changeLabel: incidentCount === 0 ? '특이사항 없음' : '감지된 이벤트',
+            change: monitoringHours === 0 ? '' : (incidentCount === 0 ? '안전함' : '확인 필요'),
+            changeLabel: monitoringHours === 0 ? '분석된 결과가 없습니다' : (incidentCount === 0 ? '특이사항 없음' : '감지된 이벤트'),
             icon: Activity,
-            color: incidentCount === 0 ? 'text-safe' : 'text-warning',
-            bgColor: incidentCount === 0 ? 'bg-safe-50' : 'bg-warning-50',
+            color: monitoringHours === 0 ? 'text-gray-400' : (incidentCount === 0 ? 'text-safe' : 'text-warning'),
+            bgColor: monitoringHours === 0 ? 'bg-gray-50' : (incidentCount === 0 ? 'bg-safe-50' : 'bg-warning-50'),
             trend: 'neutral'
         },
     ]

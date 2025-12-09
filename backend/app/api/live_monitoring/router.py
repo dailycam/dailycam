@@ -818,12 +818,26 @@ async def get_monitoring_stats(
         RealtimeEvent.timestamp >= hour_ago
     ).count()
     
+    # 오늘의 총 모니터링 시간 계산 (분 단위)
+    today_segments = db.query(SegmentAnalysis).filter(
+        SegmentAnalysis.camera_id == camera_id,
+        SegmentAnalysis.segment_start >= today_start,
+        SegmentAnalysis.status == 'completed'
+    ).all()
+    
+    total_monitoring_seconds = sum(
+        (s.segment_end - s.segment_start).total_seconds() 
+        for s in today_segments
+    )
+    total_monitoring_minutes = int(total_monitoring_seconds / 60)
+    
     return {
         "camera_id": camera_id,
         "today_total_events": total_events,
         "danger_events": danger_events,
         "warning_events": warning_events,
         "recent_hour_events": recent_events,
+        "today_monitoring_minutes": total_monitoring_minutes,
         "is_active": camera_id in active_streams
     }
 

@@ -13,8 +13,8 @@ import google.generativeai as genai
 import yaml
 from dotenv import load_dotenv
 
-# .env 파일 로드
-env_path = Path(__file__).parent.parent.parent / ".env"
+# .env 파일 로드 (루트 디렉토리)
+env_path = Path(__file__).parent.parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 
@@ -929,8 +929,8 @@ class GeminiService:
 [개월 수 정보]
 - 이 아이의 개월 수: {age_months}개월
 - 개월 수 기반 예상 단계: {initial_stage_from_age}단계
-- 이 정보를 참고하되, 실제 관찰된 행동 패턴이 더 중요합니다.
-- 관찰된 행동이 예상 단계와 다르다면, 관찰 결과를 우선하여 판단하세요.
+- 이 정보는 **매우 중요한 기준점**입니다. 특별한 사유(확연히 빠른/느린 발달 행동 관찰)가 없다면 이 단계를 우선적으로 고려하세요.
+- 다만, 관찰된 행동이 예상 단계와 **명확하게 일치하지 않는 경우에만** 다른 단계를 선택하세요.
 """
 
                 # compact JSON으로 토큰 절감
