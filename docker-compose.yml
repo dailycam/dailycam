@@ -82,7 +82,7 @@ services:
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend:/app
-    command: python analysis_worker.py
+    command: python app/workers/analysis_worker.py
     restart: unless-stopped
     networks:
       - dailycam-network
@@ -109,7 +109,7 @@ services:
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend:/app
-    command: python analysis_worker.py
+    command: python app/workers/analysis_worker.py
     restart: unless-stopped
     networks:
       - dailycam-network

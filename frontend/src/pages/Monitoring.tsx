@@ -21,7 +21,7 @@ import { API_BASE_URL } from '@/constants/api'
 
 export default function Monitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
-  const [isMuted, setIsMuted] = useState(false)
+  const [isMuted, setIsMuted] = useState(true) // 자동 재생을 위해 기본값을 mute로 설정
   const [selectedCamera, setSelectedCamera] = useState('camera-1')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -484,6 +484,7 @@ export default function Monitoring() {
                 ref={videoRef}
                 className={`w-full h-full object-contain ${!isStreamActive ? 'hidden' : ''}`}
                 playsInline
+                autoPlay
                 muted={isMuted}
               />
 

@@ -56,12 +56,24 @@ def create_app() -> FastAPI:
     # ----------------------------------------------------
     # CORS 설정 (라우터 등록 전에 먼저 설정해야 함)
     # ----------------------------------------------------
+    # 환경 변수에서 CORS 허용 도메인 읽기 (콤마로 구분)
+    cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+    
+    # 개발용 로컬호스트 기본 추가
+    default_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    
+    # 중복 제거하여 합치기
+    allow_origins = list(set(origins + default_origins))
+    
+    print(f"🌐 CORS 허용 도메인: {allow_origins}")
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ],  # Vite 개발 서버
+        allow_origins=allow_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
         allow_headers=["*"],
