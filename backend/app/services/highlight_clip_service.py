@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.clip import HighlightClip, ClipCategory
 from app.models.live_monitoring.models import SegmentAnalysis
+from app.services.s3_service import S3Service
 
 
 class HighlightClipService:
@@ -141,6 +142,52 @@ class HighlightClipService:
             db.add(clip)
             db.commit()
             db.refresh(clip)
+            
+            # S3에 업로드 (활성화된 경우)
+            s3_service = S3Service()
+            if s3_service.is_enabled():
+                try:
+                    # 비디오 업로드
+                    video_s3_url = s3_service.upload_clip(
+                        file_path=output_path,
+                        clip_id=str(clip.id),
+                        file_type="video"
+                    )
+                    
+                    # 썸네일 업로드
+                    thumbnail_s3_url = None
+                    if thumbnail_path.exists():
+                        thumbnail_s3_url = s3_service.upload_clip(
+                            file_path=thumbnail_path,
+                            clip_id=str(clip.id),
+                            file_type="thumbnail"
+                        )
+                    
+                    # DB에 S3 URL 업데이트
+                    if video_s3_url:
+                        clip.video_url = video_s3_url
+                        if thumbnail_s3_url:
+                            clip.thumbnail_url = thumbnail_s3_url
+                        db.commit()
+                        db.refresh(clip)
+                        
+                        # 로컬 파일 삭제 (선택적 - S3 업로드 성공 후)
+                        try:
+                            output_path.unlink()
+                            print(f"[하이라이트] 🗑️ 로컬 파일 삭제: {output_path.name}")
+                        except Exception as e:
+                            print(f"[하이라이트] ⚠️ 로컬 파일 삭제 실패 (무시): {e}")
+                        
+                        if thumbnail_path.exists():
+                            try:
+                                thumbnail_path.unlink()
+                                print(f"[하이라이트] 🗑️ 로컬 썸네일 삭제: {thumbnail_path.name}")
+                            except Exception as e:
+                                print(f"[하이라이트] ⚠️ 로컬 썸네일 삭제 실패 (무시): {e}")
+                    else:
+                        print(f"[하이라이트] ⚠️ S3 업로드 실패, 로컬 URL 유지")
+                except Exception as e:
+                    print(f"[하이라이트] ⚠️ S3 업로드 중 오류 발생 (로컬 URL 유지): {e}")
             
             return {
                 "clip_id": clip.id,

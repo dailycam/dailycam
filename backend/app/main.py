@@ -201,10 +201,31 @@ def create_app() -> FastAPI:
         print("   - 하이라이트 클립: 30일 후")
         print("   - 실행 시간: 매일 새벽 3시")
 
+        # ✅ 4) 클립 하이라이트 자동 정리 스케줄러 시작 (24시간마다)
+        async def clip_cleanup_worker():
+            """7일 이상 된 클립을 자동으로 삭제하는 워커"""
+            from .services.clip_cleanup_service import ClipCleanupService
+            
+            # 첫 실행은 서버 시작 후 1시간 뒤
+            await asyncio.sleep(60 * 60)
+            
+            service = ClipCleanupService(retention_days=7)
+            while True:
+                try:
+                    service.cleanup_old_clips()
+                except Exception as e:
+                    print(f"[ClipCleanup] ❌ 주기적 정리 중 오류: {e}")
+                
+                # 24시간마다 실행
+                await asyncio.sleep(24 * 60 * 60)
+
+        asyncio.create_task(clip_cleanup_worker())
+
         print("\n" + "=" * 60)
         print("✨ 서버가 준비되었습니다!")
         print("   API 문서: http://localhost:8000/docs")
         print("   HLS 스트림: 자동 시작 중...")
+        print("   클립 정리: 24시간마다 자동 실행")
         print("=" * 60 + "\n")
 
     @app.on_event("shutdown")
