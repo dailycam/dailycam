@@ -142,8 +142,14 @@ class SegmentAnalysisScheduler:
     
     def _get_segment_video(self, segment_start: datetime) -> Optional[Path]:
         """해당 구간의 비디오 파일 경로 반환"""
+        # segment_start가 timezone-aware인 경우 naive datetime으로 변환
+        if segment_start.tzinfo is not None:
+            segment_start_naive = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
+        else:
+            segment_start_naive = segment_start
+        
         # HLS archive 폴더에서 찾기 (archive_YYYYMMDD_HHMMSS.mp4)
-        archive_filename = f"archive_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         archive_path = self.buffer_dir / archive_filename
         
         if archive_path.exists():
@@ -151,7 +157,7 @@ class SegmentAnalysisScheduler:
             return archive_path
         
         # 패턴 검색 1: 같은 날짜, 같은 시간, 같은 분 (초만 다를 수 있음)
-        archive_pattern = f"archive_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
+        archive_pattern = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M')}*.mp4"
         matching_archives = list(self.buffer_dir.glob(archive_pattern))
         
         if matching_archives:
@@ -162,7 +168,7 @@ class SegmentAnalysisScheduler:
         
         # 패턴 검색 2: 시간대가 약간 다를 수 있으므로 ±10분 범위에서 검색
         for offset_minutes in range(-10, 11):
-            adjusted_time = segment_start + timedelta(minutes=offset_minutes)
+            adjusted_time = segment_start_naive + timedelta(minutes=offset_minutes)
             adjusted_pattern = f"archive_{adjusted_time.strftime('%Y%m%d_%H%M')}*.mp4"
             adjusted_matches = list(self.buffer_dir.glob(adjusted_pattern))
             
@@ -170,13 +176,13 @@ class SegmentAnalysisScheduler:
                 # 파일 생성 시간이 segment_start와 가장 가까운 파일 선택
                 closest_file = min(
                     adjusted_matches,
-                    key=lambda f: abs((datetime.fromtimestamp(f.stat().st_mtime) - segment_start).total_seconds())
+                    key=lambda f: abs((datetime.fromtimestamp(f.stat().st_mtime) - segment_start_naive).total_seconds())
                 )
                 print(f"[10분 분석 스케줄러] ✅ 시간 범위 검색으로 아카이브 발견: {closest_file.name} (offset: {offset_minutes}분)")
                 return closest_file
         
         # fallback: hourly_buffer에서 segment 파일 찾기
-        segment_filename = f"segment_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        segment_filename = f"segment_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         fallback_path = self.fallback_buffer_dir / segment_filename
         
         if fallback_path.exists():
