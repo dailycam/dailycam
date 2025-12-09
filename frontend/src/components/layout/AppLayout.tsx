@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
-import Sidebar from './Sidebar'
-import Header from './Header'
+import Sidebar from '../layout/Sidebar'
+import Header from '../layout/Header'
 
 /**
  * 앱 내부 페이지용 레이아웃
