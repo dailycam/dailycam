@@ -4,9 +4,9 @@ import {
   AlertTriangle,
   Activity,
 } from 'lucide-react'
-import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
-import IncidentPieChart from '../components/Charts/IncidentPieChart'
-import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
+import SafetyTrendChart from '../components/charts/SafetyTrendChart'
+import IncidentPieChart from '../components/charts/IncidentPieChart'
+import ComposedTrendChart from '../components/charts/ComposedTrendChart'
 import { fetchAnalyticsData, type AnalyticsData } from '../lib/api'
 
 export default function Analytics() {

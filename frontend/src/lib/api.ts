@@ -988,3 +988,181 @@ export async function searchContent(query: string): Promise<ContentRecommendatio
     return []
   }
 }
+
+// ============================================================
+// Camera Settings API
+// ============================================================
+
+export interface CameraVideo {
+  id: number
+  filename: string
+  file_size: number
+  duration: number | null
+  order_index: number
+  uploaded_at: string
+}
+
+export interface CameraSetting {
+  id: number
+  camera_id: string
+  camera_name: string
+  is_active: boolean
+  video_count: number
+  videos: CameraVideo[]
+}
+
+/**
+ * 사용자의 카메라 설정 목록 조회
+ */
+export async function getUserCameras(): Promise<{ cameras: CameraSetting[] }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/cameras`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('카메라 설정을 가져오는 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('카메라 설정 조회 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 카메라에 영상 업로드
+ */
+export async function uploadCameraVideo(
+  cameraId: string,
+  videoFile: File
+): Promise<{
+  id: number
+  camera_id: string
+  filename: string
+  file_path: string
+  file_size: number
+  duration: number | null
+  message: string
+}> {
+  const formData = new FormData()
+  formData.append('video', videoFile)
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/camera-settings/cameras/${cameraId}/upload-video`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeader(),
+        },
+        body: formData,
+        signal: AbortSignal.timeout(10 * 60 * 1000), // 10분 타임아웃
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 업로드 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error: any) {
+    console.error('영상 업로드 실패:', error)
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('업로드 시간이 초과되었습니다.')
+    }
+    throw error
+  }
+}
+
+/**
+ * 업로드한 영상 삭제
+ */
+export async function deleteCameraVideo(videoId: number): Promise<{ message: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/videos/${videoId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 삭제 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('영상 삭제 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 영상 활성화/비활성화
+ */
+export async function toggleVideoActive(
+  videoId: number,
+  isActive: boolean
+): Promise<{ id: number; is_active: boolean; message: string }> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/camera-settings/videos/${videoId}/toggle?is_active=${isActive}`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...getAuthHeader(),
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 상태 변경 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('영상 상태 변경 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 저장 공간 사용량 조회
+ */
+export async function getStorageUsage(): Promise<{
+  total_size_bytes: number
+  total_size_mb: number
+  total_size_gb: number
+  max_size_gb: number
+  usage_percent: number
+  video_count: number
+  remaining_bytes: number
+  remaining_gb: number
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/storage/usage`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '저장 공간 조회 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('저장 공간 조회 실패:', error)
+    throw error
+  }
+}

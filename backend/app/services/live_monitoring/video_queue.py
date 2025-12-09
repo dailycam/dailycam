@@ -8,13 +8,13 @@ import random
 class VideoQueue:
     """
     짧은 영상들을 큐에 넣고 순차적으로 재생
+    사용자 업로드 영상을 우선적으로 사용
     """
     
-    def __init__(self, camera_id: str, video_dir: Path):
+    def __init__(self, camera_id: str, video_dir: Path, user_id: Optional[int] = None):
         self.camera_id = camera_id
         self.video_dir = video_dir
-        self.short_clips_dir = video_dir / "short"
-        self.medium_clips_dir = video_dir / "medium"
+        self.user_id = user_id
         
         self.current_queue: List[Path] = []
         self.current_index = 0
@@ -22,49 +22,38 @@ class VideoQueue:
     def load_videos(self, shuffle: bool = True, target_duration_minutes: int = 60):
         """
         영상 파일들을 로드하여 큐에 추가
+        ⚠️ 사용자 업로드 영상만 사용 (샘플 영상 사용 안 함)
         
         Args:
             shuffle: 영상 순서를 섞을지 여부
             target_duration_minutes: 목표 재생 시간 (분)
         """
-        # 짧은 영상들 (10-15초)
-        short_clips = list(self.short_clips_dir.glob("*.mp4"))
-        
-        # 중간 영상들 (5분)
-        medium_clips = list(self.medium_clips_dir.glob("*.mp4"))
-        
-        if not short_clips and not medium_clips:
-            print(f"[영상 큐] 경고: {self.video_dir}에 영상 파일이 없습니다")
-            return
-        
-        # 큐 구성 전략
-        # 짧은 영상 10개 = 약 2분 (12초 * 10)
-        # 중간 영상 1개 = 5분
-        # 총 7분 패턴을 반복
-        
         self.current_queue = []
         
-        # 목표 시간까지 영상 추가
-        pattern_duration = 7  # 분
-        num_patterns = (target_duration_minutes // pattern_duration) + 1
+        # 사용자 업로드 영상만 로드 (user_uploaded_로 시작하는 파일)
+        user_uploaded_videos = list(self.video_dir.glob("user_uploaded_*.mp4"))
         
-        for _ in range(num_patterns):
-            # 짧은 영상 10개 추가
-            if short_clips:
-                if shuffle:
-                    selected_shorts = random.sample(
-                        short_clips, 
-                        min(10, len(short_clips))
-                    )
-                else:
-                    selected_shorts = short_clips[:10]
-                self.current_queue.extend(selected_shorts)
+        if user_uploaded_videos:
+            # 사용자가 업로드한 영상이 있으면 이것만 사용
+            print(f"[영상 큐] ✅ 사용자 업로드 영상 {len(user_uploaded_videos)}개 발견")
             
-            # 중간 영상 1개 추가
-            if medium_clips:
-                self.current_queue.append(random.choice(medium_clips))
+            # 업로드 시간 순으로 정렬 (파일명의 타임스탬프 기준)
+            user_uploaded_videos.sort()
+            
+            if shuffle:
+                random.shuffle(user_uploaded_videos)
+            
+            # 목표 시간까지 반복
+            while len(self.current_queue) * 5 < target_duration_minutes * 60:  # 평균 5분 가정
+                self.current_queue.extend(user_uploaded_videos)
+            
+            print(f"[영상 큐] 사용자 업로드 영상을 순환 재생 (총 {len(self.current_queue)}개)")
+            return
         
-        print(f"[영상 큐] 총 {len(self.current_queue)}개 영상 로드 (목표: {target_duration_minutes}분)")
+        # 사용자 업로드 영상이 없으면 큐를 비워둠 (샘플 영상 사용 안 함)
+        print(f"[영상 큐] ⚠️ 사용자 업로드 영상이 없습니다. 스트림을 시작할 수 없습니다.")
+        print(f"[영상 큐] 💡 Settings 페이지에서 영상을 업로드해주세요.")
+        return
     
     def get_next_video(self) -> Optional[Path]:
         """
