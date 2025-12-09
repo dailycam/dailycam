@@ -12,7 +12,9 @@ export function useDevelopmentData() {
         const loadData = async () => {
             try {
                 setLoading(true);
-                const data = await getDevelopmentData(7);
+                // 오늘 날짜를 YYYY-MM-DD 형식으로 전달
+                const today = new Date().toISOString().split('T')[0];
+                const data = await getDevelopmentData(today);
                 setDevelopmentData(data);
             } catch (error) {
                 console.error('발달 데이터 로드 실패:', error);

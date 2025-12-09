@@ -273,10 +273,6 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                     const [startH, startM] = range.start.split(':').map(Number)
                     const [endH, endM] = range.end.split(':').map(Number)
 
-                    // 시작 시간과 종료 시간을 분 단위로 변환
-                    const startTotalMinutes = startH * 60 + startM
-                    const endTotalMinutes = endH * 60 + endM
-
                     // 모니터링 구간에 포함되는 모든 시간대를 찾기
                     // 12시간 기준 각도 계산 (0.5도/분)
                     let startAngle = ((startH % 12) * 60 + startM) * 0.5
