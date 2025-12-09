@@ -38,6 +38,15 @@ from .database import Base, engine
 from .database.session import test_db_connection
 from app.database import SessionLocal
 
+# 모델 import (Base.metadata에 등록하기 위해 - 테이블 자동 생성용)
+from app.models import (
+    User, TokenBlacklist, AnalysisLog, SafetyEvent, DevelopmentEvent,
+    DailySummary, HighlightClip, CameraSetting, CameraVideo,
+    DevelopmentScoreTracking, DevelopmentMilestoneTracking,
+    RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport,
+    AnalysisJob, JobStatus
+)
+
 # HLS 스트림 자동 시작을 위한 import
 from pathlib import Path
 from .services.live_monitoring.hls_stream_generator import HLSStreamGenerator
