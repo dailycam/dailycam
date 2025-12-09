@@ -1,7 +1,34 @@
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 import { API_BASE_URL } from '@/constants/api'
+import { getAuthToken } from '@/lib/auth'
 
 export default function Login() {
+    const navigate = useNavigate()
+
+    useEffect(() => {
+        // 이미 로그인되어 있는지 확인
+        const token = getAuthToken()
+        if (token) {
+            // 토큰이 있으면 유효성 검사
+            fetch(`${API_BASE_URL}/api/auth/me`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+                .then((res) => {
+                    if (res.ok) {
+                        // 토큰이 유효하면 대시보드로 이동
+                        navigate('/dashboard', { replace: true })
+                    }
+                })
+                .catch(() => {
+                    // 토큰이 유효하지 않으면 로그인 페이지 유지
+                })
+        }
+    }, [navigate])
+
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트
         window.location.href = `${API_BASE_URL}/api/auth/google/login`
