@@ -8,6 +8,7 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from starlette.requests import Request
 import os
+import traceback
 
 from app.database import get_db
 from app.models.user import User
@@ -45,7 +46,8 @@ async def google_login(request: Request):
         
         return await oauth.google.authorize_redirect(request, redirect_uri)
     except Exception as e:
-        print(f"Google 로그인 오류: {e}")
+        error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
+        print(error_msg)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
@@ -59,21 +61,41 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     사용자 정보를 받아서 데이터베이스에 저장하고 JWT 토큰 생성
     """
     try:
+        # 요청 파라미터 로깅 (디버깅용)
+        print(f"[OAuth Callback] Query params: {dict(request.query_params)}")
+        
         # Google에서 토큰 받기
         token = await oauth.google.authorize_access_token(request)
+        print(f"[OAuth Callback] Token received: {bool(token)}, keys: {list(token.keys()) if token else None}")
         
         # 사용자 정보 가져오기
         user_info = token.get('userinfo')
         if not user_info:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="사용자 정보를 가져올 수 없습니다"
-            )
+            print(f"[OAuth Callback] userinfo 없음, 토큰 전체 내용: {token}")
+            # userinfo가 없으면 토큰에서 직접 가져오기 시도
+            if 'id_token' in token:
+                from jose import jwt
+                id_token = token['id_token']
+                try:
+                    # id_token 디코딩 (검증 없이, 정보만 가져오기)
+                    decoded = jwt.get_unverified_claims(id_token)
+                    user_info = decoded
+                    print(f"[OAuth Callback] id_token에서 사용자 정보 추출 성공")
+                except Exception as decode_error:
+                    print(f"[OAuth Callback] id_token 디코딩 실패: {decode_error}")
+            
+            if not user_info:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="사용자 정보를 가져올 수 없습니다"
+                )
         
         google_id = user_info.get('sub')
         email = user_info.get('email')
         name = user_info.get('name')
         picture = user_info.get('picture')
+        
+        print(f"[OAuth Callback] User info: google_id={google_id}, email={email}, name={name}")
         
         if not google_id or not email:
             raise HTTPException(
@@ -113,13 +135,18 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             }
         )
         
+        print(f"[OAuth Callback] 로그인 성공: user_id={user.id}, email={email}")
+        
         # 프론트엔드로 리다이렉트 (토큰 포함)
         return RedirectResponse(
             url=f"{FRONTEND_URL}/auth/callback?token={access_token}"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"OAuth 콜백 오류: {e}")
+        error_msg = f"OAuth 콜백 오류: {repr(e)}\n{traceback.format_exc()}"
+        print(error_msg)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"인증 처리 중 오류가 발생했습니다: {str(e)}"
