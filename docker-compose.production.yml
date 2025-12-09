@@ -57,7 +57,7 @@ services:
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     restart: unless-stopped
     networks:
       - dailycam-network
