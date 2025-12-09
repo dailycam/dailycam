@@ -13,7 +13,6 @@ import { API_BASE_URL } from '@/constants/api'
 import HLSVideoPlayer from '../components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
-  const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted] = useState(false)
   const [selectedCamera, setSelectedCamera] = useState('camera-1')
   const [hlsUrl, setHlsUrl] = useState<string | null>(null)
@@ -110,7 +109,6 @@ export default function LiveMonitoring() {
     try {
       await stopStream(selectedCamera)
       setHlsUrl(null)
-      setIsPlaying(false)
       setIsStreamActive(false)
       setHlsError(null)
       console.log('[HLS] 스트림 중지')
@@ -121,12 +119,11 @@ export default function LiveMonitoring() {
 
   // HLS 플레이어 이벤트 핸들러
   const handleHlsPlay = () => {
-    setIsPlaying(true)
     setIsStreamActive(true)
   }
 
   const handleHlsPause = () => {
-    setIsPlaying(false)
+    // 필요시 추가 로직
   }
 
   const handleHlsError = (error: string) => {
