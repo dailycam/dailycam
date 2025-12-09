@@ -54,13 +54,21 @@ async def google_login(request: Request):
         callback_path = request.url_for('google_callback')
         redirect_uri = f"{base_url}{callback_path}"
     
-    # 디버깅을 위한 로그 (프로덕션에서는 제거하거나 로그 레벨 조정)
-    print(f"[OAuth] Generated redirect_uri: {redirect_uri}")
-    print(f"[OAuth] BACKEND_URL env: {BACKEND_URL}")
-    print(f"[OAuth] Request base_url: {request.base_url}")
-    print(f"[OAuth] X-Forwarded-Proto: {request.headers.get('X-Forwarded-Proto')}")
+    # 디버깅을 위한 로그
+    print(f"[OAuth Login] Generated redirect_uri: {redirect_uri}")
+    print(f"[OAuth Login] BACKEND_URL env: {BACKEND_URL}")
+    print(f"[OAuth Login] Request base_url: {request.base_url}")
+    print(f"[OAuth Login] X-Forwarded-Proto: {request.headers.get('X-Forwarded-Proto')}")
+    print(f"[OAuth Login] Cookies before: {request.cookies}")
+    print(f"[OAuth Login] Session keys before: {list(request.session.keys())}")
     
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    response = await oauth.google.authorize_redirect(request, redirect_uri)
+    
+    # 리다이렉트 후 쿠키 확인
+    print(f"[OAuth Login] Response headers: {dict(response.headers)}")
+    print(f"[OAuth Login] Session keys after: {list(request.session.keys())}")
+    
+    return response
 
 
 @router.get("/google/callback")
