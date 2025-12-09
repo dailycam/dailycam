@@ -340,7 +340,10 @@ def get_dashboard_summary(
         if not analysis_result:
             continue
             
-<<<<<<< HEAD
+            # Development Analysis extraction
+            development_analysis = analysis_result.get('development_analysis', {})
+            skills = development_analysis.get('skills', [])
+
             # 각 skill을 발달 이벤트로 추가
             for skill in skills:
                 if not skill.get('present', False):
@@ -368,8 +371,6 @@ def get_dashboard_summary(
                     "isSleep": False,
                     "development_score": None  # SegmentAnalysis에는 development_score가 없음
                 })
-        
-        # [추가] SegmentAnalysis의 안전 이벤트도 타임라인에 추가
         
         # [추가] SegmentAnalysis의 안전 이벤트도 타임라인에 추가
         if analysis_result:
@@ -498,97 +499,6 @@ def get_dashboard_summary(
                     "category": "안전 확인",
                     "safety_score": segment.safety_score or 100
                 })
-=======
-        # 안전 이벤트 추가
-        safety_analysis = analysis_result.get('safety_analysis', {})
-        safety_incidents = safety_analysis.get('incident_events', [])
-        
-        for incident in safety_incidents:
-            severity_raw = incident.get('severity', '')
-            
-            # severity 매핑 (한글 → 영문)
-            severity_map = {
-                "사고": "danger",
-                "사고발생": "danger",
-                "위험": "danger",
-                "주의": "warning",
-                "권장": "info"
-            }
-            
-            # 대소문자 구분 없이 매핑
-            mapped_severity = severity_map.get(severity_raw, severity_map.get(severity_raw.lower(), "info"))
-            
-            # category는 risk_type에서 가져오기 (없으면 severity 기반으로 설정)
-            risk_type = incident.get('risk_type', '')
-            if risk_type:
-                category = risk_type
-            elif severity_raw in ["사고", "사고발생", "위험"]:
-                category = "위험"
-            elif severity_raw == "주의":
-                category = "주의"
-            elif severity_raw == "권장":
-                category = "권장"
-            else:
-                category = "안전"
-            
-            # title 처리: title이 없으면 description 사용, 둘 다 없으면 기본값
-            title = incident.get('title', '').strip()
-            description = incident.get('description', '').strip()
-            
-            if not title:
-                if description:
-                    title = description[:50]
-                else:
-                    title = f"{severity_raw} 이벤트"
-            
-            if not description:
-                description = title
-            
-            timeline_events.append({
-                "time": time_str,
-                "hour": segment_hour,
-                "type": "safety",
-                "severity": mapped_severity,
-                "title": title,
-                "description": description,
-                "resolved": False,
-                "hasClip": False,
-                "category": category,
-                "timestamp_range": incident.get('timestamp_range', ''),
-                "safety_score": segment.safety_score
-            })
-        
-        # 발달 이벤트 추가
-        development_analysis = analysis_result.get('development_analysis', {})
-        skills = development_analysis.get('skills', [])
-        
-        for skill in skills:
-            if not skill.get('present', False):
-                continue
-            
-            category_str = skill.get('category', '')
-            # category 매핑
-            category_map = {
-                "대근육운동": "대근육운동 발달",
-                "소근육운동": "소근육운동 발달",
-                "언어": "언어 발달",
-                "인지": "인지 발달",
-                "사회정서": "사회성 발달"
-            }
-            category = category_map.get(category_str, "발달")
-            
-            timeline_events.append({
-                "time": time_str,
-                "hour": segment_hour,
-                "type": "development",
-                "title": skill.get('name', '발달 행동'),
-                "description": f"{skill.get('level', '')} 수준, 빈도: {skill.get('frequency', 0)}회",
-                "hasClip": False,
-                "category": category,
-                "isSleep": False,
-                "development_score": segment.development_score
-            })
->>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
     
     # 시간순으로 정렬 (최신순)
     timeline_events.sort(key=lambda x: x["hour"], reverse=True)
@@ -774,12 +684,8 @@ def get_dashboard_summary(
         "risks": risks,
         "recommendations": recommendations,
         "timelineEvents": timeline_events,  # 오늘 분석된 모든 이벤트 (실시간)
-<<<<<<< HEAD
-        "hourly_stats": hourly_stats,  # 시간대별 통계 추가 (실시간)
+        "hourlyStats": hourly_stats,  # 시간대별 통계 추가 (실시간)
         "monitoringRanges": merged_ranges # 실제 분석된 시간 구간 (start, end)
-=======
-        "hourlyStats": hourly_stats  # 시간대별 통계 추가 (실시간) - camelCase로 변경
->>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
     }
 
 

@@ -204,13 +204,8 @@ export const useDashboard = () => {
         return {
             safetyScore: dashboardData?.safetyScore ?? 0,
             developmentScore: dashboardData?.developmentScore ?? 0,
-<<<<<<< HEAD
-            monitoringHours: dashboardData?.monitoringHours || 0,
-            incidentCount: dashboardData?.incidentCount || 0
-=======
             monitoringHours: dashboardData?.monitoringHours ?? 0,
             incidentCount: dashboardData?.incidentCount ?? 0
->>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
         }
     }, [dashboardData])
 

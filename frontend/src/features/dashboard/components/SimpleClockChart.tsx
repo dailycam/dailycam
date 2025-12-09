@@ -278,12 +278,10 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                     const endTotalMinutes = endH * 60 + endM
 
                     // 모니터링 구간에 포함되는 모든 시간대를 찾기
-                    const coveredHours: number[] = []
-                    for (let h = startH; h <= endH; h++) {
-                        coveredHours.push(h)
-                    }
+                    // 12시간 기준 각도 계산 (0.5도/분)
+                    let startAngle = ((startH % 12) * 60 + startM) * 0.5
+                    let endAngle = ((endH % 12) * 60 + endM) * 0.5
 
-<<<<<<< HEAD
                     // [수정] 종료 각도가 시작 각도보다 작으면 360도 더해서 큰 호가 그려지게 함
                     if (endAngle <= startAngle) {
                         endAngle += 360
@@ -305,31 +303,6 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                             />
                         </g>
                     )
-=======
-                    // 각 시간대를 12시간 형식으로 변환하여 arc 그리기
-                    return coveredHours.map((hour, hourIdx) => {
-                        const hour12 = hour % 12
-                        const startAngle = hour12 * 30
-                        const endAngle = startAngle + 30
-
-                        return (
-                            <g
-                                key={`mon-${idx}-${hourIdx}`}
-                                onMouseEnter={() => setHoveredMonitoring(range)}
-                                onMouseLeave={() => setHoveredMonitoring(null)}
-                                className="cursor-pointer"
-                            >
-                                {/* 모니터링 띠 (가장 바깥쪽: radius + 52 ~ + 58) */}
-                                <path
-                                    d={describeDonutSlice(center, center, radius + 52, radius + 58, startAngle, endAngle)}
-                                    fill={COLORS.monitoring}
-                                    opacity={hoveredMonitoring === range ? "1" : "0.6"}
-                                    className="transition-opacity duration-200"
-                                />
-                            </g>
-                        )
-                    })
->>>>>>> ce4c0c7676a4a07e1a9996d90fecdaf2dbf0a7e1
                 })}
 
                 {/* --- [1단계: 시계 바늘 레이어] --- */}
