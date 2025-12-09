@@ -113,6 +113,9 @@ class AnalysisWorker:
         print(f"[워커 {self.worker_id}] 🚀 Job 처리 시작: ID={job.id}, 비디오={job.video_path}")
         db = next(get_db())
         
+        # camera_id로 user_id 조회 (먼저 조회해야 나이 계산 등에 사용 가능)
+        user_id = self._get_user_id_from_camera(job.camera_id, db)
+        
         try:
             video_path = Path(job.video_path)
             
@@ -235,8 +238,8 @@ class AnalysisWorker:
             db.flush()  # segment_analysis.id를 얻기 위해 flush
             
             # DevelopmentEvent 생성을 위한 AnalysisLog 생성
-            # camera_id로 user_id 매핑 (현재는 기본값 1, 추후 확장 가능)
-            user_id = self._get_user_id_from_camera(job.camera_id, db)
+            # camera_id로 user_id 매핑 (상단에서 이미 조회함)
+            # user_id = self._get_user_id_from_camera(job.camera_id, db)
             
             # AnalysisService를 사용하여 AnalysisLog 및 관련 데이터(SafetyEvent, DevelopmentEvent, HighlightClip 등) 일괄 저장
             # SegmentAnalysis의 ID를 AnalysisLog의 analysis_id로 사용하여 연결
