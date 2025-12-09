@@ -30,7 +30,9 @@ class HLSStreamGenerator:
         segment_duration: int = 10,  # HLS 세그먼트 길이 (초)
         enable_realtime_detection: bool = True,
         age_months: Optional[int] = None,
-        event_loop: Optional[asyncio.AbstractEventLoop] = None
+        event_loop: Optional[asyncio.AbstractEventLoop] = None,
+        db_session = None,  # DB 세션 (VideoQueue에서 사용)
+        user_id: Optional[int] = None  # 사용자 ID (VideoQueue에서 사용)
     ):
         self.camera_id = camera_id
         self.video_source = video_source
@@ -65,6 +67,10 @@ class HLSStreamGenerator:
         self.current_archive_path = None
         self.current_archive_start = None
         self.current_archive_frame_count = 0
+        
+        # DB 세션 및 사용자 ID 저장 (VideoQueue에서 사용)
+        self.db_session = db_session
+        self.user_id = user_id
         
     async def start_streaming(self):
         """HLS 스트리밍 시작"""
@@ -149,7 +155,12 @@ class HLSStreamGenerator:
         print(f"[HLS 스트림] ✅ FFmpeg 경로: {ffmpeg_path}")
         
         # 영상 큐 로드
-        video_queue = VideoQueue(self.camera_id, self.video_source)
+        video_queue = VideoQueue(
+            self.camera_id, 
+            self.video_source, 
+            user_id=self.user_id,
+            db=self.db_session
+        )
         video_queue.load_videos(shuffle=True, target_duration_minutes=60)
         
         if video_queue.get_queue_size() == 0:

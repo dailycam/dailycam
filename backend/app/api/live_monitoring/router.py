@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database.session import get_db
+from app.utils.auth_utils import get_current_user_id
 from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport
 from app.services.live_monitoring.fake_stream_generator import FakeLiveStreamGenerator
 from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
@@ -53,7 +54,9 @@ async def start_stream(
     camera_id: str,
     enable_analysis: bool = Query(True, description="1시간 단위 분석 활성화"),
     enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
-    age_months: int = Query(None, description="아이의 개월 수 (실시간 분석 정확도 향상)")
+    age_months: int = Query(None, description="아이의 개월 수 (실시간 분석 정확도 향상)"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     가짜 라이브 스트림 시작
@@ -70,13 +73,43 @@ async def start_stream(
     if not video_dir.exists():
         video_dir.mkdir(parents=True, exist_ok=True)
     
-    # 사용자 업로드 영상 확인
-    user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
-    if not user_videos:
-        raise HTTPException(
-            status_code=400, 
-            detail="업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
-        )
+    # DB에서 활성화된 영상 확인
+    from app.models.camera_setting import CameraSetting, CameraVideo
+    
+    try:
+        camera_setting = db.query(CameraSetting).filter(
+            CameraSetting.camera_id == camera_id,
+            CameraSetting.user_id == user_id,
+            CameraSetting.is_active == True
+        ).first()
+        
+        if not camera_setting:
+            raise HTTPException(
+                status_code=400, 
+                detail="카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
+            )
+        
+        active_videos = db.query(CameraVideo).filter(
+            CameraVideo.camera_setting_id == camera_setting.id,
+            CameraVideo.is_active == True
+        ).count()
+        
+        if active_videos == 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[스트림] DB 조회 실패, 로컬 파일 시스템 사용: {e}")
+        # 폴백: 로컬 파일 시스템
+        user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
+        if not user_videos:
+            raise HTTPException(
+                status_code=400, 
+                detail="업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+            )
     
     # 현재 이벤트 루프 가져오기
     loop = asyncio.get_running_loop()
@@ -121,7 +154,9 @@ async def start_hls_stream(
     camera_url: str = Query(None, description="홈캠 RTSP/HTTP URL (실제 카메라인 경우)"),
     enable_analysis: bool = Query(True, description="10분 단위 분석 활성화"),
     enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
-    age_months: int = Query(None, description="아이의 개월 수")
+    age_months: int = Query(None, description="아이의 개월 수"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     HLS 스트림 시작 (진짜 실시간 스트림)
@@ -161,17 +196,35 @@ async def start_hls_stream(
         video_source = camera_url
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     else:
-        # 사용자 업로드 영상
+        # 사용자 업로드 영상 (DB 기반 확인)
+        from app.models.camera_setting import CameraSetting, CameraVideo
+        
         video_dir = Path(f"videos/{camera_id}")
         if not video_dir.exists():
             video_dir.mkdir(parents=True, exist_ok=True)
         
-        # 사용자 업로드 영상 확인
-        user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
-        if not user_videos:
+        # DB에서 활성화된 영상 확인
+        camera_setting = db.query(CameraSetting).filter(
+            CameraSetting.camera_id == camera_id,
+            CameraSetting.user_id == user_id,
+            CameraSetting.is_active == True
+        ).first()
+        
+        if not camera_setting:
             raise HTTPException(
                 400, 
-                "업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+                "카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
+            )
+        
+        active_videos = db.query(CameraVideo).filter(
+            CameraVideo.camera_setting_id == camera_setting.id,
+            CameraVideo.is_active == True
+        ).count()
+        
+        if active_videos == 0:
+            raise HTTPException(
+                400, 
+                "활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
             )
         
         video_source = video_dir
@@ -180,7 +233,7 @@ async def start_hls_stream(
     # 현재 이벤트 루프 가져오기
     loop = asyncio.get_running_loop()
     
-    # HLS 스트림 생성기 생성
+    # HLS 스트림 생성기 생성 (DB 세션 전달)
     generator = HLSStreamGenerator(
         camera_id=camera_id,
         video_source=video_source,
@@ -189,7 +242,9 @@ async def start_hls_stream(
         segment_duration=10,  # 10초 단위 HLS 세그먼트
         enable_realtime_detection=enable_realtime_detection,
         age_months=age_months,
-        event_loop=loop
+        event_loop=loop,
+        db_session=db,  # DB 세션 전달
+        user_id=user_id  # 사용자 ID 전달
     )
     active_hls_streams[camera_id] = generator
     
@@ -348,7 +403,9 @@ async def stream_video(
     loop: bool = Query(True, description="반복 재생 여부"),
     speed: float = Query(1.0, description="재생 속도"),
     video_path: str = Query(None, description="특정 비디오 경로"),
-    use_segments: bool = Query(True, description="세그먼트 파일 기반 스트리밍 사용 여부")
+    use_segments: bool = Query(True, description="세그먼트 파일 기반 스트리밍 사용 여부"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     실시간 스트림 (MJPEG 스트리밍)
@@ -508,12 +565,35 @@ async def stream_video(
     # 원본 영상 기반 스트리밍 (fallback)
     video_dir = Path(f"videos/{camera_id}")
     
-    # 비디오 파일 찾기
+    # 비디오 파일 찾기 (DB 기반)
+    from app.models.camera_setting import CameraSetting, CameraVideo
+    
+    video_files = []
     if video_path:
         video_files = [Path(video_path)]
     else:
-        # 사용자 업로드 영상만 로드 (user_uploaded_로 시작하는 파일)
-        video_files = sorted(video_dir.glob("user_uploaded_*.mp4"))
+        # DB에서 활성화된 영상 조회
+        try:
+            camera_setting = db.query(CameraSetting).filter(
+                CameraSetting.camera_id == camera_id,
+                CameraSetting.user_id == user_id,
+                CameraSetting.is_active == True
+            ).first()
+            
+            if camera_setting:
+                camera_videos = db.query(CameraVideo).filter(
+                    CameraVideo.camera_setting_id == camera_setting.id,
+                    CameraVideo.is_active == True
+                ).order_by(CameraVideo.order_index).all()
+                
+                for video in camera_videos:
+                    video_path_obj = Path(video.file_path)
+                    if video_path_obj.exists():
+                        video_files.append(video_path_obj)
+        except Exception as e:
+            print(f"[스트림] DB 조회 실패, 로컬 파일 시스템 사용: {e}")
+            # 폴백: 로컬 파일 시스템
+            video_files = sorted(video_dir.glob("user_uploaded_*.mp4"))
         
         if not video_files:
             raise HTTPException(

@@ -207,6 +207,62 @@ async def upload_camera_video(
     
     print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초)")
     
+    # 영상 업로드 후 자동으로 HLS 스트림 시작 (백그라운드에서 계속 실행)
+    try:
+        from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
+        import asyncio
+        
+        # 이미 스트림이 실행 중이면 재시작 (새 영상 반영)
+        if camera_id in active_hls_streams:
+            print(f"[비디오 업로드] 기존 스트림 재시작 중: {camera_id}")
+            generator = active_hls_streams[camera_id]
+            generator.stop_streaming()
+            
+            if camera_id in hls_stream_tasks:
+                task = hls_stream_tasks[camera_id]
+                if not task.done():
+                    task.cancel()
+                del hls_stream_tasks[camera_id]
+            del active_hls_streams[camera_id]
+        
+        # 새 스트림 시작 (백그라운드 태스크)
+        from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
+        from pathlib import Path
+        
+        video_dir = Path(f"videos/{camera_id}")
+        output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+        
+        # 이벤트 루프 가져오기 (비동기 컨텍스트에서)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 실행 중인 루프가 없으면 새로 생성
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        generator = HLSStreamGenerator(
+            camera_id=camera_id,
+            video_source=video_dir,
+            output_dir=output_dir,
+            is_real_camera=False,
+            segment_duration=10,
+            enable_realtime_detection=True,
+            event_loop=loop,
+            db_session=db,
+            user_id=user_id
+        )
+        
+        active_hls_streams[camera_id] = generator
+        task = asyncio.create_task(generator.start_streaming())
+        hls_stream_tasks[camera_id] = task
+        
+        print(f"[비디오 업로드] ✅ HLS 스트림 자동 시작됨 (백그라운드 실행): {camera_id}")
+        
+    except Exception as e:
+        print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
+        import traceback
+        traceback.print_exc()
+    
     return {
         "id": camera_video.id,
         "camera_id": camera_id,
@@ -214,7 +270,7 @@ async def upload_camera_video(
         "file_path": str(file_path),
         "file_size": len(content),
         "duration": duration,
-        "message": "비디오가 업로드되었습니다"
+        "message": "비디오가 업로드되었고 스트림이 자동으로 시작되었습니다"
     }
 
 
@@ -247,6 +303,18 @@ async def delete_camera_video(
     
     # ⚠️ 중요: 해당 카메라의 HLS 스트림이 실행 중이면 중지
     camera_id = camera_setting.camera_id
+    file_path = Path(video.file_path)
+    
+    # 로컬 파일 삭제
+    if file_path.exists():
+        try:
+            file_path.unlink()
+            print(f"[비디오 삭제] 로컬 파일 삭제 완료: {file_path}")
+        except Exception as e:
+            print(f"[비디오 삭제] ⚠️ 로컬 파일 삭제 실패: {e}")
+    else:
+        print(f"[비디오 삭제] ⚠️ 로컬 파일이 존재하지 않음: {file_path}")
+    
     from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
     
     if camera_id in active_hls_streams:
