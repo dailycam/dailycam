@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { AnalysisProvider } from './context/AnalysisContext'
+import { AuthProvider } from './context/AuthContext'
 import HomeLayout from './components/layout/HomeLayout'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -19,8 +20,9 @@ import ProfileSetup from './pages/ProfileSetup'
 
 function App() {
   return (
-    <AnalysisProvider>
-      <Routes>
+    <AuthProvider>
+      <AnalysisProvider>
+        <Routes>
         {/* 로그인 */}
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
@@ -49,7 +51,8 @@ function App() {
           </Route>
         </Route>
       </Routes>
-    </AnalysisProvider>
+      </AnalysisProvider>
+    </AuthProvider>
   )
 }
 

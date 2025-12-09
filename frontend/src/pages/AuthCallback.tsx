@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { setAuthToken } from '../lib/auth'
+import { useAuth } from '../context/AuthContext'
 import { API_BASE_URL } from '@/constants/api'
 
 export default function AuthCallback() {
     const [searchParams] = useSearchParams()
     const navigate = useNavigate()
+    const { refreshUser } = useAuth()
     const [status, setStatus] = useState('로그인 처리 중...')
 
     useEffect(() => {
@@ -23,26 +25,39 @@ export default function AuthCallback() {
                 setAuthToken(token)
                 console.log('[AuthCallback] 토큰 저장 완료')
 
-                // 2. 사용자 정보 조회
+                // 2. 사용자 정보 조회 (Context에서 가져오기)
                 setStatus('사용자 정보 확인 중...')
-                const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
-
-                if (!response.ok) {
+                await refreshUser()
+                
+                // Context 업데이트 대기 (최대 1초)
+                let retries = 0
+                let currentUserInfo = null
+                while (retries < 10) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    // Context에서 직접 가져오기 위해 다시 확인
+                    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    })
+                    if (response.ok) {
+                        currentUserInfo = await response.json()
+                        break
+                    }
+                    retries++
+                }
+                
+                if (!currentUserInfo) {
                     throw new Error('사용자 정보를 가져올 수 없습니다')
                 }
-
-                const userInfo = await response.json()
-                console.log('[AuthCallback] 사용자 정보:', userInfo)
+                
+                console.log('[AuthCallback] 사용자 정보:', currentUserInfo)
 
                 // 3. 구독 상태 확인
-                const isSubscribed = Boolean(userInfo.is_subscribed)
+                const isSubscribed = Boolean(currentUserInfo.is_subscribed)
 
                 // 4. 프로필 완성 여부 확인 (아이 이름, 생년월일)
-                const profileCompleted = Boolean(userInfo.child_name && userInfo.child_birthdate)
+                const profileCompleted = Boolean(currentUserInfo.child_name && currentUserInfo.child_birthdate)
 
                 // 5. 리다이렉트 로직
                 if (!isSubscribed) {

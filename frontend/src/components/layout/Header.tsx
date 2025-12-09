@@ -1,8 +1,7 @@
 import { Bell, User, LogOut, ChevronDown } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { getAuthToken, removeAuthToken } from '../../lib/auth'
-import { API_BASE_URL } from '@/constants/api'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import {
   addNotification,
   deleteNotification,
@@ -14,27 +13,16 @@ import {
 } from '../../lib/notifications'
 
 
-interface UserInfo {
-  id: number
-  email: string
-  name: string
-  picture: string
-  created_at: string
-  is_subscribed?: boolean | number
-  subscription_plan?: string | null
-}
-
 interface HeaderProps {
   isSidebarOpen: boolean
 }
 
 export default function Header({ isSidebarOpen }: HeaderProps) {
+  const { user: userInfo, logout } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<StoredNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
-  const navigate = useNavigate()
 
   // 알림 불러오기
   const loadNotifications = () => {
@@ -91,14 +79,14 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
   };
 
   // 플랜 코드 → 표시용 문구
-  const getPlanLabel = (info: UserInfo | null) => {
-    if (!info) return '로딩 중...'
+  const getPlanLabel = () => {
+    if (!userInfo) return '로딩 중...'
 
-    const subscribed = Boolean(info.is_subscribed)
+    const subscribed = Boolean(userInfo.is_subscribed)
 
     if (!subscribed) return '무료 회원'
 
-    switch (info.subscription_plan) {
+    switch (userInfo.subscription_plan) {
       case 'BASIC':
         return '베이직 플랜 회원'
       case 'PREMIUM':
@@ -108,59 +96,8 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
     }
   }
 
-  // 사용자 정보 가져오기
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      const token = getAuthToken()
-
-      if (!token) {
-        navigate('/login')
-        return
-      }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          setUserInfo({
-            ...data,
-            is_subscribed: Boolean(data.is_subscribed),
-          })
-        } else {
-          removeAuthToken()
-          navigate('/login')
-        }
-      } catch (error) {
-        console.error('사용자 정보 가져오기 오류:', error)
-      }
-    }
-
-    fetchUserInfo()
-  }, [navigate])
-
   const handleLogout = async () => {
-    const token = getAuthToken()
-
-    if (token) {
-      try {
-        await fetch(`${API_BASE_URL}/api/auth/logout-with-token`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-      } catch (error) {
-        console.error('로그아웃 오류:', error)
-      }
-    }
-
-    removeAuthToken()
-    navigate('/')
+    await logout()
   }
 
   return (
@@ -284,7 +221,7 @@ export default function Header({ isSidebarOpen }: HeaderProps) {
               <p className="text-sm font-medium text-gray-900">
                 {userInfo?.name || '로딩 중...'}
               </p>
-              <p className="text-xs text-gray-500">{getPlanLabel(userInfo)}</p>
+              <p className="text-xs text-gray-500">{getPlanLabel()}</p>
             </div>
             {userInfo?.picture ? (
               <img

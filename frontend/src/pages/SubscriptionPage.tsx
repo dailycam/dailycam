@@ -2,8 +2,10 @@
 
 import { useNavigate } from 'react-router-dom'
 import { Shield } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { getAuthToken } from '../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
 
 declare global {
     interface Window {
@@ -11,22 +13,9 @@ declare global {
     }
 }
 
-interface MeResponse {
-    id: number
-    email: string
-    name: string
-    // 백엔드에서 /api/auth/me에 is_subscribed, next_billing_at까지 내려줄 거라면
-    // 여기에 추가해도 됨
-    // is_subscribed?: boolean
-    // next_billing_at?: string | null
-}
-
-// 🔥 백엔드 기본 URL (Vite .env에서 설정 가능)
-import { API_BASE_URL } from '@/constants/api'
-
 export default function SubscriptionPage() {
     const navigate = useNavigate()
-    const [me, setMe] = useState<MeResponse | null>(null)
+    const { user: me, refreshUser } = useAuth()
 
     useEffect(() => {
         // PortOne 스크립트 로드 대기 및 초기화
@@ -75,36 +64,7 @@ export default function SubscriptionPage() {
             window.addEventListener('load', handleLoad)
         }
 
-        const fetchMe = async () => {
-            const token = getAuthToken()
-            if (!token) {
-                console.warn('토큰이 없습니다.')
-                return
-            }
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
-                if (res.ok) {
-                    const data = await res.json()
-                    console.log('사용자 정보 로드 완료:', data)
-                    setMe({
-                        id: data.id,
-                        email: data.email,
-                        name: data.name,
-                    })
-                } else {
-                    console.error('사용자 정보 로드 실패:', res.status, res.statusText)
-                }
-            } catch (e) {
-                console.error('failed to fetch /me', e)
-            }
-        }
-
-        fetchMe()
+        // Context에서 사용자 정보를 가져오므로 별도 호출 불필요
 
         return () => {
             if (retryTimeout) {
@@ -186,28 +146,29 @@ export default function SubscriptionPage() {
 
                         alert('베이직 플랜 월 정기구독이 시작되었습니다.')
 
+                        // 사용자 정보 새로고침
+                        await refreshUser()
+                        
+                        // Context 업데이트 대기
+                        await new Promise(resolve => setTimeout(resolve, 300))
+                        
                         // 프로필 완성 여부 확인 후 리다이렉트
-                        try {
-                            const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                                headers: {
-                                    Authorization: `Bearer ${getAuthToken()}`,
-                                },
-                            })
-                            if (meRes.ok) {
-                                const userData = await meRes.json()
-                                // 프로필이 완성되지 않았으면 프로필 설정 페이지로
-                                if (!userData.profile_completed) {
-                                    navigate('/profile-setup')
-                                } else {
-                                    // 이미 프로필이 있으면 홈으로
-                                    navigate('/')
-                                }
-                            } else {
-                                // 사용자 정보를 가져올 수 없으면 기본적으로 프로필 설정으로
+                        // 임시로 직접 호출 (Context 업데이트가 완료되지 않을 수 있음)
+                        const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                            headers: {
+                                Authorization: `Bearer ${getAuthToken()}`,
+                            },
+                        })
+                        
+                        if (meRes.ok) {
+                            const userData = await meRes.json()
+                            const profileCompleted = Boolean(userData.child_name && userData.child_birthdate)
+                            if (!profileCompleted) {
                                 navigate('/profile-setup')
+                            } else {
+                                navigate('/')
                             }
-                        } catch (e) {
-                            console.error('프로필 확인 실패:', e)
+                        } else {
                             navigate('/profile-setup')
                         }
                     } catch (e) {

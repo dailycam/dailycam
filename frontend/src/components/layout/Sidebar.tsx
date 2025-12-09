@@ -10,18 +10,9 @@ import {
   ChevronRight,
   Video,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { getAuthToken } from '../../lib/auth'
-import { API_BASE_URL } from '@/constants/api'
-
-interface MeResponse {
-  user_id: number
-  email: string
-  is_subscribed: boolean
-  subscription_plan: string | null
-  next_billing_at: string | null
-}
+import { useAuth } from '../../context/AuthContext'
 
 const navigation = [
   { name: '홈', icon: Home, href: '/home' },
@@ -41,52 +32,42 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const location = useLocation()
-  const [isSubscribed, setIsSubscribed] = useState(false)
+  const { user, isSubscribed, refreshUser } = useAuth()
   const [daysLeft, setDaysLeft] = useState<number | null>(null)
   const [plan, setPlan] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const token = getAuthToken()
-      if (!token) return
+    if (user) {
+      const subscribed = Boolean(user.is_subscribed)
+      setPlan(user.subscription_plan ?? null)
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        if (response.ok) {
-          const data: MeResponse = await response.json()
-          const subscribed = Boolean(data.is_subscribed)
-          setIsSubscribed(subscribed)
-          setPlan(data.subscription_plan ?? null)
-
-          if (subscribed && data.next_billing_at) {
-            const now = new Date()
-            const nextDate = new Date(data.next_billing_at)
-            if (!isNaN(nextDate.getTime())) {
-              const diffMs = nextDate.getTime() - now.getTime()
-              const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-              setDaysLeft(diffDays)
-            } else {
-              setDaysLeft(null)
-            }
-          } else {
-            setDaysLeft(null)
-          }
+      if (subscribed && user.next_billing_at) {
+        const now = new Date()
+        const nextDate = new Date(user.next_billing_at)
+        if (!isNaN(nextDate.getTime())) {
+          const diffMs = nextDate.getTime() - now.getTime()
+          const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+          setDaysLeft(diffDays)
+        } else {
+          setDaysLeft(null)
         }
-      } catch (error) {
-        console.error('Failed to fetch user info:', error)
+      } else {
+        setDaysLeft(null)
       }
     }
+  }, [user])
 
-    fetchUserInfo()
-    window.addEventListener('subscriptionChanged', fetchUserInfo)
-    return () => {
-      window.removeEventListener('subscriptionChanged', fetchUserInfo)
+  // 구독 변경 이벤트 리스너
+  useEffect(() => {
+    const handleSubscriptionChanged = () => {
+      refreshUser()
     }
-  }, [])
+
+    window.addEventListener('subscriptionChanged', handleSubscriptionChanged)
+    return () => {
+      window.removeEventListener('subscriptionChanged', handleSubscriptionChanged)
+    }
+  }, [refreshUser])
 
   const progressWidth =
     daysLeft !== null && daysLeft > 0 ? `${Math.min((daysLeft / 30) * 100, 100)}%` : '0%'

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import {
   User as UserIcon,
   Bell,
@@ -65,7 +66,7 @@ export default function Settings() {
   const initialSection: Section =
     ((location.state as { section?: Section } | null)?.section) ?? 'profile'
 
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const { user: userInfo, refreshUser } = useAuth()
   const [activeSection, setActiveSection] = useState<Section>(initialSection)
   const [isCancelling, setIsCancelling] = useState(false)
 
@@ -105,51 +106,18 @@ export default function Settings() {
   }, [location.state, activeSection])
 
 
-  // 사용자 정보 가져오기
+  // 사용자 정보가 변경되면 프로필 폼 초기화
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const token = getAuthToken()
-
-      if (!token) {
-        navigate('/login')
-        return
-      }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          const userData = {
-            ...data,
-            is_subscribed: Boolean(data.is_subscribed),
-            has_billing_key: Boolean(data.has_billing_key),
-          }
-          setUserInfo(userData)
-
-          // 프로필 폼 초기화
-          setProfileForm({
-            name: data.name || '',
-            phone: data.phone || '',
-            child_name: data.child_name || '',
-            child_birthdate: data.child_birthdate || '',
-            picture: data.picture || ''
-          })
-        } else {
-          removeAuthToken()
-          navigate('/login')
-        }
-      } catch (error) {
-        console.error('사용자 정보 가져오기 오류:', error)
-      }
+    if (userInfo) {
+      setProfileForm({
+        name: userInfo.name || '',
+        phone: userInfo.phone || '',
+        child_name: userInfo.child_name || '',
+        child_birthdate: userInfo.child_birthdate || '',
+        picture: userInfo.picture || ''
+      })
     }
-
-    fetchUserInfo()
-  }, [navigate])
+  }, [userInfo])
 
   // 카메라 설정 가져오기
   useEffect(() => {
@@ -290,27 +258,7 @@ export default function Settings() {
         }
 
         // 사용자 정보 다시 가져오기
-        const meResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (meResponse.ok) {
-          const data = await meResponse.json()
-          setUserInfo({
-            ...data,
-            is_subscribed: Boolean(data.is_subscribed),
-            has_billing_key: Boolean(data.has_billing_key),
-          })
-          setProfileForm({
-            name: data.name || '',
-            phone: data.phone || '',
-            child_name: data.child_name || '',
-            child_birthdate: data.child_birthdate || '',
-            picture: data.picture || ''
-          })
-        }
+        await refreshUser()
 
         alert('프로필 사진이 변경되었습니다!')
       } catch (error) {
@@ -350,18 +298,8 @@ export default function Settings() {
 
       // ✅ 구독 정보(플랜, 남은 기간)는 그대로 두고,
       //    필요하면 안내 텍스트만 바꾸는 용도로 쓸 수 있음
-      setUserInfo((prev) =>
-        prev
-          ? {
-            ...prev,
-            // 백엔드에서 내려주면 동기화
-            is_subscribed: data?.is_subscribed ?? prev.is_subscribed,
-            next_billing_at: data?.next_billing_at ?? prev.next_billing_at,
-            subscription_plan: data?.subscription_plan ?? prev.subscription_plan,
-            has_billing_key: data?.has_billing_key ?? false,
-          }
-          : prev
-      )
+      // 사용자 정보 새로고침
+      await refreshUser()
 
       // 사이드바 등 다른 컴포넌트에 알려주기 (여전히 남은 기간은 보이게 됨)
       window.dispatchEvent(new Event('subscriptionChanged'))
@@ -421,25 +359,14 @@ export default function Settings() {
       }
 
       // 사용자 정보 다시 가져오기
-      const meResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (meResponse.ok) {
-        const data = await meResponse.json()
-        setUserInfo({
-          ...data,
-          is_subscribed: Boolean(data.is_subscribed),
-          has_billing_key: Boolean(data.has_billing_key),
-        })
+      await refreshUser()
+      if (userInfo) {
         setProfileForm({
-          name: data.name || '',
-          phone: data.phone || '',
-          child_name: data.child_name || '',
-          child_birthdate: data.child_birthdate || '',
-          picture: data.picture || ''
+          name: userInfo.name || '',
+          phone: userInfo.phone || '',
+          child_name: userInfo.child_name || '',
+          child_birthdate: userInfo.child_birthdate || '',
+          picture: userInfo.picture || ''
         })
       }
 

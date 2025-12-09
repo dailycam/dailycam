@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera } from 'lucide-react'
-import { API_BASE_URL } from '@/constants/api'
-import { getAuthToken } from '@/lib/auth'
+import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
     const navigate = useNavigate()
@@ -11,28 +10,15 @@ export default function Login() {
     // ProtectedRoute에서 전달받은 원래 경로
     const from = (location.state as any)?.from || '/monitoring'
 
+    const { isAuthenticated } = useAuth()
+    
     useEffect(() => {
-        // 이미 로그인되어 있는지 확인
-        const token = getAuthToken()
-        if (token) {
-            // 토큰이 있으면 유효성 검사
-            fetch(`${API_BASE_URL}/api/auth/me`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            })
-                .then((res) => {
-                    if (res.ok) {
-                        // 토큰이 유효하면 원래 가려던 페이지로 이동
-                        console.log('[Login] 이미 로그인됨, 리다이렉트:', from)
-                        navigate(from, { replace: true })
-                    }
-                })
-                .catch(() => {
-                    // 토큰이 유효하지 않으면 로그인 페이지 유지
-                })
+        // 이미 로그인되어 있으면 원래 가려던 페이지로 이동
+        if (isAuthenticated) {
+            console.log('[Login] 이미 로그인됨, 리다이렉트:', from)
+            navigate(from, { replace: true })
         }
-    }, [navigate, from])
+    }, [navigate, from, isAuthenticated])
 
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트

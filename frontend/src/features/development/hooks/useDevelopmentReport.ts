@@ -1,34 +1,21 @@
 import { useState, useEffect } from 'react'
 import { getDevelopmentData, DevelopmentData } from '../../../lib/api'
-import { getAuthToken } from '../../../lib/auth'
+import { useAuth } from '../../../context/AuthContext'
 import { RadarDataItem } from '../types'
-import { API_BASE_URL } from '@/constants/api'
 
 export const useDevelopmentReport = () => {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date())
     const [developmentData, setDevelopmentData] = useState<DevelopmentData | null>(null)
     const [childName, setChildName] = useState<string>('우리 아이')
 
-    // 사용자 정보 가져오기
+    const { user } = useAuth()
+    
+    // 사용자 정보에서 아이 이름 가져오기
     useEffect(() => {
-        const fetchUserInfo = async () => {
-            const token = getAuthToken()
-            if (!token) return
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (response.ok) {
-                    const data = await response.json()
-                    setChildName(data.child_name || '우리 아이')
-                }
-            } catch (error) {
-                console.error('사용자 정보 로드 실패:', error)
-            }
+        if (user?.child_name) {
+            setChildName(user.child_name)
         }
-        fetchUserInfo()
-    }, [])
+    }, [user])
 
     // API에서 데이터 로드 (선택한 날짜 기준)
     useEffect(() => {
