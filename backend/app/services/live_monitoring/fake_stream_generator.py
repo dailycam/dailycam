@@ -1,6 +1,7 @@
 """가짜 라이브 스트림 생성기"""
 
 import cv2
+import pytz
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -41,8 +42,9 @@ class FakeLiveStreamGenerator:
         
         self.is_running = True
         
-        # 현재 시간 기준으로 첫 시간대 시작
-        now = datetime.now()
+        # 현재 시간 기준으로 첫 시간대 시작 (KST)
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
         self.current_hour_start = now.replace(minute=0, second=0, microsecond=0)
         self._start_new_hour_file()
         
@@ -57,8 +59,9 @@ class FakeLiveStreamGenerator:
             
             await self._play_video_async(video_path)
             
-            # 시간대가 바뀌었는지 확인
-            now = datetime.now()
+            # 시간대가 바뀌었는지 확인 (KST)
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             hour_start = now.replace(minute=0, second=0, microsecond=0)
             if hour_start != self.current_hour_start:
                 self._finalize_current_hour()
@@ -101,8 +104,9 @@ class FakeLiveStreamGenerator:
             
             # 프레임 샘플링
             if frame_count % frame_skip == 0:
-                # 시간대 확인 (1시간 지났는지)
-                now = datetime.now()
+                # 시간대 확인 (1시간 지났는지, KST)
+                kst = pytz.timezone('Asia/Seoul')
+                now = datetime.now(kst)
                 hour_start = now.replace(minute=0, second=0, microsecond=0)
                 if hour_start != self.current_hour_start:
                     self._finalize_current_hour()
