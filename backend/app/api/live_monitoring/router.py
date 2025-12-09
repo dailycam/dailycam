@@ -35,36 +35,17 @@ async def upload_video_for_streaming(
     video: UploadFile = File(..., description="업로드할 비디오 파일")
 ):
     """
-    비디오 파일 업로드 (기존 영상 저장용)
-    업로드된 영상을 short 또는 medium 폴더에 저장
+    ⚠️ DEPRECATED: 이 엔드포인트는 더 이상 사용되지 않습니다.
+    
+    대신 다음을 사용하세요:
+    POST /api/camera-settings/cameras/{camera_id}/upload-video
+    
+    이 엔드포인트는 하위 호환성을 위해 유지되지만, 새 엔드포인트 사용을 권장합니다.
     """
-    if not video.content_type or not video.content_type.startswith('video/'):
-        raise HTTPException(status_code=400, detail="비디오 파일만 업로드 가능합니다")
-    
-    # 비디오 길이에 따라 short 또는 medium 폴더에 저장
-    # 여기서는 기본적으로 short에 저장
-    video_dir = Path(f"videos/{camera_id}/short")
-    video_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 타임스탬프를 포함한 파일명 생성
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"uploaded_{timestamp}_{video.filename}"
-    file_path = video_dir / filename
-    
-    # 파일 저장
-    content = await video.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
-    
-    print(f"[비디오 업로드] {camera_id}: {filename} ({len(content)/1024/1024:.2f}MB)")
-    
-    return {
-        "camera_id": camera_id,
-        "video_path": str(file_path),
-        "filename": filename,
-        "message": "비디오 업로드 완료",
-        "stream_url": f"/api/live-monitoring/stream/{camera_id}"
-    }
+    raise HTTPException(
+        status_code=410,
+        detail="이 엔드포인트는 더 이상 사용되지 않습니다. Settings 페이지에서 영상을 업로드해주세요."
+    )
 
 
 @router.post("/start-stream/{camera_id}")
@@ -87,9 +68,14 @@ async def start_stream(
     
     # 영상 디렉토리 확인
     if not video_dir.exists():
+        video_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 사용자 업로드 영상 확인
+    user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
+    if not user_videos:
         raise HTTPException(
-            status_code=404, 
-            detail=f"영상 디렉토리가 없습니다: {video_dir}"
+            status_code=400, 
+            detail="업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
         )
     
     # 현재 이벤트 루프 가져오기
@@ -143,8 +129,29 @@ async def start_hls_stream(
     - 재연결 시 자동으로 현재 시간부터 재생
     - 가짜 영상 또는 실제 홈캠 지원
     """
+    # 이미 실행 중인 스트림이 있으면 자동으로 중지
     if camera_id in active_hls_streams:
-        raise HTTPException(status_code=400, detail="이미 HLS 스트림이 실행 중입니다")
+        print(f"[API] 기존 HLS 스트림 발견, 자동 중지 후 재시작: {camera_id}")
+        
+        # 기존 스트림 중지
+        generator = active_hls_streams[camera_id]
+        generator.stop_streaming()
+        
+        # 태스크 취소
+        if camera_id in hls_stream_tasks:
+            task = hls_stream_tasks[camera_id]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del hls_stream_tasks[camera_id]
+        
+        del active_hls_streams[camera_id]
+        
+        # 분석 스케줄러 중지
+        stop_segment_analysis_for_camera(camera_id)
     
     # 실제 카메라인지 가짜 영상인지 판단
     is_real_camera = camera_url is not None
@@ -154,10 +161,19 @@ async def start_hls_stream(
         video_source = camera_url
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     else:
-        # 가짜 영상
+        # 사용자 업로드 영상
         video_dir = Path(f"videos/{camera_id}")
         if not video_dir.exists():
-            raise HTTPException(404, f"영상 디렉토리가 없습니다: {video_dir}")
+            video_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 사용자 업로드 영상 확인
+        user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
+        if not user_videos:
+            raise HTTPException(
+                400, 
+                "업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+            )
+        
         video_source = video_dir
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     
@@ -496,26 +512,13 @@ async def stream_video(
     if video_path:
         video_files = [Path(video_path)]
     else:
-        # 원본 영상 파일들 로드
-        video_files = []
-        
-        # short 디렉토리의 영상들
-        short_dir = video_dir / "short"
-        if short_dir.exists():
-            video_files.extend(sorted(short_dir.glob("*.mp4")))
-        
-        # medium 디렉토리의 영상들
-        medium_dir = video_dir / "medium"
-        if medium_dir.exists():
-            video_files.extend(sorted(medium_dir.glob("*.mp4")))
-        
-        # 루트 디렉토리의 영상들
-        video_files.extend(sorted(video_dir.glob("*.mp4")))
+        # 사용자 업로드 영상만 로드 (user_uploaded_로 시작하는 파일)
+        video_files = sorted(video_dir.glob("user_uploaded_*.mp4"))
         
         if not video_files:
             raise HTTPException(
                 status_code=404,
-                detail=f"스트림 파일이 없습니다. {video_dir}에 영상을 업로드하세요"
+                detail=f"업로드된 영상이 없습니다. Settings 페이지에서 영상을 업로드해주세요."
             )
     
     print(f"[스트림] 원본 영상 기반 스트리밍: {camera_id}, {len(video_files)}개 파일")

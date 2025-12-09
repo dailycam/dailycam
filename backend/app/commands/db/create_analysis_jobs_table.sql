@@ -1,5 +1,5 @@
 -- VLM 분석 작업 큐 테이블 생성
--- 실행: mysql -u root -p dailycam < scripts/create_analysis_jobs_table.sql
+-- 실행: mysql -u root -p dailycam < backend/app/commands/db/create_analysis_jobs_table.sql
 
 CREATE TABLE IF NOT EXISTS analysis_jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,

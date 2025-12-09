@@ -32,6 +32,7 @@ from .api.clips.router import router as clips_router
 from .api.profile.router import router as profile_router
 from .api.content.router import router as content_router
 from .api.reports.router import router as report_router
+from .api.camera_settings import router as camera_settings_router
 
 from .database import Base, engine
 from .database.session import test_db_connection
@@ -42,6 +43,7 @@ from pathlib import Path
 from .services.live_monitoring.hls_stream_generator import HLSStreamGenerator
 from .services.live_monitoring.segment_analyzer import start_segment_analysis_for_camera
 from .services.live_monitoring.hourly_aggregator import start_hourly_aggregation_for_camera
+from .services.cleanup_service import start_cleanup_scheduler, stop_cleanup_scheduler
 
 
 def create_app() -> FastAPI:
@@ -191,6 +193,13 @@ def create_app() -> FastAPI:
                 print(traceback.format_exc())
         
         asyncio.create_task(auto_start_hls_stream())
+        
+        # ✅ 4) 자동 정리 스케줄러 시작
+        print("\n🗑️ 자동 정리 스케줄러 시작...")
+        asyncio.create_task(start_cleanup_scheduler())
+        print("   - 아카이브 파일: 분석 완료 후 7일")
+        print("   - 하이라이트 클립: 30일 후")
+        print("   - 실행 시간: 매일 새벽 3시")
 
         print("\n" + "=" * 60)
         print("✨ 서버가 준비되었습니다!")
@@ -200,7 +209,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_event():
-        """애플리케이션 종료 시 HLS 스트림 정리"""
+        """애플리케이션 종료 시 HLS 스트림 및 정리 스케줄러 종료"""
         print("\n👋 DailyCam Backend 종료 중...")
         
         # HLS 스트림 정리
@@ -217,7 +226,11 @@ def create_app() -> FastAPI:
             if not task.done():
                 task.cancel()
         
+        # 자동 정리 스케줄러 중지
+        stop_cleanup_scheduler()
+        
         print("✅ HLS 스트림 정리 완료")
+        print("✅ 자동 정리 스케줄러 중지 완료")
 
     # ----------------------------------------------------
     # 루트 엔드포인트
@@ -288,6 +301,13 @@ def create_app() -> FastAPI:
 
     # 일일 육아 리포트 (추가)
     app.include_router(report_router, prefix="/api/reports", tags=["reports"])
+
+    # 카메라 설정
+    app.include_router(
+        camera_settings_router,
+        prefix="/api/camera-settings",
+        tags=["camera-settings"]
+    )
 
     # ----------------------------------------------------
     # 정적 파일 마운트 (비디오 및 썸네일 서빙용)

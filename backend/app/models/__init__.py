@@ -6,6 +6,7 @@ from app.models.token_blacklist import TokenBlacklist
 from app.models.analysis import AnalysisLog, SafetyEvent, DevelopmentEvent
 from app.models.summary import DailySummary
 from app.models.clip import HighlightClip
+from app.models.camera_setting import CameraSetting, CameraVideo
 from app.models.development_tracking import DevelopmentScoreTracking, DevelopmentMilestoneTracking
 from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus

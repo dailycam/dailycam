@@ -16,6 +16,7 @@ import { motion } from 'motion/react'
 import Hls from 'hls.js'
 import { uploadVideoForStreaming, startHlsStream, stopHlsStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
+import { addNotification } from '../lib/notifications'
 
 
 
@@ -45,6 +46,48 @@ export default function Monitoring() {
     const mins = minutes % 60
     return mins > 0 ? `${hours}시간 ${mins}분` : `${hours}시간`
   }
+
+  // 영상 삭제 이벤트 감지
+  useEffect(() => {
+    const handleVideoDeleted = async () => {
+      console.log('영상 삭제 감지, 스트림 상태 확인 중...')
+      
+      // 스트림 상태 확인
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          // 스트림이 중지되었으면 UI 업데이트
+          if (!data.is_active || !data.is_running) {
+            console.log('스트림이 중지되었습니다. UI 업데이트 중...')
+            if (hlsRef.current) {
+              hlsRef.current.destroy()
+              hlsRef.current = null
+            }
+            if (videoRef.current) {
+              videoRef.current.pause()
+              videoRef.current.src = ''
+              videoRef.current.load()
+            }
+            setIsStreamActive(false)
+            setIsPlaying(false)
+            setUploadError('영상이 삭제되어 스트림이 중지되었습니다. 다시 시작하려면 "모니터링 시작" 버튼을 클릭하세요.')
+          }
+        }
+      } catch (error) {
+        console.error('스트림 상태 확인 오류:', error)
+      }
+    }
+
+    window.addEventListener('video-deleted', handleVideoDeleted as EventListener)
+    return () => {
+      window.removeEventListener('video-deleted', handleVideoDeleted as EventListener)
+    }
+  }, [selectedCamera])
 
   // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
   useEffect(() => {
@@ -191,7 +234,7 @@ export default function Monitoring() {
     }
   }
 
-  // 비디오 업로드 및 HLS 스트리밍 시작
+  // 비디오 업로드 및 모니터링 시작
   const handleUploadAndStream = async () => {
     if (!videoFile) return
 
@@ -208,10 +251,10 @@ export default function Monitoring() {
       console.log('비디오 업로드 시작...')
       await uploadVideoForStreaming(selectedCamera, videoFile)
 
-      // 3. HLS 스트림 시작 요청
-      console.log('HLS 스트림 시작 요청...')
+      // 3. 모니터링 시작 요청
+      console.log('모니터링 시작 요청...')
       const response = await startHlsStream(selectedCamera)
-      console.log('HLS 스트림 시작 응답:', response)
+      console.log('모니터링 시작 응답:', response)
 
       // 4. HLS 재생 시작
       const playlistUrl = response.playlist_url
@@ -303,7 +346,7 @@ export default function Monitoring() {
     }
   }
 
-  // HLS 스트림 시작 (비디오 업로드 없이 기존 영상 사용)
+  // 모니터링 시작 (비디오 업로드 없이 기존 영상 사용)
   const handleStartHlsStream = async () => {
     setIsUploading(true)
     setUploadError(null)
@@ -314,10 +357,10 @@ export default function Monitoring() {
         await handleStopStream()
       }
 
-      // 2. HLS 스트림 시작 요청
-      console.log('HLS 스트림 시작 요청...')
+      // 2. 모니터링 시작 요청
+      console.log('모니터링 시작 요청...')
       const response = await startHlsStream(selectedCamera)
-      console.log('HLS 스트림 시작 응답:', response)
+      console.log('모니터링 시작 응답:', response)
 
       // 3. HLS 재생 시작 (플레이리스트 생성 대기)
       const playlistUrl = response.playlist_url
@@ -420,8 +463,8 @@ export default function Monitoring() {
         setUploadError('이 브라우저는 HLS 재생을 지원하지 않습니다.')
       }
     } catch (error: any) {
-      console.error('HLS 스트림 시작 실패:', error)
-      setUploadError(error.message || 'HLS 스트림을 시작할 수 없습니다.')
+      console.error('모니터링 시작 실패:', error)
+      setUploadError(error.message || '모니터링을 시작할 수 없습니다.')
     } finally {
       setIsUploading(false)
     }
@@ -444,6 +487,13 @@ export default function Monitoring() {
       await stopHlsStream(selectedCamera)
       setIsStreamActive(false)
       setIsPlaying(false)
+      
+      // 시스템 알림 추가
+      addNotification({
+        title: '모니터링 중지',
+        message: `${selectedCamera === 'camera-1' ? '거실' : selectedCamera === 'camera-2' ? '아이방' : '주방'} 카메라 모니터링이 중지되었습니다.`,
+        type: 'system'
+      })
     } catch (error) {
       console.error('스트림 중지 오류:', error)
     }
@@ -502,7 +552,7 @@ export default function Monitoring() {
                           : '주방 카메라'}
                     </p>
                     <p className="text-xs mt-2 text-gray-500">
-                      'HLS 스트림 시작' 버튼을 클릭하여 라이브 스트리밍을 시작하세요
+                      '모니터링 시작' 버튼을 클릭하여 라이브 스트리밍을 시작하세요
                     </p>
                     {uploadError && (
                       <div className="mt-4 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm max-w-md mx-auto">
@@ -559,7 +609,7 @@ export default function Monitoring() {
                           className="px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <MonitorPlay className="w-4 h-4" />
-                          {isUploading ? '시작 중...' : 'HLS 스트림 시작'}
+                          {isUploading ? '시작 중...' : '모니터링 시작'}
                         </button>
                         <button
                           onClick={() => setShowUploadModal(true)}

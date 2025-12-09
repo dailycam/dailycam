@@ -152,8 +152,10 @@ class HLSStreamGenerator:
         video_queue.load_videos(shuffle=True, target_duration_minutes=60)
         
         if video_queue.get_queue_size() == 0:
-            print(f"[HLS 스트림] 오류: 재생할 영상이 없습니다")
+            print(f"[HLS 스트림] ❌ 오류: 사용자 업로드 영상이 없습니다")
+            print(f"[HLS 스트림] 💡 Settings 페이지에서 영상을 업로드해주세요")
             print(f"[HLS 스트림] 영상 경로: {self.video_source}")
+            self.is_running = False
             return
         
         # 실시간 이벤트 탐지기
