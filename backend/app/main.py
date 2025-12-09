@@ -222,6 +222,7 @@ def create_app() -> FastAPI:
         same_site="lax",  # 도메인 통일 후 lax로 충분 (OAuth는 전체 페이지 이동)
         https_only=is_production,  # 운영이면 True, 로컬은 False
         max_age=3600,  # 세션 유효 시간 (1시간)
+        domain=".dailycam.net" if is_production else None,  # 서브도메인 간 쿠키 공유
     )
     
     # 리다이렉트 응답에서 세션 쿠키가 설정되도록 보장하는 커스텀 미들웨어
