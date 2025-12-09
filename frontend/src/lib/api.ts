@@ -555,9 +555,10 @@ export interface DashboardData {
 
 /**
  * 대시보드 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
  * @param rangeDays 조회할 일수 (기본값: 7)
  */
-export async function getDashboardData(rangeDays: number = 7): Promise<DashboardData> {
+export async function getDashboardData(targetDate?: string, rangeDays: number = 7): Promise<DashboardData> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dashboard/summary`, {
       method: 'POST',
@@ -567,6 +568,7 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
       },
       body: JSON.stringify({
         range_days: rangeDays,
+        target_date: targetDate,
       }),
     })
 
@@ -645,10 +647,15 @@ export interface DevelopmentData {
 
 /**
  * 발달 리포트 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
  */
-export async function getDevelopmentData(days: number = 7): Promise<DevelopmentData> {
+export async function getDevelopmentData(targetDate?: string): Promise<DevelopmentData> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/development/summary?days=${days}`, {
+    const url = targetDate
+      ? `${API_BASE_URL}/api/development/summary?target_date=${targetDate}`
+      : `${API_BASE_URL}/api/development/summary`
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         ...getAuthHeader(), // 인증 헤더 추가
@@ -910,18 +917,49 @@ export async function getTrendingContent(): Promise<ContentRecommendation[]> {
  */
 export async function getRecommendedNews(): Promise<ContentRecommendation[]> {
   try {
+    // 브라우저 위치 정보 수집
+    let locationData: { latitude?: number; longitude?: number } = {}
+
+    if ('geolocation' in navigator) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 5000,
+            maximumAge: 300000, // 5분 캐시
+            enableHighAccuracy: false
+          })
+        })
+
+        locationData = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }
+        console.log('📍 [위치] 좌표 수집 성공:', locationData)
+      } catch (geoError) {
+        console.warn('⚠️ [위치] 위치 권한 거부 또는 오류, 전국 뉴스로 fallback:', geoError)
+      }
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/content/recommended-news`, {
-      method: 'GET',
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         ...getAuthHeader(),
       },
+      body: JSON.stringify(locationData)
     })
 
     if (!response.ok) {
       throw new Error('추천 뉴스를 가져오는 중 오류가 발생했습니다.')
     }
 
-    const data: { news: ContentRecommendation[] } = await response.json()
+    const data: { news: ContentRecommendation[]; location?: string } = await response.json()
+
+    // 지역 정보가 있으면 로그 출력
+    if (data.location) {
+      console.log(`✅ [뉴스] ${data.location} 지역 뉴스 로드 완료`)
+    }
+
     return data.news || []
   } catch (error) {
     console.error('추천 뉴스 조회 실패:', error)

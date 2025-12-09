@@ -3,6 +3,7 @@ import { getDashboardData } from '../../../lib/api'
 import { TimelineEvent, MonitoringRange, HourlyStat, DailyStats, ClockData } from '../types'
 
 export const useDashboard = () => {
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date())
     const [dashboardData, setDashboardData] = useState<any>(null)
     const [loading, setLoading] = useState(false) // 초기값 false로 변경
     const [error, setError] = useState<string | null>(null)
@@ -17,7 +18,8 @@ export const useDashboard = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const data = await getDashboardData()
+                const dateStr = selectedDate.toISOString().split('T')[0] // YYYY-MM-DD 형식
+                const data = await getDashboardData(dateStr)
                 console.log('📦 [Dashboard] 받은 데이터:', data)
                 setDashboardData(data)
             } catch (err) {
@@ -28,7 +30,7 @@ export const useDashboard = () => {
             }
         }
         fetchData()
-    }, [])
+    }, [selectedDate])
 
     // 타임라인 이벤트 데이터 준비
     const timelineEvents: TimelineEvent[] = useMemo(() => {
@@ -209,7 +211,27 @@ export const useDashboard = () => {
 
     const closeModal = () => setIsModalOpen(false)
 
+    // 날짜 변경 핸들러
+    const handleDateChange = (newDate: Date) => {
+        setSelectedDate(newDate)
+    }
+
+    // 사용 가능한 날짜 범위 (최근 7일)
+    const getAvailableDates = (): Date[] => {
+        const dates: Date[] = []
+        const today = new Date()
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() - i)
+            dates.push(date)
+        }
+        return dates
+    }
+
     return {
+        selectedDate,
+        handleDateChange,
+        availableDates: getAvailableDates(),
         dashboardData,
         loading,
         error,

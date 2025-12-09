@@ -29,14 +29,15 @@ def calculate_age_months(birth_date: date) -> int:
 
 @router.get("/summary")
 def get_development_summary(
-    days: int = Query(7, description="조회할 일수"),
+    target_date: str = Query(None, description="조회할 날짜 (YYYY-MM-DD), 기본값은 오늘"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
     발달 리포트용 요약 데이터 조회
     
-    오늘(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
+    특정 날짜(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
+    최근 7일 이내의 날짜만 조회 가능합니다.
     """
     # 0. 사용자 정보 조회 및 현재 개월 수 계산
     user = db.query(User).filter(User.id == user_id).first()
@@ -46,13 +47,25 @@ def get_development_summary(
     if user and user.child_birthdate:
         age_months = calculate_age_months(user.child_birthdate)
     
-    # 1. 날짜 범위 설정
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
+    # 1. 조회할 날짜 설정 (기본값: 오늘)
+    if target_date:
+        try:
+            query_date = datetime.strptime(target_date, "%Y-%m-%d")
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        query_date = datetime.now()
     
-    # 2. 오늘 날짜의 모든 분석 로그 조회 (일일 집계)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    # 최근 7일 이내인지 확인
+    days_ago = (datetime.now() - query_date).days
+    if days_ago < 0 or days_ago > 6:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Only data from the last 7 days can be queried")
+    
+    # 2. 해당 날짜의 모든 분석 로그 조회 (하루치)
+    today_start = query_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = query_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     # AnalysisLog에서 조회
     today_logs = (
@@ -196,23 +209,22 @@ def get_development_summary(
         for cat, count in category_counts
     ]
     
-    # 7. 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
-    now = datetime.now()
-    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-    
-    # 최신 HourlyReport 조회
+    # 7. 텍스트 데이터는 HourlyReport에서 가져오기 (선택한 날짜의 최신 리포트)
     camera_id = "camera-1"  # 추후 사용자별 카메라 매핑으로 변경
+    
+    # 선택한 날짜의 HourlyReport 조회
     latest_hourly_report = (
         db.query(HourlyReport)
         .filter(
             HourlyReport.camera_id == camera_id,
-            HourlyReport.hour_start < current_hour_start
+            HourlyReport.hour_start >= today_start,
+            HourlyReport.hour_start <= today_end
         )
         .order_by(HourlyReport.hour_start.desc())
         .first()
     )
     
-    # 발달 요약 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    # 발달 요약 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
     latest_log = today_logs[0] if today_logs else None
     if latest_hourly_report and latest_hourly_report.development_summary:
         development_summary = latest_hourly_report.development_summary
@@ -221,7 +233,7 @@ def get_development_summary(
     else:
         development_summary = "아직 분석된 데이터가 없습니다."
     
-    # 추천 활동 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    # 추천 활동 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
     if latest_hourly_report and latest_hourly_report.recommended_activities:
         recommendations = latest_hourly_report.recommended_activities
     elif latest_log and latest_log.recommendations:
@@ -231,7 +243,7 @@ def get_development_summary(
     
     # 9. 최종 응답 (사용자 생년월일 기반 age_months 사용)
 
-    # 발달 인사이트 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    # 발달 인사이트 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
     if latest_hourly_report and latest_hourly_report.development_insights:
         development_insights = latest_hourly_report.development_insights
     elif latest_log and latest_log.development_insights:

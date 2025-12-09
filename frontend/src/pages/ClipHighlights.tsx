@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import { Play, Download, Share2, TrendingUp, Shield, Calendar, Clock, Film } from 'lucide-react'
 import { getClipHighlights, HighlightClip } from '../lib/api'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function ClipHighlights() {
   const [selectedClip, setSelectedClip] = useState<string | null>(null)
@@ -57,7 +58,7 @@ export default function ClipHighlights() {
   const handleDownload = async (clip: HighlightClip) => {
     try {
       // 비디오 파일 직접 다운로드 (정적 파일 서빙)
-      const videoUrl = `http://localhost:8000${clip.video_url}`
+      const videoUrl = `${API_BASE_URL}${clip.video_url}`
 
       const a = document.createElement('a')
       a.href = videoUrl
@@ -98,7 +99,7 @@ export default function ClipHighlights() {
             {clip.video_url ? (
               <video
                 className="w-full h-full object-cover rounded-lg"
-                src={`http://localhost:8000${clip.video_url}#t=5`}
+                src={`${API_BASE_URL}${clip.video_url}#t=5`}
                 preload="metadata"
                 muted
                 playsInline
@@ -110,7 +111,7 @@ export default function ClipHighlights() {
               />
             ) : clip.thumbnail_url ? (
               <img
-                src={`http://localhost:8000${clip.thumbnail_url}`}
+                src={`${API_BASE_URL}${clip.thumbnail_url}`}
                 alt={clip.title}
                 className="w-full h-full object-cover rounded-lg"
                 onError={(e) => {
@@ -318,7 +319,7 @@ export default function ClipHighlights() {
                     controls
                     autoPlay
                     className="w-full h-full object-contain"
-                    src={`http://localhost:8000${clip.video_url}`}
+                    src={`${API_BASE_URL}${clip.video_url}`}
                     onError={(e) => {
                       console.error('비디오 로드 실패:', clip.video_url)
                       e.currentTarget.parentElement!.innerHTML = `
