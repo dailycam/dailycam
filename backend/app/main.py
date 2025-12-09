@@ -2,10 +2,13 @@
 
 import os
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 
 # .env 파일 명시적 로드
-load_dotenv()
+# 루트 디렉토리의 .env 파일을 찾아 로드합니다.
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # LangChain 호환성을 위해 GEMINI_API_KEY를 GOOGLE_API_KEY로 설정
 if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):

@@ -22,8 +22,10 @@ from app.database.session import get_db
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.models.live_monitoring.models import SegmentAnalysis
 from app.models.analysis import AnalysisLog, DevelopmentEvent, DevelopmentCategory
+from app.models.user import User
 from app.services.gemini_service import GeminiService
 from app.services.analysis_service import AnalysisService
+from dateutil.relativedelta import relativedelta
 
 
 class AnalysisWorker:
@@ -163,11 +165,30 @@ class AnalysisWorker:
                     else:
                         print(f"[워커 {self.worker_id}] 🤖 Gemini VLM 분석 시작...")
                     
+                    # 아이 개월 수 계산
+                    user = db.query(User).filter(User.id == user_id).first()
+                    age_months = None
+                    if user and user.child_birthdate:
+                        try:
+                            today = datetime.now().date()
+                            # date 타입 호환성 처리
+                            birthdate = user.child_birthdate
+                            if isinstance(birthdate, datetime):
+                                birthdate = birthdate.date()
+                                
+                            delta = relativedelta(today, birthdate)
+                            age_months = delta.years * 12 + delta.months
+                            print(f"[워커 {self.worker_id}] 👶 아이 개월수 계산: {age_months}개월 (생일: {birthdate})")
+                        except Exception as e:
+                            print(f"[워커 {self.worker_id}] ⚠️ 나이 계산 오류: {e}")
+                    else:
+                        print(f"[워커 {self.worker_id}] ⚠️ 아이 생일 정보 없음 (User ID: {user_id})")
+
                     analysis_result = await self.gemini_service.analyze_video_vlm(
                         video_bytes=video_bytes,
                         content_type="video/mp4",
                         stage=None,
-                        age_months=None
+                        age_months=age_months
                     )
                     print(f"[워커 {self.worker_id}] ✅ Gemini VLM 분석 완료")
                     break

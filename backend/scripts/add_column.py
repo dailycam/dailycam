@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 # but here we just need DB connection
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-load_dotenv()
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / '.env')
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")

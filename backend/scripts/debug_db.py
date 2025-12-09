@@ -5,7 +5,7 @@ from pathlib import Path
 
 # .env 로드
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / '.env')
+load_dotenv(Path(__file__).parent.parent.parent / '.env')
 
 from app.database import SessionLocal
 from app.models.daily_report.models import (

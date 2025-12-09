@@ -20,6 +20,7 @@ const polarToCartesian = (centerX: number, centerY: number, radius: number, angl
 }
 
 // 도넛 조각(Arc) 생성 함수 (두께 포함)
+// 도넛 조각(Arc) 생성 함수 (두께 포함)
 const describeDonutSlice = (x: number, y: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) => {
     const startOuter = polarToCartesian(x, y, outerRadius, endAngle)
     const endOuter = polarToCartesian(x, y, outerRadius, startAngle)
@@ -278,6 +279,11 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                     const startAngle = startHour12 * 30
                     let endAngle = (endHour12 + 1) * 30
 
+                    // [수정] 종료 각도가 시작 각도보다 작으면 360도 더해서 큰 호가 그려지게 함
+                    if (endAngle <= startAngle) {
+                        endAngle += 360
+                    }
+
                     return (
                         <g
                             key={`mon-${idx}`}
@@ -285,9 +291,9 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                             onMouseLeave={() => setHoveredMonitoring(null)}
                             className="cursor-pointer"
                         >
-                            {/* 모니터링 띠 (가장 바깥쪽: radius + 52 ~ + 58) */}
+                            {/* 모니터링 띠 (가장 바깥쪽: radius + 55 ~ + 61) */}
                             <path
-                                d={describeDonutSlice(center, center, radius + 52, radius + 58, startAngle, endAngle)}
+                                d={describeDonutSlice(center, center, radius + 55, radius + 61, startAngle, endAngle)}
                                 fill={COLORS.monitoring}
                                 opacity={hoveredMonitoring === range ? "1" : "0.6"}
                                 className="transition-opacity duration-200"

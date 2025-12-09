@@ -49,8 +49,15 @@ export const useDashboard = () => {
         }))
     }, [dashboardData])
 
-    // 모니터링 구간 데이터 준비 (실제 이벤트 시간 기반)
+    // 모니터링 구간 데이터 준비 (실제 분석 시간 또는 이벤트 시간 기반)
     const monitoringRanges: MonitoringRange[] = useMemo(() => {
+        // [수정] 백엔드에서 받은 실제 분석 구간 데이터가 있으면 우선 사용
+        if (dashboardData?.monitoringRanges && dashboardData.monitoringRanges.length > 0) {
+            console.log('✅ [Monitoring Ranges] 백엔드 데이터 사용:', dashboardData.monitoringRanges)
+            return dashboardData.monitoringRanges
+        }
+
+        // 폴백: 백엔드 데이터가 없으면 타임라인 이벤트로 추정
         if (timelineEvents.length === 0) return []
 
         // 이벤트를 시간순으로 정렬
@@ -61,7 +68,7 @@ export const useDashboard = () => {
         const endTime = sortedEvents[sortedEvents.length - 1].time
 
         return [{ start: startTime, end: endTime }]
-    }, [timelineEvents])
+    }, [timelineEvents, dashboardData])
 
     // 시간대별 통계 - 백엔드 데이터 우선 사용
     const hourlyStats: HourlyStat[] = useMemo(() => {
@@ -191,8 +198,8 @@ export const useDashboard = () => {
         })
 
         return {
-            safetyScore: dashboardData?.safetyScore || 100,
-            developmentScore: dashboardData?.developmentScore || 50,
+            safetyScore: dashboardData?.safetyScore ?? 0,
+            developmentScore: dashboardData?.developmentScore ?? 0,
             monitoringHours: dashboardData?.monitoringHours || 0,
             incidentCount: dashboardData?.incidentCount || 0
         }
