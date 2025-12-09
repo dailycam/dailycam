@@ -214,16 +214,13 @@ def create_app() -> FastAPI:
     )
 
     # 세션 미들웨어 추가 (OAuth에 필요)
-    # HTTPS 환경에서 쿠키 설정 추가
-    # OAuth 리다이렉트는 크로스 사이트 요청이므로 same_site="none" 필요
-    # same_site="none"을 사용하려면 반드시 Secure 플래그가 필요
-    # Starlette는 X-Forwarded-Proto 헤더를 확인하여 HTTPS인지 판단함
+    # 도메인 통일 후 same_site="lax"로 충분 (같은 도메인 내 리다이렉트)
     is_production = os.getenv("ENVIRONMENT") == "production"
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
-        same_site="none",  # 크로스 사이트 OAuth 리다이렉트를 위해 none 사용
-        https_only=True,  # Secure 플래그 필수 (X-Forwarded-Proto 헤더로 HTTPS 판단)
+        same_site="lax",  # 도메인 통일 후 lax로 충분 (OAuth는 전체 페이지 이동)
+        https_only=is_production,  # 운영이면 True, 로컬은 False
         max_age=3600,  # 세션 유효 시간 (1시간)
     )
     
