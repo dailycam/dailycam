@@ -248,6 +248,33 @@ class S3Service:
             print(f"[S3Service] ❌ 아카이브 업로드 중 오류 발생: {e}")
             return None
     
+    def archive_exists(self, s3_key: str) -> bool:
+        """
+        S3에 아카이브 파일이 존재하는지 확인
+        
+        Args:
+            s3_key: S3 키 (예: archives/camera-1/2025/12/09/archive_20251209_100000.mp4)
+        
+        Returns:
+            파일 존재 여부
+        """
+        if not self.is_enabled():
+            return False
+        
+        try:
+            self.s3_client.head_object(Bucket=self.bucket_name, Key=s3_key)
+            return True
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == '404' or error_code == 'NoSuchKey':
+                return False
+            # 다른 에러는 예외 발생
+            print(f"[S3Service] ⚠️ S3 파일 존재 확인 중 오류: {e}")
+            return False
+        except Exception as e:
+            print(f"[S3Service] ⚠️ 파일 존재 확인 중 오류 발생: {e}")
+            return False
+    
     def download_archive(
         self,
         s3_key: str,

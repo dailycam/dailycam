@@ -123,44 +123,53 @@ class AnalysisWorker:
                 backend_dir = Path(__file__).parent.parent.parent
                 video_path = (backend_dir / video_path).resolve()
             
-            # 1. 파일 존재 확인 및 S3에서 다운로드 (필요시)
+            # 1. S3 우선 확인, 없으면 로컬 파일 사용
             downloaded_from_s3 = False
-            if not video_path.exists():
-                from app.services.s3_service import S3Service
-                s3_service = S3Service()
+            from app.services.s3_service import S3Service
+            s3_service = S3Service()
+            
+            # S3 키 생성
+            segment_start_utc = job.segment_start
+            if segment_start_utc.tzinfo is None:
+                segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+            
+            # KST로 변환하여 파일명 생성
+            kst = timezone(timedelta(hours=9))
+            segment_start_kst = segment_start_utc.astimezone(kst)
+            archive_filename = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M%S')}.mp4"
+            s3_key = f"archives/{job.camera_id}/{segment_start_kst.strftime('%Y/%m/%d')}/{archive_filename}"
+            
+            # S3 우선 확인
+            if s3_service.is_enabled() and s3_service.archive_exists(s3_key):
+                print(f"[워커 {self.worker_id}] 📥 S3에 파일 존재, 다운로드 시작: {s3_key}")
                 
-                if s3_service.is_enabled():
-                    # segment_start를 사용하여 S3 키 생성
-                    segment_start_utc = job.segment_start
-                    if segment_start_utc.tzinfo is None:
-                        segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
-                    
-                    # KST로 변환하여 파일명 생성
-                    kst = timezone(timedelta(hours=9))
-                    segment_start_kst = segment_start_utc.astimezone(kst)
-                    archive_filename = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M%S')}.mp4"
-                    
-                    # S3 키 생성 (upload_archive와 동일한 형식)
-                    s3_key = f"archives/{job.camera_id}/{segment_start_kst.strftime('%Y/%m/%d')}/{archive_filename}"
-                    
-                    print(f"[워커 {self.worker_id}] 📥 로컬 파일 없음, S3에서 다운로드 시도: {s3_key}")
-                    
-                    # 로컬 디렉토리 생성
-                    video_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    # S3에서 다운로드
-                    success = s3_service.download_archive(
-                        s3_key=s3_key,
-                        local_path=video_path
-                    )
-                    
-                    if success:
-                        downloaded_from_s3 = True
-                        print(f"[워커 {self.worker_id}] ✅ S3 다운로드 완료: {video_path.name}")
-                    else:
-                        raise FileNotFoundError(f"비디오 파일 없음 (S3 다운로드 실패): {video_path}")
+                # 로컬 디렉토리 생성
+                video_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # S3에서 다운로드
+                success = s3_service.download_archive(
+                    s3_key=s3_key,
+                    local_path=video_path
+                )
+                
+                if success:
+                    downloaded_from_s3 = True
+                    print(f"[워커 {self.worker_id}] ✅ S3 다운로드 완료: {video_path.name}")
                 else:
-                    raise FileNotFoundError(f"비디오 파일 없음 (S3 비활성화): {video_path}")
+                    # S3 다운로드 실패 시 로컬 파일 확인
+                    if video_path.exists():
+                        print(f"[워커 {self.worker_id}] ⚠️ S3 다운로드 실패, 로컬 파일 사용: {video_path.name}")
+                    else:
+                        raise FileNotFoundError(f"비디오 파일 없음 (S3 다운로드 실패, 로컬 파일도 없음): {video_path}")
+            elif video_path.exists():
+                # S3에 없거나 비활성화된 경우 로컬 파일 사용
+                print(f"[워커 {self.worker_id}] 📁 로컬 파일 사용: {video_path.name}")
+            else:
+                # S3에도 없고 로컬에도 없음
+                if s3_service.is_enabled():
+                    raise FileNotFoundError(f"비디오 파일 없음 (S3에도 로컬에도 없음): {s3_key}")
+                else:
+                    raise FileNotFoundError(f"비디오 파일 없음 (S3 비활성화, 로컬 파일도 없음): {video_path}")
             
             # 2. 파일 안정화 대기 (S3에서 다운로드한 경우는 스킵)
             if not downloaded_from_s3:
