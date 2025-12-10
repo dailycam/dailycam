@@ -412,8 +412,8 @@ class HLSStreamGenerator:
             '-r', str(self.target_fps),
             '-f', 'hls',
             '-hls_time', str(self.segment_duration),
-            '-hls_list_size', '10',
-            '-hls_flags', 'delete_segments',
+            '-hls_list_size', '20',  # 세그먼트 개수 증가
+            # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화 (페이지 복귀 시 부드러운 재생)
             '-hls_segment_filename', segment_pattern,
             str(playlist_path)
         ]
@@ -491,11 +491,11 @@ class HLSStreamGenerator:
                     '-b:a', '128k',  # 오디오 비트레이트
                     '-ar', '44100',  # 오디오 샘플레이트
                     '-ac', '2',  # 스테레오
-                    '-shortest',  # 짧은 스트림에 맞춤 (비디오/오디오 동기화)
+                    # '-shortest',  # 라이브 스트리밍에서는 제거 (오디오 동기화 지연 방지)
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
-                    '-hls_list_size', '10',
-                    '-hls_flags', 'delete_segments',
+                    '-hls_list_size', '20',  # 세그먼트 개수 증가
+                    # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
                 ]
@@ -513,8 +513,8 @@ class HLSStreamGenerator:
                     '-tune', 'zerolatency',
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
-                    '-hls_list_size', '10',
-                    '-hls_flags', 'delete_segments',
+                    '-hls_list_size', '20',  # 세그먼트 개수 증가
+                    # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
                 ]
