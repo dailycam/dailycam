@@ -54,19 +54,28 @@ def get_dashboard_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=range_days)
     
-    # 2. 오늘 날짜의 모든 분석 로그 조회 (일일 집계)
-    # KST 기준 오늘 날짜
+    # 2. 조회할 날짜의 모든 분석 로그 조회 (일일 집계)
+    # KST 기준 조회 날짜 설정 (target_date 사용)
     kst = pytz.timezone('Asia/Seoul')
-    now_kst = datetime.now(kst)
-    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end_kst = now_kst.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # query_date를 KST로 변환 (target_date가 있으면 사용, 없으면 오늘)
+    if request.target_date:
+        # query_date는 이미 파싱된 naive datetime이므로 KST로 변환
+        query_date_kst = kst.localize(query_date)
+    else:
+        # 기본값: 오늘 (KST)
+        query_date_kst = datetime.now(kst)
+    
+    # 조회할 날짜의 시작/끝 시간 설정
+    target_start_kst = query_date_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    target_end_kst = query_date_kst.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     # UTC로 변환 (데이터베이스는 UTC로 저장됨)
-    today_start_utc = today_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
-    today_end_utc = today_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    target_start_utc = target_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    target_end_utc = target_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
     
-    print(f"[Dashboard] 오늘 날짜 범위 (KST): {today_start_kst} ~ {today_end_kst}")
-    print(f"[Dashboard] 오늘 날짜 범위 (UTC): {today_start_utc} ~ {today_end_utc}")
+    print(f"[Dashboard] 조회 날짜 (KST): {target_start_kst} ~ {target_end_kst}")
+    print(f"[Dashboard] 조회 날짜 (UTC): {target_start_utc} ~ {target_end_utc}")
     print(f"[Dashboard] User ID: {user_id}")
     
     # AnalysisLog 조회
@@ -74,8 +83,8 @@ def get_dashboard_summary(
         db.query(AnalysisLog)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start_utc,
-            AnalysisLog.created_at <= today_end_utc
+            AnalysisLog.created_at >= target_start_utc,
+            AnalysisLog.created_at <= target_end_utc
         )
         .all()
     )
@@ -87,17 +96,17 @@ def get_dashboard_summary(
         db.query(SegmentAnalysis)
         .filter(
             SegmentAnalysis.camera_id == camera_id,
-            SegmentAnalysis.segment_start >= today_start_utc,
-            SegmentAnalysis.segment_start <= today_end_utc,
+            SegmentAnalysis.segment_start >= target_start_utc,
+            SegmentAnalysis.segment_start <= target_end_utc,
             SegmentAnalysis.status == 'completed'
         )
         .all()
     )
     
-    print(f"[Dashboard] 오늘 분석된 로그 개수: {len(today_logs)}")
-    print(f"[Dashboard] 오늘 분석된 세그먼트 개수: {len(today_segments)}")
+    print(f"[Dashboard] 조회 날짜 분석된 로그 개수: {len(today_logs)}")
+    print(f"[Dashboard] 조회 날짜 분석된 세그먼트 개수: {len(today_segments)}")
     
-    # 2-1. 오늘 분석된 데이터의 평균 안전 점수 및 발달 점수
+    # 2-1. 조회 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
     # AnalysisLog와 SegmentAnalysis 모두에서 수집
     today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
     today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
@@ -131,15 +140,15 @@ def get_dashboard_summary(
         .first()
     )
     
-    # 4. 오늘 날짜의 위험 이벤트 카운트 (일일 집계)
+    # 4. 조회 날짜의 위험 이벤트 카운트 (일일 집계)
     # AnalysisLog 기반 이벤트
     incident_count = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start_utc,
-            AnalysisLog.created_at <= today_end_utc,
+            AnalysisLog.created_at >= target_start_utc,
+            AnalysisLog.created_at <= target_end_utc,
             SafetyEvent.severity.in_(["위험", "주의"])
         )
         .count()
