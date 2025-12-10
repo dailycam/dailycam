@@ -11,7 +11,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import and_
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -281,6 +281,24 @@ class AnalysisWorker:
                     print(f"[워커 {self.worker_id}] ✅ 하이라이트 클립 {len(clips)}개 생성 완료")
                     for clip in clips:
                         print(f"  📹 {clip.get('video_url', 'N/A')}")
+                    
+                    # 클립 생성 완료 후 S3 아카이브 삭제 (비용 절감)
+                    from app.services.s3_service import S3Service
+                    s3_service = S3Service()
+                    if s3_service.is_enabled():
+                        # segment_start를 사용하여 S3 키 생성
+                        segment_start_utc = segment_analysis.segment_start
+                        if segment_start_utc.tzinfo is None:
+                            segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+                        
+                        delete_success = s3_service.delete_archive(
+                            camera_id=job.camera_id,
+                            segment_start=segment_start_utc
+                        )
+                        if delete_success:
+                            print(f"[워커 {self.worker_id}] 🗑️ S3 아카이브 삭제 완료 (비용 절감)")
+                        else:
+                            print(f"[워커 {self.worker_id}] ⚠️ S3 아카이브 삭제 실패 (수동 확인 필요)")
                 else:
                     print(f"[워커 {self.worker_id}] ℹ️  생성된 클립 없음 (필터링 조건 미충족)")
                     
