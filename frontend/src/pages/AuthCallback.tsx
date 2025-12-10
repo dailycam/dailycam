@@ -1,30 +1,120 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { setAuthToken } from '../lib/auth'
+import { useAuth } from '../context/AuthContext'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function AuthCallback() {
     const [searchParams] = useSearchParams()
     const navigate = useNavigate()
+    const { refreshUser } = useAuth()
+    const [status, setStatus] = useState('로그인 처리 중...')
 
     useEffect(() => {
-        const token = searchParams.get('token')
+        const handleCallback = async () => {
+            const token = searchParams.get('token')
 
-        if (token) {
-            // 토큰을 localStorage에 저장
-            localStorage.setItem('access_token', token)
+            if (!token) {
+                console.warn('[AuthCallback] 토큰이 없습니다.')
+                navigate('/login', { replace: true })
+                return
+            }
 
-            // 대시보드로 리다이렉트
-            navigate('/dashboard')
-        } else {
-            // 토큰이 없으면 로그인 페이지로
-            navigate('/login')
+            try {
+                // 1. 토큰 저장
+                setAuthToken(token)
+                console.log('[AuthCallback] 토큰 저장 완료')
+
+                // 2. 사용자 정보 조회 (Context에서 가져오기)
+                setStatus('사용자 정보 확인 중...')
+                await refreshUser()
+                
+                // Context 업데이트 대기 (최대 1초)
+                let retries = 0
+                let currentUserInfo = null
+                while (retries < 10) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    // Context에서 직접 가져오기 위해 다시 확인
+                    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    })
+                    if (response.ok) {
+                        currentUserInfo = await response.json()
+                        break
+                    }
+                    retries++
+                }
+                
+                if (!currentUserInfo) {
+                    throw new Error('사용자 정보를 가져올 수 없습니다')
+                }
+                
+                console.log('[AuthCallback] 사용자 정보:', currentUserInfo)
+
+                // 3. 구독 상태 확인
+                const isSubscribed = Boolean(currentUserInfo.is_subscribed)
+
+                // 4. 프로필 완성 여부 확인 (아이 이름, 생년월일)
+                const profileCompleted = Boolean(currentUserInfo.child_name && currentUserInfo.child_birthdate)
+
+                // 5. 리다이렉트 로직
+                if (!isSubscribed) {
+                    // 미구독 회원 -> 구독 페이지
+                    console.log('[AuthCallback] 미구독 회원 - 구독 페이지로 이동')
+                    navigate('/subscription', { replace: true })
+                } else if (!profileCompleted) {
+                    // 구독 회원이지만 프로필 미완성 -> 프로필 등록 페이지
+                    console.log('[AuthCallback] 프로필 미완성 - 프로필 등록 페이지로 이동')
+                    navigate('/profile-setup', { replace: true })
+                } else {
+                    // 구독 회원 + 프로필 완성 -> 대시보드로 이동
+                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 대시보드로 이동')
+
+                    // 상태 업데이트
+                    setStatus('대시보드로 이동 중...')
+
+                    // 대시보드로 즉시 이동
+                    navigate('/dashboard', { replace: true })
+
+                    // AI 콘텐츠 미리 로드 (대시보드 데이터 로드 후 실행되도록 약간 지연)
+                    setTimeout(() => {
+                        console.log('[AuthCallback] AI 콘텐츠 미리 로드 시작')
+                        Promise.all([
+                            fetch(`${API_BASE_URL}/api/content/recommended-videos`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch(`${API_BASE_URL}/api/content/recommended-blogs`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch(`${API_BASE_URL}/api/content/recommended-news`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            }),
+                            fetch(`${API_BASE_URL}/api/content/trending`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            })
+                        ]).then(() => {
+                            console.log('[AuthCallback] AI 콘텐츠 미리 로드 완료')
+                        }).catch(err => {
+                            console.warn('[AuthCallback] AI 콘텐츠 미리 로드 실패 (무시):', err)
+                        })
+                    }, 500) // 500ms 지연
+                }
+            } catch (error) {
+                console.error('[AuthCallback] 오류 발생:', error)
+                navigate('/login', { replace: true })
+            }
         }
+
+        handleCallback()
     }, [searchParams, navigate])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
             <div className="text-center">
                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                <p className="text-gray-700 text-lg">로그인 처리 중...</p>
+                <p className="text-gray-700 text-lg">{status}</p>
             </div>
         </div>
     )

@@ -3,19 +3,17 @@ import {
   TrendingUp,
   AlertTriangle,
   Activity,
-  Filter,
 } from 'lucide-react'
-import SafetyTrendChart from '../components/Charts/SafetyTrendChart'
-import IncidentPieChart from '../components/Charts/IncidentPieChart'
-import ComposedTrendChart from '../components/Charts/ComposedTrendChart'
+import SafetyTrendChart from '../components/charts/SafetyTrendChart'
+import IncidentPieChart from '../components/charts/IncidentPieChart'
+import ComposedTrendChart from '../components/charts/ComposedTrendChart'
 import { fetchAnalyticsData, type AnalyticsData } from '../lib/api'
-import { mockAnalyticsData } from '../utils/mockData'
 
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
 
   // 데이터베이스에서 데이터 가져오기
   useEffect(() => {
@@ -27,9 +25,7 @@ export default function Analytics() {
         setData(analyticsData)
       } catch (err) {
         console.error('Analytics 데이터 로드 오류:', err)
-        // API 실패 시 더미 데이터 사용 (미리보기용)
-        setData(mockAnalyticsData)
-        setError(null) // 에러를 숨기고 더미 데이터 표시
+        setError('데이터를 불러올 수 없습니다.')
       } finally {
         setLoading(false)
       }
@@ -146,11 +142,11 @@ export default function Analytics() {
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="grid grid-cols-2 gap-3">
               {data.incident_distribution.map((item) => (
-                <IncidentTypeItem 
+                <IncidentTypeItem
                   key={item.name}
-                  type={item.name} 
-                  count={item.value} 
-                  color={`bg-[${item.color}]`} 
+                  type={item.name}
+                  count={item.value}
+                  color={`bg-[${item.color}]`}
                 />
               ))}
             </div>
@@ -333,29 +329,6 @@ function IncidentTypeItem({
       <div className={`w-3 h-3 rounded ${color}`}></div>
       <span className="text-sm text-gray-700 flex-1">{type}</span>
       <span className="text-sm font-semibold text-gray-900">{count}</span>
-    </div>
-  )
-}
-
-// Time Heatmap Bar Component
-function TimeHeatmapBar({ time, level }: { time: string; level: number }) {
-  const getColor = (level: number) => {
-    if (level >= 80) return 'bg-danger'
-    if (level >= 50) return 'bg-warning'
-    return 'bg-safe'
-  }
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-gray-600 w-24">{time}</span>
-      <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
-        <div
-          className={`h-full ${getColor(level)} transition-all duration-300 flex items-center justify-end pr-2`}
-          style={{ width: `${level}%` }}
-        >
-          <span className="text-xs text-white font-medium">{level}%</span>
-        </div>
-      </div>
     </div>
   )
 }

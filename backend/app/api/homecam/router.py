@@ -2,8 +2,12 @@
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
 import time  # 시간 측정을 위한 import 추가
+from sqlalchemy.orm import Session
 
 from app.services.gemini_service import GeminiService, get_gemini_service
+from app.services.analysis_service import AnalysisService
+from app.database import get_db
+from app.utils.auth_utils import get_current_user_id
 
 router = APIRouter()
 
@@ -16,7 +20,10 @@ async def analyze_video(
     temperature: float = Query(0.4, description="AI 창의성 (0.0 ~ 1.0)"),
     top_k: int = Query(30, description="어휘 다양성"),
     top_p: float = Query(0.95, description="문장 자연스러움"),
+    save_to_db: bool = Query(True, description="분석 결과를 데이터베이스에 저장할지 여부"),
     gemini_service: GeminiService = Depends(get_gemini_service),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
 ) -> dict:
     """
     비디오 파일을 업로드하여 VLM 프롬프트로 분석하고 결과를 반환합니다.
@@ -72,6 +79,33 @@ async def analyze_video(
         end_time = time.time()  # 분석 종료 시간 기록
         analysis_time = end_time - start_time
         print(f"[VLM 비디오 분석 완료] 총 소요 시간: {analysis_time:.2f}초")
+        
+        # 데이터베이스에 저장 (save_to_db가 True인 경우)
+        if save_to_db:
+            try:
+                print("[DB 저장 시작] 분석 결과를 데이터베이스에 저장합니다...")
+                video_path = f"uploads/{user_id}/{video.filename}"  # 실제로는 파일을 저장한 경로를 사용
+                analysis_log = AnalysisService.save_analysis_result(
+                    db=db,
+                    user_id=user_id,
+                    video_path=video_path,
+                    analysis_result=result
+                )
+                print(f"[DB 저장 완료] AnalysisLog ID: {analysis_log.id}, Analysis ID: {analysis_log.analysis_id}")
+                
+                # 응답에 분석 ID 추가 (analysis_id는 실제 DB의 PK가 아닌 사용자 식별용 ID)
+                result["analysis_id"] = analysis_log.analysis_id
+                result["analysis_log_id"] = analysis_log.id  # 실제 DB PK도 함께 반환
+                result["saved_to_db"] = True
+            except Exception as db_error:
+                import traceback
+                print(f"⚠️ DB 저장 실패: {db_error}")
+                print(f"상세 에러:\n{traceback.format_exc()}")
+                # DB 저장 실패해도 분석 결과는 반환
+                result["saved_to_db"] = False
+                result["db_error"] = str(db_error)
+        else:
+            result["saved_to_db"] = False
         
         return result
     except ValueError as e:

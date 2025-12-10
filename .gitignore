@@ -18,6 +18,7 @@ dist-ssr/
 **/.env.local
 .env.production
 **/.env.production
+env.production
 
 # Logs
 logs/
@@ -58,6 +59,13 @@ uploads/
 
 __pycache__/
 *.pyc
+
+# FFmpeg 바이너리 (자동 다운로드됨)
+backend/bin/
+
+# 비디오 처리 임시 파일
+backend/temp_videos/
+videos/
 
 # Agent configuration
 .agent/

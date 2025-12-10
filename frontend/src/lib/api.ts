@@ -2,7 +2,8 @@
  * 백엔드 API 클라이언트
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { getAuthHeader } from './auth'
+import { API_BASE_URL } from '@/constants/api'
 
 /**
  * 라이브 스트리밍 관련 API
@@ -103,6 +104,60 @@ export function getStreamUrl(
   }
 
   return baseUrl
+}
+
+export interface StartHlsStreamResponse {
+  message: string
+  camera_id: string
+  status: string
+  stream_type: string
+  analysis_enabled: boolean
+  playlist_url: string
+}
+
+/**
+ * HLS 스트림을 시작합니다.
+ */
+export async function startHlsStream(
+  cameraId: string,
+  enableAnalysis: boolean = true,
+  enableRealtimeDetection: boolean = true
+): Promise<StartHlsStreamResponse> {
+  const params = new URLSearchParams({
+    enable_analysis: enableAnalysis.toString(),
+    enable_realtime_detection: enableRealtimeDetection.toString(),
+  })
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/live-monitoring/start-hls-stream/${cameraId}?${params.toString()}`,
+    {
+      method: 'POST',
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 시작 중 오류가 발생했습니다.')
+  }
+
+  return await response.json()
+}
+
+/**
+ * HLS 스트림을 중지합니다.
+ */
+export async function stopHlsStream(cameraId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-hls-stream/${cameraId}`, {
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    // 404는 이미 중지된 것으로 간주
+    if (response.status === 404) return
+
+    const error = await response.json()
+    throw new Error(error.detail || 'HLS 스트림 중지 중 오류가 발생했습니다.')
+  }
 }
 
 /**
@@ -244,6 +299,7 @@ export async function analyzeVideoWithBackend(
     temperature?: number
     topK?: number
     topP?: number
+    save_to_db?: boolean
   }
 ): Promise<VideoAnalysisResult> {
   const formData = new FormData()
@@ -256,17 +312,46 @@ export async function analyzeVideoWithBackend(
   if (options?.temperature !== undefined) params.append('temperature', options.temperature.toString())
   if (options?.topK !== undefined) params.append('top_k', options.topK.toString())
   if (options?.topP !== undefined) params.append('top_p', options.topP.toString())
+  if (options?.save_to_db !== undefined) params.append('save_to_db', options.save_to_db.toString())
 
   const url = `${API_BASE_URL}/api/homecam/analyze-video${params.toString() ? '?' + params.toString() : ''}`
 
+  // 인증 토큰 가져오기 (공통 유틸리티 사용)
+  const headers: HeadersInit = {
+    ...getAuthHeader()
+  }
+
   const response = await fetch(url, {
     method: 'POST',
+    headers,
     body: formData,
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.detail || '비디오 분석 중 오류가 발생했습니다.')
+    // 401 Unauthorized 에러 처리
+    if (response.status === 401) {
+      const errorText = await response.text()
+      let errorMessage = '인증이 필요합니다. 로그인 후 다시 시도해주세요.'
+      try {
+        const error = JSON.parse(errorText)
+        errorMessage = error.detail || errorMessage
+      } catch {
+        // JSON 파싱 실패 시 기본 메시지 사용
+      }
+      throw new Error(errorMessage)
+    }
+
+    // 기타 에러 처리
+    let errorMessage = '비디오 분석 중 오류가 발생했습니다.'
+    try {
+      const error = await response.json()
+      errorMessage = error.detail || error.message || errorMessage
+    } catch {
+      // JSON 파싱 실패 시 텍스트로 읽기
+      const text = await response.text()
+      errorMessage = text || errorMessage
+    }
+    throw new Error(errorMessage)
   }
 
   const data = await response.json()
@@ -404,38 +489,8 @@ export async function fetchAnalyticsData(): Promise<AnalyticsData> {
 
     return await response.json()
   } catch (error) {
-    // 백엔드 연결 실패 시 목 데이터 반환
-    console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
-    return {
-      weekly_trend: [
-        { date: '2024-11-04', safety: 90, incidents: 1, activity: 70 },
-        { date: '2024-11-05', safety: 92, incidents: 0, activity: 75 },
-        { date: '2024-11-06', safety: 88, incidents: 2, activity: 65 },
-        { date: '2024-11-07', safety: 94, incidents: 0, activity: 80 },
-        { date: '2024-11-08', safety: 91, incidents: 1, activity: 72 },
-        { date: '2024-11-09', safety: 93, incidents: 0, activity: 78 },
-        { date: '2024-11-10', safety: 92, incidents: 0, activity: 73 },
-      ],
-      incident_distribution: [
-        { name: '넘어짐', value: 2, color: '#ef4444' },
-        { name: '충돌', value: 1, color: '#f59e0b' },
-        { name: '접근', value: 3, color: '#3b82f6' },
-        { name: '이탈', value: 0, color: '#8b5cf6' },
-        { name: '기타', value: 1, color: '#6b7280' },
-      ],
-      summary: {
-        avg_safety_score: 91.4,
-        total_incidents: 4,
-        safe_zone_percentage: 92.5,
-        incident_reduction_percentage: 15.2,
-        prev_avg_safety: 88,
-        prev_total_incidents: 6,
-        safety_change: 3.4,
-        safety_change_percent: 3.9,
-        incident_change: -2,
-        incident_change_percent: -33.3,
-      },
-    }
+    console.error('Analytics 데이터 조회 실패:', error)
+    throw error
   }
 }
 
@@ -460,31 +515,60 @@ export interface RecommendationItem {
   description: string
 }
 
+export interface DashboardTimelineEvent {
+  time: string
+  hour: number
+  type: 'development' | 'safety'
+  severity?: 'danger' | 'warning' | 'info'
+  title: string
+  description: string
+  resolved?: boolean
+  hasClip: boolean
+  category: string
+  isSleep?: boolean
+  timestamp_range?: string
+  thumbnailUrl?: string
+  videoUrl?: string
+}
+
+export interface HourlyStat {
+  hour: number
+  safetyScore: number
+  developmentScore: number
+  eventCount: number
+}
+
 export interface DashboardData {
   summary: string
   rangeDays: number
   safetyScore: number
+  developmentScore: number
   incidentCount: number
   monitoringHours: number
   activityPattern: string
   weeklyTrend: DashboardWeeklyTrendItem[]
   risks: RiskItem[]
   recommendations: RecommendationItem[]
+  timelineEvents?: DashboardTimelineEvent[]
+  hourlyStats?: HourlyStat[]
 }
 
 /**
  * 대시보드 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
  * @param rangeDays 조회할 일수 (기본값: 7)
  */
-export async function getDashboardData(rangeDays: number = 7): Promise<DashboardData> {
+export async function getDashboardData(targetDate?: string, rangeDays: number = 7): Promise<DashboardData> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dashboard/summary`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeader(), // 인증 헤더 추가
       },
       body: JSON.stringify({
         range_days: rangeDays,
+        target_date: targetDate,
       }),
     })
 
@@ -498,66 +582,587 @@ export async function getDashboardData(rangeDays: number = 7): Promise<Dashboard
 
     const data = await response.json()
 
+    // [디버깅] 백엔드 응답 확인
+    console.log('✅ [Dashboard API] 백엔드 응답 받음:', data)
+    console.log('📊 [Dashboard API] safetyScore:', data.safetyScore)
+    console.log('📊 [Dashboard API] timelineEvents:', data.timelineEvents)
+    console.log('📊 [Dashboard API] hourlyStats:', data.hourlyStats)
+
     // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
       summary: data.summary,
-      rangeDays: data.range_days,
-      safetyScore: data.safety_score,
-      incidentCount: data.incident_count,
-      monitoringHours: data.monitoring_hours,
-      activityPattern: data.activity_pattern,
-      weeklyTrend: data.weekly_trend || [],
+      rangeDays: data.rangeDays || rangeDays,
+      safetyScore: data.safetyScore || 0,
+      developmentScore: data.developmentScore || 0,
+      incidentCount: data.incidentCount || 0,
+      monitoringHours: data.monitoringHours || 0,
+      activityPattern: data.activityPattern || "",
+      weeklyTrend: data.weeklyTrend || [],
       risks: data.risks || [],
       recommendations: data.recommendations || [],
+      timelineEvents: data.timelineEvents || [],
+      hourlyStats: data.hourlyStats || [],
     }
   } catch (error: any) {
-    // 백엔드 연결 실패 시 목 데이터 반환
-    // 404 에러는 조용히 처리 (백엔드에 엔드포인트가 없는 경우)
-    if (error?.message !== 'DASHBOARD_ENDPOINT_NOT_FOUND') {
-      console.warn('백엔드 연결 실패, 목 데이터 사용:', error)
+    console.error('대시보드 데이터 조회 실패:', error)
+    throw error
+  }
+}
+
+// ============================================================
+// Development Report API
+// ============================================================
+
+export interface DevelopmentRadarScores {
+  언어: number
+  운동: number
+  인지: number
+  사회성: number
+  정서: number
+}
+
+export interface DevelopmentFrequencyItem {
+  category: string
+  count: number
+  color: string
+}
+
+export interface RecommendedActivity {
+  title: string
+  benefit: string
+  description?: string
+  duration?: string
+}
+
+export interface DevelopmentData {
+  ageMonths: number
+  developmentSummary: string
+  developmentScore: number
+  developmentRadarScores: DevelopmentRadarScores
+  strongestArea: string
+  dailyDevelopmentFrequency: DevelopmentFrequencyItem[]
+  recommendedActivities: RecommendedActivity[]
+  developmentInsights: string[] // Added
+}
+
+/**
+ * 발달 리포트 데이터 조회
+ * @param targetDate 조회할 날짜 (YYYY-MM-DD), 기본값은 오늘
+ */
+export async function getDevelopmentData(targetDate?: string): Promise<DevelopmentData> {
+  try {
+    const url = targetDate
+      ? `${API_BASE_URL}/api/development/summary?target_date=${targetDate}`
+      : `${API_BASE_URL}/api/development/summary`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(), // 인증 헤더 추가
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('발달 데이터를 가져오는 중 오류가 발생했습니다.')
     }
+
+    const data = await response.json()
+
+    // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
-      summary: "오늘 아이는 전반적으로 안전하게 활동했습니다. 거실 세이프존에서 92%의 시간을 보냈으며, 주방 데드존에 3회 접근했습니다.",
-      rangeDays: rangeDays,
-      safetyScore: 92,
-      incidentCount: 2,
-      monitoringHours: 14,
-      activityPattern: "정상",
-      weeklyTrend: [
-        { day: "월", score: 90, incidents: 1, activity: 70, safety: 90 },
-        { day: "화", score: 92, incidents: 0, activity: 75, safety: 92 },
-        { day: "수", score: 88, incidents: 2, activity: 65, safety: 88 },
-        { day: "목", score: 94, incidents: 0, activity: 80, safety: 94 },
-        { day: "금", score: 91, incidents: 1, activity: 72, safety: 91 },
-        { day: "토", score: 93, incidents: 0, activity: 78, safety: 93 },
-        { day: "일", score: 92, incidents: 0, activity: 73, safety: 92 },
-      ] as DashboardWeeklyTrendItem[],
-      risks: [
-        {
-          level: 'high',
-          title: '주방 근처 반복 접근',
-          time: '오후 2:15 - 2:45',
-          count: 3,
-        },
-        {
-          level: 'medium',
-          title: '계단 입구 접근',
-          time: '오전 11:30',
-          count: 1,
-        },
-      ],
-      recommendations: [
-        {
-          priority: 'high',
-          title: '주방 안전 게이트 설치',
-          description: '아이가 주방 데드존에 자주 접근하고 있습니다. 안전 게이트 설치를 권장합니다.',
-        },
-        {
-          priority: 'medium',
-          title: '거실 테이블 모서리 보호대 추가',
-          description: '충돌 위험이 감지되었습니다. 모서리 보호대를 추가로 설치하세요.',
-        },
-      ],
+      ageMonths: data.age_months || 7,
+      developmentSummary: data.development_summary || '아직 분석된 데이터가 없습니다.',
+      developmentScore: data.development_score || 0,
+      developmentRadarScores: data.development_radar_scores || {
+        언어: 0,
+        운동: 0,
+        인지: 0,
+        사회성: 0,
+        정서: 0,
+      },
+      strongestArea: data.strongest_area || '운동',
+      dailyDevelopmentFrequency: data.daily_development_frequency || [],
+      recommendedActivities: data.recommended_activities || [],
+      developmentInsights: data.development_insights || [], // Added
     }
+  } catch (error) {
+    console.error('발달 데이터 조회 실패:', error)
+    throw error
+  }
+}
+
+// ============================================================
+// Clip Highlights API
+// ============================================================
+
+export interface HighlightClip {
+  id: number
+  title: string
+  description: string
+  video_url: string
+  thumbnail_url: string
+  download_url?: string  // 다운로드 URL
+  category: string
+  sub_category?: string
+  importance?: string
+  duration_seconds?: number
+  created_at?: string
+}
+
+export interface ClipHighlightsResponse {
+  clips: HighlightClip[]
+  total: number
+}
+
+/**
+ * 하이라이트 클립 목록 조회 (인증 불필요)
+ */
+export async function getClipHighlights(
+  category: string = 'all',
+  limit: number = 20,
+  targetDate?: string  // YYYY-MM-DD 형식
+): Promise<ClipHighlightsResponse> {
+  try {
+    let url = `${API_BASE_URL}/api/clips/list?category=${category}&limit=${limit}`
+    if (targetDate) {
+      url += `&target_date=${targetDate}`
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+    })
+
+    if (!response.ok) {
+      throw new Error('클립 데이터를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('클립 데이터 조회 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 세그먼트 분석 결과에서 클립 생성
+ */
+export async function generateClipsFromAnalysis(
+  cameraId: string,
+  segmentAnalysisId?: number
+): Promise<{ message: string; clips_created?: number; segment_analysis_id: number }> {
+  try {
+    const url = segmentAnalysisId
+      ? `${API_BASE_URL}/api/clips/generate/${cameraId}?segment_analysis_id=${segmentAnalysisId}`
+      : `${API_BASE_URL}/api/clips/generate/${cameraId}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '클립 생성 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('클립 생성 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 클립 삭제
+ */
+export async function deleteClip(clipId: number): Promise<{ message: string; clip_id: number }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/clips/${clipId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '클립 삭제 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('클립 삭제 실패:', error)
+    throw error
+  }
+}
+
+
+// ============================================================
+// Content Recommendation API (Gemini AI)
+// ============================================================
+
+export interface VideoRecommendation {
+  id: string
+  type: 'youtube'
+  title: string
+  description: string
+  url: string
+  thumbnail?: string
+  channel?: string
+  views?: string
+  tags: string[]
+  category: string
+}
+
+export interface BlogRecommendation {
+  id: string
+  type: 'blog'
+  title: string
+  description: string
+  url: string
+  tags: string[]
+  category: string
+}
+
+export type ContentRecommendation = VideoRecommendation | BlogRecommendation
+
+export interface ContentResponse<T> {
+  videos?: T[]
+  blogs?: T[]
+  content?: T[]
+  age_months: number
+  cached: boolean
+  cached_at?: string
+  generated_at?: string
+}
+
+/**
+ * AI 추천 YouTube 영상 가져오기
+ */
+export async function getRecommendedVideos(): Promise<VideoRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-videos`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 영상을 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<VideoRecommendation> = await response.json()
+    return data.videos || []
+  } catch (error) {
+    console.error('추천 영상 조회 실패:', error)
+    // 에러 시 빈 배열 반환 (fallback)
+    return []
+  }
+}
+
+/**
+ * AI 추천 블로그 포스트 가져오기
+ */
+export async function getRecommendedBlogs(): Promise<BlogRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-blogs`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 블로그를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<BlogRecommendation> = await response.json()
+    return data.blogs || []
+  } catch (error) {
+    console.error('추천 블로그 조회 실패:', error)
+    return []
+  }
+}
+
+/**
+ * AI 추천 트렌딩 콘텐츠 가져오기 (영상+블로그 혼합)
+ */
+export async function getTrendingContent(): Promise<ContentRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/trending`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('트렌딩 콘텐츠를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: ContentResponse<ContentRecommendation> = await response.json()
+    return data.content || []
+  } catch (error) {
+    console.error('트렌딩 콘텐츠 조회 실패:', error)
+    return []
+  }
+}
+
+/**
+ * AI 추천 뉴스 가져오기
+ */
+export async function getRecommendedNews(): Promise<ContentRecommendation[]> {
+  try {
+    // 브라우저 위치 정보 수집
+    let locationData: { latitude?: number; longitude?: number } = {}
+
+    if ('geolocation' in navigator) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 5000,
+            maximumAge: 300000, // 5분 캐시
+            enableHighAccuracy: false
+          })
+        })
+
+        locationData = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }
+        console.log('📍 [위치] 좌표 수집 성공:', locationData)
+      } catch (geoError) {
+        console.warn('⚠️ [위치] 위치 권한 거부 또는 오류, 전국 뉴스로 fallback:', geoError)
+      }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/content/recommended-news`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(locationData)
+    })
+
+    if (!response.ok) {
+      throw new Error('추천 뉴스를 가져오는 중 오류가 발생했습니다.')
+    }
+
+    const data: { news: ContentRecommendation[]; location?: string } = await response.json()
+
+    // 지역 정보가 있으면 로그 출력
+    if (data.location) {
+      console.log(`✅ [뉴스] ${data.location} 지역 뉴스 로드 완료`)
+    }
+
+    return data.news || []
+  } catch (error) {
+    console.error('추천 뉴스 조회 실패:', error)
+    return []
+  }
+}
+
+// 콘텐츠 검색
+export async function searchContent(query: string): Promise<ContentRecommendation[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/content/search?query=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('검색 중 오류가 발생했습니다.')
+    }
+
+    const data: { results: ContentRecommendation[] } = await response.json()
+    return data.results || []
+  } catch (error) {
+    console.error('검색 실패:', error)
+    return []
+  }
+}
+
+// ============================================================
+// Camera Settings API
+// ============================================================
+
+export interface CameraVideo {
+  id: number
+  filename: string
+  file_size: number
+  duration: number | null
+  order_index: number
+  uploaded_at: string
+}
+
+export interface CameraSetting {
+  id: number
+  camera_id: string
+  camera_name: string
+  is_active: boolean
+  video_count: number
+  videos: CameraVideo[]
+}
+
+/**
+ * 사용자의 카메라 설정 목록 조회
+ */
+export async function getUserCameras(): Promise<{ cameras: CameraSetting[] }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/cameras`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('카메라 설정을 가져오는 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('카메라 설정 조회 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 카메라에 영상 업로드
+ */
+export async function uploadCameraVideo(
+  cameraId: string,
+  videoFile: File
+): Promise<{
+  id: number
+  camera_id: string
+  filename: string
+  file_path: string
+  file_size: number
+  duration: number | null
+  message: string
+}> {
+  const formData = new FormData()
+  formData.append('video', videoFile)
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/camera-settings/cameras/${cameraId}/upload-video`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeader(),
+        },
+        body: formData,
+        signal: AbortSignal.timeout(10 * 60 * 1000), // 10분 타임아웃
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 업로드 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error: any) {
+    console.error('영상 업로드 실패:', error)
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      throw new Error('업로드 시간이 초과되었습니다.')
+    }
+    throw error
+  }
+}
+
+/**
+ * 업로드한 영상 삭제
+ */
+export async function deleteCameraVideo(videoId: number): Promise<{ message: string }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/videos/${videoId}`, {
+      method: 'DELETE',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 삭제 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('영상 삭제 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 영상 활성화/비활성화
+ */
+export async function toggleVideoActive(
+  videoId: number,
+  isActive: boolean
+): Promise<{ id: number; is_active: boolean; message: string }> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/camera-settings/videos/${videoId}/toggle?is_active=${isActive}`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...getAuthHeader(),
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '영상 상태 변경 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('영상 상태 변경 실패:', error)
+    throw error
+  }
+}
+
+/**
+ * 저장 공간 사용량 조회
+ */
+export async function getStorageUsage(): Promise<{
+  total_size_bytes: number
+  total_size_mb: number
+  total_size_gb: number
+  max_size_gb: number
+  usage_percent: number
+  video_count: number
+  remaining_bytes: number
+  remaining_gb: number
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/camera-settings/storage/usage`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || '저장 공간 조회 중 오류가 발생했습니다.')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('저장 공간 조회 실패:', error)
+    throw error
   }
 }

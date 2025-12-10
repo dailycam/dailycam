@@ -13,8 +13,12 @@
 - 판단 근거를 `stage_consistency.evidence`에 구체적으로 기록한다.
 - 필요하면 `suggested_stage_for_next_analysis`를 설정한다.
 
+3단계. 부정 분석 – 안전 관찰(safety_analysis)
+- **safety_insights 생성**: `safety_analysis.safety_insights` 필드에 안전 요약과 중복되지 않는, 핵심 안전 인사이트 2-3개를 생성한다. (자세한 내용은 [safety_insights 필드 정의]를 참고하라)
+
 3단계. 긍정 분석 – 발달 관찰(development_analysis)
 - **중요**: `development_analysis.summary` 필드에 이 영상에서 관찰된 전반적인 발달 수준을 2-3문장으로 요약한다.
+- **development_insights 생성**: `development_analysis.development_insights` 필드에 발달 요약과 중복되지 않는, 핵심 발달 인사이트 2-3개를 생성한다. (자세한 내용은 [development_insights 필드 정의]를 참고하라)
 - **핵심 과업 중심 필터링 (매우 중요)**:
   - 관찰된 모든 미세 동작(예: 발 위치 조정, 무릎 구부리기, 시선 이동 등)을 개별 항목으로 나열하지 마시오.
   - 반드시 **해당 월령/단계의 주요 발달 과업(Milestone)** 단위로 그룹화하여 `skills`에 기록하시오.

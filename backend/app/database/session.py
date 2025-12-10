@@ -10,17 +10,17 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
-# .env 파일 경로 확인 (선택사항)
-env_path = Path(__file__).parent.parent.parent / '.env'
+# .env 파일 경로 확인 (루트 디렉토리)
+env_path = Path(__file__).parent.parent.parent.parent / '.env'
 if env_path.exists():
     load_dotenv(dotenv_path=env_path, override=True)
 
-# 데이터베이스 연결 정보
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "dailycam")
+# 데이터베이스 연결 정보 (Docker와 로컬 모두 지원)
+DB_HOST = os.getenv("MYSQL_HOST") or os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("MYSQL_PORT") or os.getenv("DB_PORT", "3306")
+DB_USER = os.getenv("MYSQL_USER") or os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("MYSQL_PASSWORD") or os.getenv("DB_PASSWORD", "")
+DB_NAME = os.getenv("MYSQL_DATABASE") or os.getenv("DB_NAME", "dailycam")
 
 # 데이터베이스 URL 생성
 # dailycam 데이터베이스 사용

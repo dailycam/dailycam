@@ -158,6 +158,50 @@ npm run dev
 - **Backend API**: http://localhost:8000
 - **API 문서**: http://localhost:8000/docs
 
+#### 5️⃣ Docker로 실행 (권장)
+```bash
+# 프로젝트 루트에서
+# .env 파일 생성 (env.production.template 참고)
+
+# Docker Compose로 실행
+docker-compose up -d --build
+
+# 로그 확인
+docker-compose logs -f
+```
+
+자세한 내용은 [DOCKER_SETUP.md](DOCKER_SETUP.md)를 참고하세요.
+
+---
+
+## 🌐 프로덕션 배포
+
+### AWS Lightsail 배포
+
+DailyCam을 AWS Lightsail에 배포하는 방법:
+
+1. **빠른 시작**: [QUICK_START_DEPLOYMENT.md](QUICK_START_DEPLOYMENT.md) 참고
+2. **상세 가이드**: [docs/DEPLOYMENT_LIGHTSAIL.md](docs/DEPLOYMENT_LIGHTSAIL.md) 참고
+3. **배포 체크리스트**: [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) 확인
+
+### 배포 전 준비사항
+
+- AWS Lightsail 인스턴스 ($40/월 플랜 이상 권장)
+- 필수 API 키 (Gemini, Google OAuth, PortOne 등)
+- 도메인 (선택사항, HTTPS 사용 시)
+
+### 배포 명령어
+
+```bash
+# 환경 변수 설정
+cp env.production.template .env.production
+# .env.production 파일 편집
+
+# 배포 실행
+chmod +x deploy.sh
+./deploy.sh
+```
+
 ---
 
 ## 📁 프로젝트 구조
