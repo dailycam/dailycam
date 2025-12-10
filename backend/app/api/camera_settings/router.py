@@ -227,7 +227,6 @@ async def upload_camera_video(
         
         # 새 스트림 시작 (백그라운드 태스크)
         from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
-        from pathlib import Path
         
         video_dir = Path(f"videos/{camera_id}")
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
