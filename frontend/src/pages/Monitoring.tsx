@@ -84,10 +84,22 @@ export default function Monitoring() {
   // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
   useEffect(() => {
     const checkAndConnectStream = async () => {
-      // 이미 HLS 플레이어가 있고 재생 중이면 재연결만 시도
-      if (hlsRef.current && videoRef.current && !videoRef.current.paused) {
-        console.log('이미 재생 중, 재연결 스킵')
-        return
+      // 이미 HLS 플레이어가 있고 비디오가 재생 중이면 라이브 엣지로 이동하고 표시
+      if (hlsRef.current && videoRef.current) {
+        if (videoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA 이상
+          console.log('기존 플레이어 재사용, 라이브 엣지로 이동')
+          // 라이브 엣지로 이동
+          if (videoRef.current.duration && isFinite(videoRef.current.duration)) {
+            videoRef.current.currentTime = Math.max(0, videoRef.current.duration - 3)
+          }
+          // 재생 중이 아니면 재생
+          if (videoRef.current.paused) {
+            videoRef.current.play().catch(e => console.warn('재생 실패:', e))
+          }
+          setIsStreamActive(true)
+          setIsPlaying(true)
+          return
+        }
       }
       
       try {
@@ -105,7 +117,29 @@ export default function Monitoring() {
             const fullPlaylistUrl = `${API_BASE_URL}${data.playlist_url}`
 
             if (Hls.isSupported() && videoRef.current) {
-              // 기존 플레이어는 항상 파괴하고 새로 생성
+              // 기존 플레이어가 있고 같은 URL이면 재사용 (라이브 엣지로 이동)
+              if (hlsRef.current && hlsRef.current.url === fullPlaylistUrl) {
+                console.log('기존 플레이어 재사용, 라이브 엣지로 이동')
+                hlsRef.current.startLoad() // 라이브 엣지에서 다시 로드
+                if (videoRef.current) {
+                  // 라이브 엣지로 이동
+                  const moveToLiveEdge = () => {
+                    if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration)) {
+                      videoRef.current.currentTime = Math.max(0, videoRef.current.duration - 3)
+                    }
+                  }
+                  videoRef.current.addEventListener('loadedmetadata', moveToLiveEdge, { once: true })
+                  if (videoRef.current.readyState >= 1) {
+                    moveToLiveEdge()
+                  }
+                  videoRef.current.play().catch(e => console.warn('재생 실패:', e))
+                }
+                setIsStreamActive(true)
+                setIsPlaying(true)
+                return
+              }
+              
+              // 기존 플레이어가 있으면 파괴하고 새로 생성
               if (hlsRef.current) {
                 hlsRef.current.destroy()
               }
@@ -133,6 +167,7 @@ export default function Monitoring() {
 
               hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 console.log('HLS 매니페스트 파싱 완료, 라이브 엣지로 이동')
+                setIsStreamActive(true) // 즉시 표시
                 if (videoRef.current) {
                   const duration = videoRef.current.duration
                   if (duration && isFinite(duration) && duration > 3) {
@@ -157,12 +192,19 @@ export default function Monitoring() {
               })
 
               hlsRef.current = hls
-              setIsStreamActive(true)
               setIsPlaying(true)
             } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
               videoRef.current.src = fullPlaylistUrl
+              videoRef.current.addEventListener('loadedmetadata', () => {
+                if (videoRef.current) {
+                  const duration = videoRef.current.duration
+                  if (duration && isFinite(duration) && duration > 3) {
+                    videoRef.current.currentTime = Math.max(0, duration - 3)
+                  }
+                }
+                setIsStreamActive(true)
+              }, { once: true })
               videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
-              setIsStreamActive(true)
               setIsPlaying(true)
             }
           } else {
@@ -187,9 +229,10 @@ export default function Monitoring() {
 
     return () => {
       clearInterval(interval)
-      // cleanup 시 플레이어는 파괴하지 않음 (다른 페이지로 갔다가 돌아올 때를 위해)
+      // cleanup 시 플레이어와 비디오는 유지 (백그라운드에서 계속 재생)
+      // 다른 페이지로 가도 영상은 계속 돌아가고, 돌아오면 즉시 보임
     }
-  }, [selectedCamera, isStreamActive])
+  }, [selectedCamera]) // isStreamActive 의존성 제거 (무한 루프 방지)
 
   // 비디오 재생/일시정지 제어
   useEffect(() => {
@@ -278,8 +321,8 @@ export default function Monitoring() {
                 muted={isMuted}
               />
 
-              {/* Placeholder when no stream */}
-              {!isStreamActive && (
+              {/* Placeholder when no stream - 비디오가 실제로 재생 중이 아니고 소스도 없을 때만 표시 */}
+              {!isStreamActive && (!videoRef.current?.src || videoRef.current?.readyState < 2) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
