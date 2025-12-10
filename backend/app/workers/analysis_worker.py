@@ -11,7 +11,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import and_
 
 # 프로젝트 루트를 Python 경로에 추가
@@ -116,32 +116,75 @@ class AnalysisWorker:
         user_id = self._get_user_id_from_camera(job.camera_id, db)
         
         try:
+            # 상대 경로를 절대 경로로 변환 (프로젝트 루트 기준)
             video_path = Path(job.video_path)
+            if not video_path.is_absolute():
+                # 프로젝트 루트 기준으로 절대 경로 생성
+                backend_dir = Path(__file__).parent.parent.parent
+                video_path = (backend_dir / video_path).resolve()
             
-            # 1. 파일 존재 확인
+            # 1. 파일 존재 확인 및 S3에서 다운로드 (필요시)
+            downloaded_from_s3 = False
             if not video_path.exists():
-                raise FileNotFoundError(f"비디오 파일 없음: {video_path}")
-            
-            # 2. 파일 안정화 대기 (30초 + 크기 확인)
-            print(f"[워커 {self.worker_id}] ⏳ 파일 안정화 대기 중...")
-            await asyncio.sleep(30)
-            
-            # 파일 크기 안정화 확인
-            prev_size = 0
-            stable_count = 0
-            max_wait = 60
-            
-            for _ in range(max_wait):
-                current_size = video_path.stat().st_size
-                if current_size == prev_size and current_size > 0:
-                    stable_count += 1
-                    if stable_count >= 3:
-                        print(f"[워커 {self.worker_id}] ✅ 파일 안정화 완료: {current_size / (1024 * 1024):.2f}MB")
-                        break
+                from app.services.s3_service import S3Service
+                s3_service = S3Service()
+                
+                if s3_service.is_enabled():
+                    # segment_start를 사용하여 S3 키 생성
+                    segment_start_utc = job.segment_start
+                    if segment_start_utc.tzinfo is None:
+                        segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+                    
+                    # KST로 변환하여 파일명 생성
+                    kst = timezone(timedelta(hours=9))
+                    segment_start_kst = segment_start_utc.astimezone(kst)
+                    archive_filename = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M%S')}.mp4"
+                    
+                    # S3 키 생성 (upload_archive와 동일한 형식)
+                    s3_key = f"archives/{job.camera_id}/{segment_start_kst.strftime('%Y/%m/%d')}/{archive_filename}"
+                    
+                    print(f"[워커 {self.worker_id}] 📥 로컬 파일 없음, S3에서 다운로드 시도: {s3_key}")
+                    
+                    # 로컬 디렉토리 생성
+                    video_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # S3에서 다운로드
+                    success = s3_service.download_archive(
+                        s3_key=s3_key,
+                        local_path=video_path
+                    )
+                    
+                    if success:
+                        downloaded_from_s3 = True
+                        print(f"[워커 {self.worker_id}] ✅ S3 다운로드 완료: {video_path.name}")
+                    else:
+                        raise FileNotFoundError(f"비디오 파일 없음 (S3 다운로드 실패): {video_path}")
                 else:
-                    stable_count = 0
-                    prev_size = current_size
-                await asyncio.sleep(1)
+                    raise FileNotFoundError(f"비디오 파일 없음 (S3 비활성화): {video_path}")
+            
+            # 2. 파일 안정화 대기 (S3에서 다운로드한 경우는 스킵)
+            if not downloaded_from_s3:
+                print(f"[워커 {self.worker_id}] ⏳ 파일 안정화 대기 중...")
+                await asyncio.sleep(30)
+                
+                # 파일 크기 안정화 확인
+                prev_size = 0
+                stable_count = 0
+                max_wait = 60
+                
+                for _ in range(max_wait):
+                    current_size = video_path.stat().st_size
+                    if current_size == prev_size and current_size > 0:
+                        stable_count += 1
+                        if stable_count >= 3:
+                            print(f"[워커 {self.worker_id}] ✅ 파일 안정화 완료: {current_size / (1024 * 1024):.2f}MB")
+                            break
+                    else:
+                        stable_count = 0
+                        prev_size = current_size
+                    await asyncio.sleep(1)
+            else:
+                print(f"[워커 {self.worker_id}] ⏭️ S3 다운로드 파일이므로 안정화 대기 스킵")
             
             # 3. 파일 크기 검증
             file_size = video_path.stat().st_size
@@ -288,7 +331,26 @@ class AnalysisWorker:
                 print(f"[워커 {self.worker_id}] ⚠️  클립 생성 실패 (분석은 완료됨): {clip_error}")
                 # 클립 생성 실패해도 분석은 성공으로 처리
             
-            # 8. 파일 삭제 (옵션)
+            # 8. S3 아카이브 삭제 (분석 완료 후 즉시 삭제 - 비용 절감)
+            # 클립 생성 성공/실패와 관계없이 분석 완료 후 즉시 삭제
+            from app.services.s3_service import S3Service
+            s3_service = S3Service()
+            if s3_service.is_enabled():
+                # segment_start를 사용하여 S3 키 생성
+                segment_start_utc = segment_analysis.segment_start
+                if segment_start_utc.tzinfo is None:
+                    segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+                
+                delete_success = s3_service.delete_archive(
+                    camera_id=job.camera_id,
+                    segment_start=segment_start_utc
+                )
+                if delete_success:
+                    print(f"[워커 {self.worker_id}] 🗑️ S3 아카이브 삭제 완료 (비용 절감)")
+                else:
+                    print(f"[워커 {self.worker_id}] ⚠️ S3 아카이브 삭제 실패 (수동 확인 필요)")
+            
+            # 9. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
             if delete_after and video_path.exists():
                 try:

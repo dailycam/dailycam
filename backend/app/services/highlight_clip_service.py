@@ -304,14 +304,45 @@ class HighlightClipService:
         archive_filename = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M%S')}.mp4"
         source_video = self.source_dir / archive_filename
         
+        # 로컬 파일이 없으면 S3에서 다운로드 시도
         if not source_video.exists():
-            pattern = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M')}*.mp4"
-            matches = list(self.source_dir.glob(pattern))
-            if matches:
-                source_video = matches[0]
+            from app.services.s3_service import S3Service
+            s3_service = S3Service()
+            
+            if s3_service.is_enabled():
+                # S3 키 생성 (upload_archive와 동일한 형식)
+                s3_key = f"archives/{self.camera_id}/{segment_start_kst.strftime('%Y/%m/%d')}/{archive_filename}"
+                
+                print(f"[하이라이트] 📥 로컬 파일 없음, S3에서 다운로드 시도: {s3_key}")
+                
+                # 로컬 디렉토리 생성
+                self.source_dir.mkdir(parents=True, exist_ok=True)
+                
+                # S3에서 다운로드
+                success = s3_service.download_archive(
+                    s3_key=s3_key,
+                    local_path=source_video
+                )
+                
+                if not success:
+                    # 패턴 검색으로 대체 시도
+                    pattern = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M')}*.mp4"
+                    matches = list(self.source_dir.glob(pattern))
+                    if matches:
+                        source_video = matches[0]
+                        print(f"[하이라이트] 🔍 패턴 매칭 파일 사용: {source_video.name}")
+                    else:
+                        print(f"[하이라이트] ❌ 원본 영상을 찾을 수 없습니다: {archive_filename}")
+                        return clips_created
             else:
-                print(f"[하이라이트] ❌ 원본 영상을 찾을 수 없습니다: {archive_filename}")
-                return clips_created
+                # S3 비활성화 시 패턴 검색으로 대체
+                pattern = f"archive_{segment_start_kst.strftime('%Y%m%d_%H%M')}*.mp4"
+                matches = list(self.source_dir.glob(pattern))
+                if matches:
+                    source_video = matches[0]
+                else:
+                    print(f"[하이라이트] ❌ 원본 영상을 찾을 수 없습니다: {archive_filename}")
+                    return clips_created
         
         print(f"[하이라이트] 🔍 원본 영상 검색: {source_video.name}")
         print(f"[하이라이트] 📁 검색 경로: {self.source_dir}")

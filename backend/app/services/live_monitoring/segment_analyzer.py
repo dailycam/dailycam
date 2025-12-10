@@ -95,17 +95,25 @@ class SegmentAnalysisScheduler:
             print(f"[Job 등록] 📅 현재 시간(한국 시각): {now.strftime('%H:%M:%S')}")
             print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
             
-            # 2. 해당 구간의 비디오 파일 찾기
+            # 2. 해당 구간의 비디오 파일 찾기 (로컬 또는 S3)
+            # 로컬 파일이 없어도 Job 등록 (워커가 S3에서 다운로드)
             video_path = self._get_segment_video(segment_start)
             
+            # 로컬 파일이 없으면 예상 경로만 설정 (워커가 S3에서 다운로드)
             if not video_path or not video_path.exists():
-                print(f"[Job 등록] ❌ 비디오 파일 없음: {segment_start.strftime('%H:%M:%S')}")
-                return
+                # 예상 로컬 경로 생성 (워커가 S3에서 다운로드할 때 사용)
+                segment_start_naive = segment_start.replace(tzinfo=None) if segment_start.tzinfo else segment_start
+                archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
+                video_path = self.buffer_dir / archive_filename
+                print(f"[Job 등록] ⚠️ 로컬 파일 없음, 워커가 S3에서 다운로드 예정: {archive_filename}")
+            else:
+                print(f"[Job 등록] ✅ 로컬 파일 발견: {video_path.name}")
             
-            # 3. 이미 등록된 Job이 있는지 확인
+            # 3. 이미 등록된 Job이 있는지 확인 (UTC로 변환하여 비교)
+            segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
             existing_job = db.query(AnalysisJob).filter(
                 AnalysisJob.camera_id == self.camera_id,
-                AnalysisJob.segment_start == segment_start,
+                AnalysisJob.segment_start == segment_start_utc,
                 AnalysisJob.status.in_([JobStatus.PENDING, JobStatus.PROCESSING, JobStatus.COMPLETED])
             ).first()
             
@@ -114,7 +122,6 @@ class SegmentAnalysisScheduler:
                 return
             
             # 4. 분석 Job 등록 (DB에는 UTC로 저장)
-            segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
             segment_end_utc = segment_end.astimezone(pytz.UTC).replace(tzinfo=None)
             
             analysis_job = AnalysisJob(
@@ -151,13 +158,22 @@ class SegmentAnalysisScheduler:
         archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         archive_path = self.buffer_dir / archive_filename
         
+        print(f"[10분 분석 스케줄러] 🔍 정확한 파일명 검색: {archive_filename}")
+        print(f"[10분 분석 스케줄러] 📄 전체 경로: {archive_path.absolute()}")
+        print(f"[10분 분석 스케줄러] 📄 파일 존재 여부: {archive_path.exists()}")
+        
         if archive_path.exists():
             print(f"[10분 분석 스케줄러] ✅ 정확한 아카이브 파일 발견: {archive_filename}")
             return archive_path
         
         # 패턴 검색 1: 같은 날짜, 같은 시간, 같은 분 (초만 다를 수 있음)
         archive_pattern = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M')}*.mp4"
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 1: {archive_pattern} (디렉토리: {self.buffer_dir.absolute()})")
         matching_archives = list(self.buffer_dir.glob(archive_pattern))
+        print(f"[10분 분석 스케줄러] 📋 패턴 매칭 결과: {len(matching_archives)}개 파일")
+        if matching_archives:
+            for f in matching_archives:
+                print(f"    - {f.name}")
         
         if matching_archives:
             # 가장 최근에 생성된 파일 선택
@@ -166,12 +182,16 @@ class SegmentAnalysisScheduler:
             return latest_archive
         
         # 패턴 검색 2: 시간대가 약간 다를 수 있으므로 ±10분 범위에서 검색
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 2: ±10분 범위 검색")
         for offset_minutes in range(-10, 11):
             adjusted_time = segment_start_naive + timedelta(minutes=offset_minutes)
             adjusted_pattern = f"archive_{adjusted_time.strftime('%Y%m%d_%H%M')}*.mp4"
             adjusted_matches = list(self.buffer_dir.glob(adjusted_pattern))
             
             if adjusted_matches:
+                print(f"  - offset {offset_minutes}분: {len(adjusted_matches)}개 파일 발견")
+                for f in adjusted_matches:
+                    print(f"    - {f.name}")
                 # 파일 생성 시간이 segment_start와 가장 가까운 파일 선택
                 closest_file = min(
                     adjusted_matches,

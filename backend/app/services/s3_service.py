@@ -248,6 +248,99 @@ class S3Service:
             print(f"[S3Service] ❌ 아카이브 업로드 중 오류 발생: {e}")
             return None
     
+    def download_archive(
+        self,
+        s3_key: str,
+        local_path: Path
+    ) -> bool:
+        """
+        S3에서 아카이브 영상을 다운로드
+        
+        Args:
+            s3_key: S3 키 (예: archives/camera-1/2025/12/09/archive_20251209_100000.mp4)
+            local_path: 다운로드할 로컬 경로
+        
+        Returns:
+            다운로드 성공 여부
+        """
+        if not self.is_enabled():
+            print(f"[S3Service] ⚠️ S3가 비활성화되어 있습니다. 다운로드 스킵: {s3_key}")
+            return False
+        
+        try:
+            # 로컬 디렉토리 생성
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            print(f"[S3Service] 📥 아카이브 다운로드 시작: s3://{self.bucket_name}/{s3_key} → {local_path}")
+            
+            self.s3_client.download_file(
+                self.bucket_name,
+                s3_key,
+                str(local_path)
+            )
+            
+            file_size_mb = local_path.stat().st_size / (1024 * 1024)
+            print(f"[S3Service] ✅ 아카이브 다운로드 완료: {local_path.name} ({file_size_mb:.2f}MB)")
+            
+            return True
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'NoSuchKey':
+                print(f"[S3Service] ❌ S3에 파일이 존재하지 않습니다: {s3_key}")
+            else:
+                print(f"[S3Service] ❌ 아카이브 S3 다운로드 실패: {e}")
+            return False
+        except Exception as e:
+            print(f"[S3Service] ❌ 다운로드 중 오류 발생: {e}")
+            return False
+    
+    def delete_archive(
+        self,
+        camera_id: str,
+        segment_start: datetime
+    ) -> bool:
+        """
+        S3에서 아카이브 영상 삭제
+        
+        Args:
+            camera_id: 카메라 ID
+            segment_start: 세그먼트 시작 시간
+        
+        Returns:
+            삭제 성공 여부
+        """
+        if not self.is_enabled():
+            print(f"[S3Service] ⚠️ S3가 비활성화되어 있습니다. 삭제 스킵")
+            return False
+        
+        try:
+            # S3 키 생성 (upload_archive와 동일한 형식)
+            archive_filename = f"archive_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+            s3_key = f"archives/{camera_id}/{segment_start.strftime('%Y/%m/%d')}/{archive_filename}"
+            
+            print(f"[S3Service] 🗑️ 아카이브 삭제 시작: s3://{self.bucket_name}/{s3_key}")
+            
+            self.s3_client.delete_object(
+                Bucket=self.bucket_name,
+                Key=s3_key
+            )
+            
+            print(f"[S3Service] ✅ 아카이브 삭제 완료: {archive_filename}")
+            return True
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'NoSuchKey':
+                print(f"[S3Service] ℹ️ S3에 파일이 존재하지 않습니다 (이미 삭제됨): {s3_key}")
+                return True  # 이미 삭제된 경우 성공으로 처리
+            else:
+                print(f"[S3Service] ❌ 아카이브 S3 삭제 실패: {e}")
+            return False
+        except Exception as e:
+            print(f"[S3Service] ❌ 삭제 중 오류 발생: {e}")
+            return False
+    
     def _get_content_type(self, extension: str) -> str:
         """파일 확장자에 따른 Content-Type 반환"""
         content_types = {
