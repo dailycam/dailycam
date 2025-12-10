@@ -347,20 +347,51 @@ async def serve_hls_file(camera_id: str, filename: str):
     # MIME 타입 설정
     if filename.endswith('.m3u8'):
         media_type = "application/vnd.apple.mpegurl"
+        # m3u8 파일은 동적으로 업데이트되므로 파일 내용을 직접 읽어서 반환
+        # FileResponse는 Content-Length를 먼저 계산하는데, 파일이 업데이트되면 길이가 달라져서 에러 발생
+        try:
+            # 파일 내용을 읽기 (동기 I/O를 별도 스레드에서 실행)
+            def read_file():
+                with open(file_path, 'rb') as f:
+                    return f.read()
+            
+            file_content = await asyncio.to_thread(read_file)
+            
+            return Response(
+                content=file_content,
+                media_type=media_type,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
+        except Exception as e:
+            print(f"[HLS] m3u8 파일 읽기 실패: {e}")
+            raise HTTPException(status_code=500, detail="파일을 읽을 수 없습니다")
     elif filename.endswith('.ts'):
         media_type = "video/mp2t"
+        # ts 파일은 FileResponse 사용 (크기가 크고 변경이 적음)
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     else:
         media_type = "application/octet-stream"
-    
-    return FileResponse(
-        file_path,
-        media_type=media_type,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-    )
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
 
 @router.post("/stop-stream/{camera_id}")
