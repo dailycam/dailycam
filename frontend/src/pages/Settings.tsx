@@ -539,13 +539,10 @@ export default function Settings() {
 
     try {
       setIsDeletingAccount(true)
-      const token = getAuthToken()
 
       const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',  // httpOnly Cookie 전송
       })
 
       if (!response.ok) {

@@ -161,11 +161,49 @@ def create_app() -> FastAPI:
 
         # ✅ 3) HLS 스트림 자동 시작 (camera-1)
         async def auto_start_hls_stream():
-            """서버 시작 시 자동으로 HLS 스트림 시작"""
+            """서버 시작 시 자동으로 HLS 스트림 시작 (DB에 영상이 있는 경우만)"""
             camera_id = "camera-1"
-            video_dir = Path(f"videos/{camera_id}")
             
-            # 영상 디렉토리가 있는지 확인
+            # DB에서 카메라 설정 확인 (동기 DB 작업을 별도 스레드에서 실행)
+            def check_camera_in_db():
+                db = SessionLocal()
+                try:
+                    from app.models.camera_setting import CameraSetting, CameraVideo
+                    camera_setting = db.query(CameraSetting).filter(
+                        CameraSetting.camera_id == camera_id
+                    ).first()
+                    
+                    if not camera_setting:
+                        return False, "카메라 설정이 없습니다"
+                    
+                    # 활성 영상이 있는지 확인
+                    active_videos = db.query(CameraVideo).filter(
+                        CameraVideo.camera_setting_id == camera_setting.id,
+                        CameraVideo.is_active == True
+                    ).count()
+                    
+                    if active_videos == 0:
+                        return False, "활성 영상이 없습니다"
+                    
+                    return True, None
+                    
+                except Exception as e:
+                    return False, f"DB 확인 실패: {e}"
+                finally:
+                    db.close()
+            
+            # 동기 DB 작업을 비동기로 실행
+            try:
+                should_start, error_msg = await asyncio.to_thread(check_camera_in_db)
+                
+                if not should_start:
+                    print(f"⚠️  HLS 자동 시작 스킵: {error_msg} ({camera_id})")
+                    return
+            except Exception as e:
+                print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
+                return
+            
+            video_dir = Path(f"videos/{camera_id}")
             if not video_dir.exists():
                 print(f"⚠️  HLS 자동 시작 실패: 영상 디렉토리가 없습니다 ({video_dir})")
                 return

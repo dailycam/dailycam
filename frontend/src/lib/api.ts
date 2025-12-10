@@ -151,9 +151,18 @@ export async function stopHlsStream(cameraId: string): Promise<void> {
 }
 
 /**
- * 스트림을 중지합니다.
+ * 스트림을 중지합니다. (HLS 스트림도 같이 중지)
  */
 export async function stopStream(cameraId: string): Promise<void> {
+  // HLS 스트림 중지 시도 (현재 대부분의 스트림이 HLS)
+  try {
+    await stopHlsStream(cameraId)
+    return
+  } catch (error) {
+    // HLS 스트림이 없으면 구버전 API 호출
+  }
+  
+  // 구버전 스트림 중지 (fallback)
   const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-stream/${cameraId}`, {
     method: 'POST',
     credentials: 'include',  // httpOnly Cookie 전송

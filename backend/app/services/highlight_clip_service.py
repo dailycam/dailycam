@@ -357,11 +357,17 @@ class HighlightClipService:
                     try:
                         start_time_str = timestamp_range.split('-')[0]
                         h, m, s = start_time_str.split(':')
-                        timestamp_offset = int(h) * 3600 + int(m) * 60 + int(s)
+                        absolute_timestamp = int(h) * 3600 + int(m) * 60 + int(s)
+                        
+                        # VLM이 전체 영상 기준으로 생성한 timestamp를 10분 세그먼트 기준으로 변환
+                        # 예: 18분(1080초) → 10분 세그먼트 내에서는 0초 (1080 % 600 = 480초)
+                        segment_duration = 600  # 10분
+                        timestamp_offset = absolute_timestamp % segment_duration
                         
                         print(f"[하이라이트] 🔍 안전 이벤트 파싱: {event.get('title', 'N/A')}")
                         print(f"  - 원본 timestamp_range: {timestamp_range}")
-                        print(f"  - 계산된 offset: {timestamp_offset}초")
+                        print(f"  - 절대 시간: {absolute_timestamp}초")
+                        print(f"  - 세그먼트 내 offset: {timestamp_offset}초")
                         
                         safety_events.append({
                             'type': 'safety',
