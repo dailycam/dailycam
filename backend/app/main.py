@@ -148,60 +148,103 @@ def create_app() -> FastAPI:
 
         asyncio.create_task(billing_worker())
 
-        # ✅ 3) HLS 스트림 자동 시작 (camera-1)
-        async def auto_start_hls_stream():
-            """서버 시작 시 자동으로 HLS 스트림 시작"""
-            camera_id = "camera-1"
-            video_dir = Path(f"videos/{camera_id}")
+        # ✅ 3) HLS 스트림 자동 시작 (DB에 활성 영상이 있는 모든 카메라)
+        async def auto_start_hls_streams():
+            """서버 시작 시 자동으로 HLS 스트림 시작 (DB에 활성 영상이 있는 모든 카메라)"""
             
-            # 영상 디렉토리가 있는지 확인
-            if not video_dir.exists():
-                print(f"⚠️  HLS 자동 시작 실패: 영상 디렉토리가 없습니다 ({video_dir})")
+            # DB에서 활성 영상이 있는 모든 카메라 조회 (동기 DB 작업을 별도 스레드에서 실행)
+            def get_cameras_with_active_videos():
+                db = SessionLocal()
+                try:
+                    from app.models.camera_setting import CameraSetting, CameraVideo
+                    
+                    # 모든 카메라 설정 조회
+                    all_cameras = db.query(CameraSetting).all()
+                    cameras_to_start = []
+                    
+                    for camera_setting in all_cameras:
+                        # 활성 영상이 있는지 확인
+                        active_videos = db.query(CameraVideo).filter(
+                            CameraVideo.camera_setting_id == camera_setting.id,
+                            CameraVideo.is_active == True
+                        ).count()
+                        
+                        if active_videos > 0:
+                            cameras_to_start.append(camera_setting.camera_id)
+                    
+                    return cameras_to_start
+                    
+                except Exception as e:
+                    print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
+                    return []
+                finally:
+                    db.close()
+            
+            # 동기 DB 작업을 비동기로 실행
+            try:
+                cameras_to_start = await asyncio.to_thread(get_cameras_with_active_videos)
+                
+                if not cameras_to_start:
+                    print("⚠️  HLS 자동 시작 스킵: 활성 영상이 있는 카메라가 없습니다")
+                    return
+                
+                print(f"📹 HLS 자동 시작 대상 카메라: {', '.join(cameras_to_start)}")
+                
+            except Exception as e:
+                print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
                 return
             
             # 짧은 대기 후 시작 (다른 초기화 작업 완료 대기)
             await asyncio.sleep(2)
             
-            try:
-                print(f"\n🎥 HLS 스트림 자동 시작 중: {camera_id}")
-                
-                output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
-                loop = asyncio.get_running_loop()
-                
-                generator = HLSStreamGenerator(
-                    camera_id=camera_id,
-                    video_source=video_dir,
-                    output_dir=output_dir,
-                    is_real_camera=False,
-                    segment_duration=10,
-                    enable_realtime_detection=True,
-                    age_months=None,
-                    event_loop=loop
-                )
-                
-                # 전역 스트림 관리에 등록 (router.py와 공유)
-                from .api.live_monitoring.router import active_hls_streams, hls_stream_tasks
-                active_hls_streams[camera_id] = generator
-                
-                # 백그라운드 태스크로 실행
-                task = asyncio.create_task(generator.start_streaming())
-                hls_stream_tasks[camera_id] = task
-                
-                # 10분 단위 분석 스케줄러 시작
-                await start_segment_analysis_for_camera(camera_id)
-                
-                # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
-                await start_hourly_aggregation_for_camera(camera_id)
-                
-                print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
-                print(f"   스트림 URL: http://localhost:8000/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
-                
-            except Exception as e:
-                print(f"❌ HLS 자동 시작 실패: {e}")
-                import traceback
-                print(traceback.format_exc())
+            # 각 카메라에 대해 스트림 시작
+            for camera_id in cameras_to_start:
+                try:
+                    video_dir = Path(f"videos/{camera_id}")
+                    if not video_dir.exists():
+                        print(f"⚠️  HLS 자동 시작 스킵: 영상 디렉토리가 없습니다 ({video_dir})")
+                        continue
+                    
+                    print(f"\n🎥 HLS 스트림 자동 시작 중: {camera_id}")
+                    
+                    output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+                    loop = asyncio.get_running_loop()
+                    
+                    generator = HLSStreamGenerator(
+                        camera_id=camera_id,
+                        video_source=video_dir,
+                        output_dir=output_dir,
+                        is_real_camera=False,
+                        segment_duration=10,
+                        enable_realtime_detection=True,
+                        age_months=None,
+                        event_loop=loop
+                    )
+                    
+                    # 전역 스트림 관리에 등록 (router.py와 공유)
+                    from .api.live_monitoring.router import active_hls_streams, hls_stream_tasks
+                    active_hls_streams[camera_id] = generator
+                    
+                    # 백그라운드 태스크로 실행
+                    task = asyncio.create_task(generator.start_streaming())
+                    hls_stream_tasks[camera_id] = task
+                    
+                    # 10분 단위 분석 스케줄러 시작
+                    await start_segment_analysis_for_camera(camera_id)
+                    
+                    # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
+                    await start_hourly_aggregation_for_camera(camera_id)
+                    
+                    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                    print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
+                    print(f"   스트림 URL: {backend_url}/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
+                    
+                except Exception as e:
+                    print(f"❌ HLS 자동 시작 실패 ({camera_id}): {e}")
+                    import traceback
+                    print(traceback.format_exc())
         
-        asyncio.create_task(auto_start_hls_stream())
+        asyncio.create_task(auto_start_hls_streams())
         
         # ✅ 4) 자동 정리 스케줄러 시작
         print("\n🗑️ 자동 정리 스케줄러 시작...")

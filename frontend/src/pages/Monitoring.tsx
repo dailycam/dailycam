@@ -12,7 +12,6 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import Hls from 'hls.js'
-import { startHlsStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 
 
@@ -167,19 +166,9 @@ export default function Monitoring() {
               setIsPlaying(true)
             }
           } else {
-            // 스트림이 없지만 백엔드에 활성 영상이 있을 수 있으므로 자동 시작 시도
-            console.log('스트림이 없지만 자동 시작 시도 중...')
-            try {
-              const startResponse = await startHlsStream(selectedCamera)
-              if (startResponse && startResponse.playlist_url) {
-                // 스트림 시작 성공, 잠시 후 재연결 시도
-                setTimeout(() => {
-                  checkAndConnectStream()
-                }, 2000)
-              }
-            } catch (error) {
-              console.log('자동 스트림 시작 실패 (활성 영상 없음):', error)
-            }
+            // 스트림이 없으면 백엔드가 자동으로 시작할 때까지 대기
+            // 프론트엔드에서 스트림을 시작하지 않음 (백엔드가 계속 돌고 있어야 함)
+            console.log('스트림이 없음. 백엔드가 자동으로 시작할 때까지 대기 중...')
           }
         }
       } catch (error) {
