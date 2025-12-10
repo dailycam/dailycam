@@ -158,13 +158,22 @@ class SegmentAnalysisScheduler:
         archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         archive_path = self.buffer_dir / archive_filename
         
+        print(f"[10분 분석 스케줄러] 🔍 정확한 파일명 검색: {archive_filename}")
+        print(f"[10분 분석 스케줄러] 📄 전체 경로: {archive_path.absolute()}")
+        print(f"[10분 분석 스케줄러] 📄 파일 존재 여부: {archive_path.exists()}")
+        
         if archive_path.exists():
             print(f"[10분 분석 스케줄러] ✅ 정확한 아카이브 파일 발견: {archive_filename}")
             return archive_path
         
         # 패턴 검색 1: 같은 날짜, 같은 시간, 같은 분 (초만 다를 수 있음)
         archive_pattern = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M')}*.mp4"
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 1: {archive_pattern} (디렉토리: {self.buffer_dir.absolute()})")
         matching_archives = list(self.buffer_dir.glob(archive_pattern))
+        print(f"[10분 분석 스케줄러] 📋 패턴 매칭 결과: {len(matching_archives)}개 파일")
+        if matching_archives:
+            for f in matching_archives:
+                print(f"    - {f.name}")
         
         if matching_archives:
             # 가장 최근에 생성된 파일 선택
@@ -173,12 +182,16 @@ class SegmentAnalysisScheduler:
             return latest_archive
         
         # 패턴 검색 2: 시간대가 약간 다를 수 있으므로 ±10분 범위에서 검색
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 2: ±10분 범위 검색")
         for offset_minutes in range(-10, 11):
             adjusted_time = segment_start_naive + timedelta(minutes=offset_minutes)
             adjusted_pattern = f"archive_{adjusted_time.strftime('%Y%m%d_%H%M')}*.mp4"
             adjusted_matches = list(self.buffer_dir.glob(adjusted_pattern))
             
             if adjusted_matches:
+                print(f"  - offset {offset_minutes}분: {len(adjusted_matches)}개 파일 발견")
+                for f in adjusted_matches:
+                    print(f"    - {f.name}")
                 # 파일 생성 시간이 segment_start와 가장 가까운 파일 선택
                 closest_file = min(
                     adjusted_matches,
