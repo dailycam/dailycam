@@ -7,11 +7,8 @@ import {
   Shield,
   CreditCard,
   Camera,
-  Smartphone,
-  Lock,
   Globe,
   Save,
-  LogOut,
   Upload,
   Trash2,
   Video,
@@ -34,20 +31,7 @@ import {
   type StoredNotification
 } from '@/lib/notifications'
 
-interface UserInfo {
-  id: number
-  email: string
-  name: string
-  picture: string
-  created_at: string
-  is_subscribed: boolean | number
-  next_billing_at?: string | null
-  subscription_plan?: string | null
-  has_billing_key?: boolean
-  phone?: string | null
-  child_name?: string | null
-  child_birthdate?: string | null
-}
+
 
 type Section =
   | 'profile'
@@ -96,6 +80,7 @@ export default function Settings() {
     video_count: number
     remaining_gb: number
   } | null>(null)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
 
   useEffect(() => {
     const sectionFromState =
@@ -125,7 +110,7 @@ export default function Settings() {
       try {
         const result = await getUserCameras()
         setCameras(result.cameras)
-        
+
         // 카메라가 있으면 첫 번째 카메라 선택
         if (result.cameras.length > 0 && !selectedCameraId) {
           setSelectedCameraId(result.cameras[0].camera_id)
@@ -151,7 +136,7 @@ export default function Settings() {
       fetchCameras()
       fetchStorage()
     }
-    
+
     if (activeSection === 'notifications') {
       loadNotificationLogs()
     }
@@ -212,8 +197,8 @@ export default function Settings() {
   }
 
   // 필터링된 알림
-  const filteredNotifications = selectedFilter === 'all' 
-    ? notificationLogs 
+  const filteredNotifications = selectedFilter === 'all'
+    ? notificationLogs
     : notificationLogs.filter(n => n.type === selectedFilter)
 
   const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -291,7 +276,7 @@ export default function Settings() {
         return
       }
 
-      const data = await res.json().catch(() => null)
+      await res.json().catch(() => null)
 
       // ✅ 구독 정보(플랜, 남은 기간)는 그대로 두고,
       //    필요하면 안내 텍스트만 바꾸는 용도로 쓸 수 있음
@@ -542,6 +527,43 @@ export default function Settings() {
     })
   }
 
+  // 계정 삭제 핸들러
+  const handleDeleteAccount = async () => {
+    if (!confirm('⚠️ 정말로 계정을 삭제하시겠습니까?\n\n모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.')) {
+      return
+    }
+
+    if (!confirm('⚠️ 최종 확인\n\n계정을 삭제하면:\n• 모든 분석 데이터가 삭제됩니다\n• 업로드한 영상이 모두 삭제됩니다\n• 구독이 자동으로 해지됩니다\n• 이 작업은 되돌릴 수 없습니다\n\n정말 계속하시겠습니까?')) {
+      return
+    }
+
+    try {
+      setIsDeletingAccount(true)
+      const token = getAuthToken()
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('계정 삭제에 실패했습니다')
+      }
+
+      // 로그아웃 처리
+      removeAuthToken()
+      alert('계정이 성공적으로 삭제되었습니다. 그동안 이용해주셔서 감사합니다.')
+      navigate('/login')
+    } catch (error) {
+      console.error('계정 삭제 오류:', error)
+      alert(error instanceof Error ? error.message : '계정 삭제 중 오류가 발생했습니다')
+    } finally {
+      setIsDeletingAccount(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -737,6 +759,28 @@ export default function Settings() {
                   ) : null}
                 </div>
               </div>
+
+              {/* 계정 삭제 - 위험 영역 */}
+              <div className="card border-red-200 bg-red-50">
+                <h2 className="text-lg font-semibold text-red-900 mb-4">⚠️ 위험 영역</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">계정 삭제</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={isDeletingAccount}
+                      className="text-sm text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isDeletingAccount ? '삭제 중...' : '계정 삭제'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
@@ -774,41 +818,37 @@ export default function Settings() {
                 <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={() => setSelectedFilter('all')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedFilter === 'all'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'all'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     전체 ({notificationLogs.length})
                   </button>
                   <button
                     onClick={() => setSelectedFilter('checklist_completed')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedFilter === 'checklist_completed'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'checklist_completed'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     체크리스트 ({notificationLogs.filter(n => n.type === 'checklist_completed').length})
                   </button>
                   <button
                     onClick={() => setSelectedFilter('system')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedFilter === 'system'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'system'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     시스템 ({notificationLogs.filter(n => n.type === 'system').length})
                   </button>
                   <button
                     onClick={() => setSelectedFilter('analysis')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedFilter === 'analysis'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'analysis'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     분석 ({notificationLogs.filter(n => n.type === 'analysis').length})
                   </button>
@@ -822,7 +862,7 @@ export default function Settings() {
                     <Bell className="w-16 h-16 mx-auto text-gray-300 mb-4" />
                     <p className="text-gray-500 mb-2">알림이 없습니다</p>
                     <p className="text-sm text-gray-400">
-                      {selectedFilter === 'all' 
+                      {selectedFilter === 'all'
                         ? '체크리스트를 완료하면 알림이 기록됩니다'
                         : `${getNotificationTypeLabel(selectedFilter)} 알림이 없습니다`
                       }
@@ -833,11 +873,10 @@ export default function Settings() {
                     {filteredNotifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`flex items-start gap-3 p-4 rounded-lg border transition-all hover:shadow-md ${
-                          !notification.read
-                            ? 'bg-blue-50/50 border-blue-200'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
+                        className={`flex items-start gap-3 p-4 rounded-lg border transition-all hover:shadow-md ${!notification.read
+                          ? 'bg-blue-50/50 border-blue-200'
+                          : 'bg-gray-50 border-gray-200'
+                          }`}
                       >
                         {/* 아이콘 */}
                         <div className="flex-shrink-0 mt-0.5">
@@ -899,57 +938,10 @@ export default function Settings() {
 
           {/* 보안 탭 */}
           {activeSection === 'security' && (
-            <>
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">보안 설정</h2>
-                <div className="space-y-3">
-                  <SecurityItem
-                    icon={Lock}
-                    label="비밀번호 변경"
-                    description="마지막 변경: 30일 전"
-                    action="변경"
-                  />
-                  <SecurityItem
-                    icon={Shield}
-                    label="2단계 인증"
-                    description="추가 보안 계층 활성화"
-                    action="설정"
-                  />
-                  <SecurityItem
-                    icon={Smartphone}
-                    label="로그인 기기 관리"
-                    description="3개 기기에서 로그인 중"
-                    action="관리"
-                  />
-                </div>
-              </div>
-
-              {/* Danger Zone */}
-              <div className="card border-danger-200 bg-danger-50">
-                <h2 className="text-lg font-semibold text-danger-900 mb-4">위험 영역</h2>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">계정 로그아웃</p>
-                      <p className="text-xs text-gray-600">모든 기기에서 로그아웃</p>
-                    </div>
-                    <button className="text-sm text-danger font-medium hover:text-danger-dark flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />
-                      로그아웃
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">계정 삭제</p>
-                      <p className="text-xs text-gray-600">모든 데이터가 영구 삭제됩니다</p>
-                    </div>
-                    <button className="text-sm text-danger font-medium hover:text-danger-dark">
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
+            <div className="card">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">보안 및 개인정보</h2>
+              <p className="text-sm text-gray-600">보안 및 개인정보 설정 기능은 추후 추가될 예정입니다.</p>
+            </div>
           )}
 
           {/* 카메라 설정 탭 */}
@@ -968,13 +960,12 @@ export default function Settings() {
                     </div>
                     <div className="w-full bg-blue-200 rounded-full h-3">
                       <div
-                        className={`h-3 rounded-full transition-all ${
-                          storageUsage.usage_percent > 90
-                            ? 'bg-red-500'
-                            : storageUsage.usage_percent > 70
+                        className={`h-3 rounded-full transition-all ${storageUsage.usage_percent > 90
+                          ? 'bg-red-500'
+                          : storageUsage.usage_percent > 70
                             ? 'bg-yellow-500'
                             : 'bg-blue-500'
-                        }`}
+                          }`}
                         style={{ width: `${Math.min(storageUsage.usage_percent, 100)}%` }}
                       ></div>
                     </div>
@@ -1037,9 +1028,8 @@ export default function Settings() {
                     />
                     <label
                       htmlFor="video-upload"
-                      className={`btn-primary flex items-center gap-2 cursor-pointer ${
-                        isUploadingVideo ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
+                      className={`btn-primary flex items-center gap-2 cursor-pointer ${isUploadingVideo ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
                     >
                       <Upload className="w-4 h-4" />
                       {isUploadingVideo ? '업로드 중...' : '영상 선택'}
@@ -1068,7 +1058,7 @@ export default function Settings() {
                   </h3>
                   {(() => {
                     const selectedCamera = cameras.find((c) => c.camera_id === selectedCameraId)
-                    
+
                     if (!selectedCamera || selectedCamera.videos.length === 0) {
                       return (
                         <div className="text-center py-8 text-gray-500">
@@ -1260,33 +1250,7 @@ function SettingsNavItem({
   )
 }
 
-// Security Item Component
-function SecurityItem({
-  icon: Icon,
-  label,
-  description,
-  action,
-}: {
-  icon: any
-  label: string
-  description: string
-  action: string
-}) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-      <div className="flex items-center gap-3">
-        <Icon className="w-5 h-5 text-gray-600" />
-        <div>
-          <p className="text-sm font-medium text-gray-900">{label}</p>
-          <p className="text-xs text-gray-600">{description}</p>
-        </div>
-      </div>
-      <button className="text-sm text-primary-600 font-medium hover:text-primary-700">
-        {action}
-      </button>
-    </div>
-  )
-}
+
 
 // Feature Item Component
 function FeatureItem({ text }: { text: string }) {
