@@ -162,12 +162,16 @@ def create_app() -> FastAPI:
                     all_cameras = db.query(CameraSetting).all()
                     cameras_to_start = []
                     
+                    print(f"[HLS 자동 시작] DB에서 카메라 조회 중... (총 {len(all_cameras)}개)")
+                    
                     for camera_setting in all_cameras:
                         # 활성 영상이 있는지 확인
                         active_videos = db.query(CameraVideo).filter(
                             CameraVideo.camera_setting_id == camera_setting.id,
                             CameraVideo.is_active == True
                         ).count()
+                        
+                        print(f"[HLS 자동 시작] 카메라 {camera_setting.camera_id}: 활성 영상 {active_videos}개")
                         
                         if active_videos > 0:
                             cameras_to_start.append(camera_setting.camera_id)
@@ -176,6 +180,8 @@ def create_app() -> FastAPI:
                     
                 except Exception as e:
                     print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
+                    import traceback
+                    print(traceback.format_exc())
                     return []
                 finally:
                     db.close()
@@ -186,13 +192,27 @@ def create_app() -> FastAPI:
                 
                 if not cameras_to_start:
                     print("⚠️  HLS 자동 시작 스킵: 활성 영상이 있는 카메라가 없습니다")
-                    return
+                    # 폴백: 로컬 파일 시스템 확인 (camera-1 디렉토리가 있으면 시작)
+                    video_dir = Path(f"videos/camera-1")
+                    if video_dir.exists() and any(video_dir.glob("*.mp4")):
+                        print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
+                        cameras_to_start = ["camera-1"]
+                    else:
+                        return
                 
                 print(f"📹 HLS 자동 시작 대상 카메라: {', '.join(cameras_to_start)}")
                 
             except Exception as e:
                 print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
-                return
+                import traceback
+                print(traceback.format_exc())
+                # 폴백: camera-1 확인
+                video_dir = Path(f"videos/camera-1")
+                if video_dir.exists() and any(video_dir.glob("*.mp4")):
+                    print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
+                    cameras_to_start = ["camera-1"]
+                else:
+                    return
             
             # 짧은 대기 후 시작 (다른 초기화 작업 완료 대기)
             await asyncio.sleep(2)

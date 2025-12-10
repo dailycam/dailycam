@@ -165,9 +165,11 @@ export default function Monitoring() {
               hls.loadSource(fullPlaylistUrl)
               hls.attachMedia(videoRef.current)
 
+              // 즉시 표시 (매니페스트 파싱 전에도)
+              setIsStreamActive(true)
+
               hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 console.log('HLS 매니페스트 파싱 완료, 라이브 엣지로 이동')
-                setIsStreamActive(true) // 즉시 표시
                 if (videoRef.current) {
                   const duration = videoRef.current.duration
                   if (duration && isFinite(duration) && duration > 3) {
@@ -175,6 +177,11 @@ export default function Monitoring() {
                   }
                   videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
                 }
+              })
+
+              hls.on(Hls.Events.LEVEL_LOADED, () => {
+                console.log('HLS 레벨 로드 완료')
+                setIsStreamActive(true)
               })
 
               hls.on(Hls.Events.ERROR, (_event, data) => {
