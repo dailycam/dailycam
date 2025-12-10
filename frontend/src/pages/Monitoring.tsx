@@ -92,6 +92,12 @@ export default function Monitoring() {
   // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
   useEffect(() => {
     const checkAndConnectStream = async () => {
+      // 이미 HLS 플레이어가 있고 재생 중이면 재연결만 시도
+      if (hlsRef.current && videoRef.current && !videoRef.current.paused) {
+        console.log('이미 재생 중, 재연결 스킵')
+        return
+      }
+      
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
@@ -107,8 +113,22 @@ export default function Monitoring() {
             const fullPlaylistUrl = `${API_BASE_URL}${data.playlist_url}`
 
             if (Hls.isSupported() && videoRef.current) {
+              // 기존 플레이어가 있으면 재사용 시도
               if (hlsRef.current) {
-                hlsRef.current.destroy()
+                try {
+                  // 기존 소스가 같으면 재연결만 시도
+                  if (hlsRef.current.url === fullPlaylistUrl) {
+                    console.log('같은 스트림, 재연결 시도...')
+                    hlsRef.current.startLoad()
+                    if (videoRef.current) {
+                      videoRef.current.play().catch(e => console.warn('재생 실패:', e))
+                    }
+                    return
+                  }
+                  hlsRef.current.destroy()
+                } catch (e) {
+                  console.warn('기존 플레이어 정리 실패:', e)
+                }
               }
 
               const hls = new Hls({
@@ -120,7 +140,8 @@ export default function Monitoring() {
                 liveMaxLatencyDuration: 15,  // VLM 분석 중에도 끊기지 않도록
                 maxBufferLength: 20,
                 maxMaxBufferLength: 40,
-                backBufferLength: 0,
+                backBufferLength: 10,  // 이전 세그먼트 유지 (페이지 복귀 시 부드러운 재생)
+                liveBackBufferLength: 10,  // 라이브 백 버퍼 길이
                 manifestLoadingTimeOut: 60000,
                 manifestLoadingMaxRetry: 10,
                 levelLoadingTimeOut: 60000,
@@ -136,8 +157,9 @@ export default function Monitoring() {
                 console.log('HLS 매니페스트 파싱 완료, 라이브 엣지로 이동')
                 if (videoRef.current) {
                   const duration = videoRef.current.duration
-                  if (duration && isFinite(duration) && duration > 3) {
-                    videoRef.current.currentTime = duration - 3
+                  if (duration && isFinite(duration) && duration > 1) {
+                    // 라이브 엣지로 이동 (1초 전으로 변경하여 더 최신 위치에서 시작)
+                    videoRef.current.currentTime = Math.max(0, duration - 1)
                   }
                   videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
                 }
@@ -146,6 +168,14 @@ export default function Monitoring() {
               hls.on(Hls.Events.ERROR, (_event, data) => {
                 if (data.fatal) {
                   console.error('HLS 치명적 오류:', data)
+                  // 자동 복구 시도
+                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    console.log('네트워크 오류, 재연결 시도...')
+                    hls.startLoad()
+                  } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    console.log('미디어 오류, 복구 시도...')
+                    hls.recoverMediaError()
+                  }
                 }
               })
 
@@ -168,8 +198,10 @@ export default function Monitoring() {
     checkAndConnectStream()
 
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy()
+      // cleanup 시 플레이어를 파괴하지 않고 일시정지만
+      // (페이지를 떠났다가 돌아올 때 부드러운 재연결을 위해)
+      if (hlsRef.current && videoRef.current) {
+        videoRef.current.pause()
       }
     }
   }, [selectedCamera])
@@ -277,7 +309,8 @@ export default function Monitoring() {
           liveMaxLatencyDuration: 15,
           maxBufferLength: 20,
           maxMaxBufferLength: 40,
-          backBufferLength: 0,
+          backBufferLength: 10,  // 이전 세그먼트 유지
+          liveBackBufferLength: 10,  // 라이브 백 버퍼 길이
           manifestLoadingTimeOut: 60000,
           manifestLoadingMaxRetry: 10,
           levelLoadingTimeOut: 60000,
@@ -295,8 +328,8 @@ export default function Monitoring() {
             console.log('HLS 매니페스트 로드됨, 라이브 엣지로 이동')
             if (videoRef.current) {
               const duration = videoRef.current.duration
-              if (duration && isFinite(duration) && duration > 3) {
-                videoRef.current.currentTime = duration - 3
+              if (duration && isFinite(duration) && duration > 1) {
+                videoRef.current.currentTime = Math.max(0, duration - 1)
               }
             }
             videoRef.current?.play().catch(e => console.error('재생 오류:', e))
@@ -403,7 +436,8 @@ export default function Monitoring() {
           liveMaxLatencyDuration: 15,
           maxBufferLength: 20,
           maxMaxBufferLength: 40,
-          backBufferLength: 0,
+          backBufferLength: 10,  // 이전 세그먼트 유지
+          liveBackBufferLength: 10,  // 라이브 백 버퍼 길이
           manifestLoadingTimeOut: 60000,
           manifestLoadingMaxRetry: 10,
           levelLoadingTimeOut: 60000,
@@ -421,8 +455,8 @@ export default function Monitoring() {
             console.log('HLS 매니페스트 로드됨, 라이브 엣지로 이동')
             if (videoRef.current) {
               const duration = videoRef.current.duration
-              if (duration && isFinite(duration) && duration > 3) {
-                videoRef.current.currentTime = duration - 3
+              if (duration && isFinite(duration) && duration > 1) {
+                videoRef.current.currentTime = Math.max(0, duration - 1)
               }
             }
             videoRef.current?.play().catch(e => console.error('재생 오류:', e))
