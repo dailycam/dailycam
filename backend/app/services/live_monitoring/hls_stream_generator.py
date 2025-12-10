@@ -72,6 +72,11 @@ class HLSStreamGenerator:
         self.db_session = db_session
         self.user_id = user_id
         
+        # 오디오 동기화를 위한 현재 영상 추적
+        self.current_video_path = None
+        self.current_video_start_time = None  # 현재 영상 재생 시작 시간
+        self.current_video_frame_count = 0  # 현재 영상의 프레임 카운트
+        
     async def start_streaming(self):
         """HLS 스트리밍 시작"""
         self.is_running = True
@@ -180,85 +185,24 @@ class HLSStreamGenerator:
         
         print(f"[HLS 스트림] 시작: {self.camera_id}")
         
-        # FFmpeg 파이프 설정 (stdin으로 프레임 전송)
+        # FFmpeg 파이프 설정은 영상이 시작될 때마다 재시작 (오디오 동기화를 위해)
         playlist_path = self.hls_dir / f"{self.camera_id}.m3u8"
         segment_pattern = str(self.hls_dir / f"{self.camera_id}_%03d.ts")
         
-        ffmpeg_cmd = [
-            ffmpeg_path,  # 전체 경로 사용
-            '-f', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', f'{self.target_width}x{self.target_height}',
-            '-r', str(self.target_fps),
-            '-i', 'pipe:',  # Windows 호환성
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-tune', 'zerolatency',
-            '-f', 'hls',
-            '-hls_time', str(self.segment_duration),
-            '-hls_list_size', '10',
-            '-hls_flags', 'delete_segments',
-            '-hls_segment_filename', segment_pattern,
-            str(playlist_path)
-        ]
+        # 초기 FFmpeg 프로세스는 None으로 시작 (첫 영상 시작 시 생성)
+        self.ffmpeg_process = None
+        self.playlist_path = playlist_path
+        self.segment_pattern = segment_pattern
         
-        print(f"[HLS 스트림] FFmpeg 명령: {' '.join(ffmpeg_cmd[:5])}...")
+        frame_count = 0
+        detection_frame_interval = 30  # 30프레임마다 탐지
+        frame_interval = 1.0 / self.target_fps  # 프레임 간격 (초)
+        last_frame_time = time.time()
+        frames_sent = 0
+        
+        print(f"[HLS 스트림] 프레임 전송 시작 (target_fps: {self.target_fps}, 간격: {frame_interval:.3f}초)")
         
         try:
-            self.ffmpeg_process = subprocess.Popen(
-                ffmpeg_cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=0,  # 버퍼링 비활성화
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-            )
-            print(f"[HLS 스트림] ✅ FFmpeg 프로세스 시작 성공 (PID: {self.ffmpeg_process.pid})")
-            
-            # FFmpeg stderr를 별도 스레드에서 읽어서 로그 출력
-            def read_stderr():
-                try:
-                    while self.is_running and self.ffmpeg_process:
-                        line = self.ffmpeg_process.stderr.readline()
-                        if line:
-                            decoded = line.decode('utf-8', errors='ignore').strip()
-                            if decoded and not decoded.startswith('frame='):  # 일반적인 프레임 정보는 제외
-                                print(f"[FFmpeg] {decoded}")
-                except Exception as e:
-                    print(f"[FFmpeg stderr 읽기 오류] {e}")
-            
-            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
-            stderr_thread.start()
-            
-            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 15초)
-            print(f"[HLS 스트림] HLS 플레이리스트 생성 대기 중...")
-            playlist_created = False
-            for i in range(150):  # 0.1초씩 150번 = 15초
-                if playlist_path.exists():
-                    playlist_created = True
-                    print(f"[HLS 스트림] ✅ HLS 플레이리스트 생성 완료: {playlist_path}")
-                    break
-                await asyncio.sleep(0.1)
-                # 5초, 10초마다 진행 상황 출력
-                if (i + 1) % 50 == 0:
-                    print(f"[HLS 스트림] 대기 중... ({(i+1)/10}초 경과)")
-            
-            if not playlist_created:
-                print(f"[HLS 스트림] ⚠️ 경고: HLS 플레이리스트가 생성되지 않았습니다. 계속 진행합니다...")
-                print(f"[HLS 스트림] 플레이리스트 경로: {playlist_path}")
-                print(f"[HLS 스트림] 디렉토리 존재 여부: {self.hls_dir.exists()}")
-                if self.hls_dir.exists():
-                    files = list(self.hls_dir.glob("*"))
-                    print(f"[HLS 스트림] 디렉토리 파일 목록: {[f.name for f in files]}")
-            
-            frame_count = 0
-            detection_frame_interval = 30  # 30프레임마다 탐지
-            frame_interval = 1.0 / self.target_fps  # 프레임 간격 (초)
-            last_frame_time = time.time()
-            frames_sent = 0
-            
-            print(f"[HLS 스트림] 프레임 전송 시작 (target_fps: {self.target_fps}, 간격: {frame_interval:.3f}초)")
-            
             while self.is_running:
                 video_path = video_queue.get_next_video()
                 if not video_path:
@@ -266,6 +210,27 @@ class HLSStreamGenerator:
                     break
                 
                 print(f"[HLS 스트림] 영상 재생 시작: {video_path.name}")
+                
+                # 이전 FFmpeg 프로세스 종료 (있다면)
+                if self.ffmpeg_process:
+                    try:
+                        self.ffmpeg_process.stdin.close()
+                        self.ffmpeg_process.wait(timeout=2)
+                    except:
+                        try:
+                            self.ffmpeg_process.terminate()
+                            self.ffmpeg_process.wait(timeout=2)
+                        except:
+                            pass
+                    self.ffmpeg_process = None
+                
+                # 새 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)
+                await self._start_ffmpeg_for_video(ffmpeg_path, video_path)
+                
+                if not self.ffmpeg_process:
+                    print(f"[HLS 스트림] ❌ FFmpeg 프로세스 시작 실패, 다음 영상으로 넘어갑니다")
+                    continue
+                
                 cap = cv2.VideoCapture(str(video_path))
                 if not cap.isOpened():
                     print(f"[HLS 스트림] 오류: 영상 열기 실패 - {video_path.name}")
@@ -277,6 +242,11 @@ class HLSStreamGenerator:
                     fps = 30.0
                 
                 print(f"[HLS 스트림] 영상 정보: FPS={fps:.2f}, 총 프레임={total_frames}")
+                
+                # 현재 영상 추적 (오디오 동기화용)
+                self.current_video_path = video_path
+                self.current_video_start_time = time.time()
+                self.current_video_frame_count = 0
                 
                 # 프레임 샘플링
                 frame_skip = int(fps / self.target_fps) if fps > self.target_fps else 1
@@ -290,7 +260,7 @@ class HLSStreamGenerator:
                     # 프레임 샘플링
                     if video_frame_count % frame_skip == 0:
                         # FFmpeg 프로세스 상태 확인
-                        if self.ffmpeg_process.poll() is not None:
+                        if self.ffmpeg_process and self.ffmpeg_process.poll() is not None:
                             print(f"[HLS 스트림] ❌ FFmpeg 프로세스가 종료되었습니다 (exit code: {self.ffmpeg_process.returncode})")
                             # stderr에서 마지막 오류 메시지 읽기
                             try:
@@ -315,14 +285,16 @@ class HLSStreamGenerator:
                         
                         # FFmpeg로 프레임 전송 (HLS 생성)
                         try:
-                            frame_bytes = frame.tobytes()
-                            self.ffmpeg_process.stdin.write(frame_bytes)
-                            self.ffmpeg_process.stdin.flush()  # 버퍼 즉시 전송
-                            frames_sent += 1
-                            
-                            # 첫 10프레임과 그 이후 100프레임마다 로그
-                            if frames_sent <= 10 or frames_sent % 100 == 0:
-                                print(f"[HLS 스트림] 프레임 전송: {frames_sent}개 (영상 프레임: {video_frame_count})")
+                            if self.ffmpeg_process:
+                                frame_bytes = frame.tobytes()
+                                self.ffmpeg_process.stdin.write(frame_bytes)
+                                self.ffmpeg_process.stdin.flush()  # 버퍼 즉시 전송
+                                frames_sent += 1
+                                self.current_video_frame_count += 1
+                                
+                                # 첫 10프레임과 그 이후 100프레임마다 로그
+                                if frames_sent <= 10 or frames_sent % 100 == 0:
+                                    print(f"[HLS 스트림] 프레임 전송: {frames_sent}개 (영상 프레임: {video_frame_count})")
                         except BrokenPipeError:
                             print("[HLS 스트림] FFmpeg 파이프 끊김 - 프로세스가 종료되었을 수 있습니다")
                             break
@@ -391,6 +363,20 @@ class HLSStreamGenerator:
                     video_frame_count += 1
                 
                 cap.release()
+                
+                # 현재 영상 재생 완료 후 FFmpeg 프로세스 종료 (오디오 동기화를 위해)
+                if self.ffmpeg_process:
+                    try:
+                        self.ffmpeg_process.stdin.close()
+                        self.ffmpeg_process.wait(timeout=5)
+                    except:
+                        try:
+                            self.ffmpeg_process.terminate()
+                            self.ffmpeg_process.wait(timeout=2)
+                        except:
+                            pass
+                    self.ffmpeg_process = None
+                
                 print(f"[HLS 스트림] 영상 재생 완료: {video_path.name}")
         
         except FileNotFoundError as e:
@@ -455,6 +441,126 @@ class HLSStreamGenerator:
                 self.ffmpeg_process.terminate()
                 self.ffmpeg_process.wait()
             print(f"[HLS 스트림] 종료: {self.camera_id}")
+    
+    async def _start_ffmpeg_for_video(self, ffmpeg_path: str, video_path: Path):
+        """특정 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)"""
+        try:
+            # 원본 영상 파일에서 오디오 스트림이 있는지 확인
+            check_audio_cmd = [
+                ffmpeg_path,
+                '-i', str(video_path),
+                '-hide_banner',
+                '-f', 'null',
+                '-'
+            ]
+            
+            # 오디오 스트림 존재 여부 확인
+            has_audio = False
+            try:
+                result = subprocess.run(
+                    check_audio_cmd,
+                    capture_output=True,
+                    stderr=subprocess.PIPE,
+                    timeout=5
+                )
+                # stderr에서 오디오 스트림 정보 확인
+                stderr_output = result.stderr.decode('utf-8', errors='ignore')
+                if 'Audio:' in stderr_output or 'Stream #0:1' in stderr_output:
+                    has_audio = True
+                    print(f"[HLS 스트림] ✅ 오디오 스트림 발견: {video_path.name}")
+            except:
+                pass
+            
+            # FFmpeg 명령어 구성 (오디오 포함)
+            if has_audio:
+                # 비디오는 파이프에서, 오디오는 원본 파일에서
+                ffmpeg_cmd = [
+                    ffmpeg_path,
+                    '-f', 'rawvideo',
+                    '-pix_fmt', 'bgr24',
+                    '-s', f'{self.target_width}x{self.target_height}',
+                    '-r', str(self.target_fps),
+                    '-i', 'pipe:',  # 비디오 입력 (파이프)
+                    '-i', str(video_path),  # 오디오 입력 (원본 파일)
+                    '-map', '0:v',  # 비디오는 첫 번째 입력(파이프)에서
+                    '-map', '1:a?',  # 오디오는 두 번째 입력(원본 파일)에서 (없으면 무시)
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',
+                    '-tune', 'zerolatency',
+                    '-c:a', 'aac',  # 오디오 코덱
+                    '-b:a', '128k',  # 오디오 비트레이트
+                    '-ar', '44100',  # 오디오 샘플레이트
+                    '-ac', '2',  # 스테레오
+                    '-shortest',  # 짧은 스트림에 맞춤 (비디오/오디오 동기화)
+                    '-f', 'hls',
+                    '-hls_time', str(self.segment_duration),
+                    '-hls_list_size', '10',
+                    '-hls_flags', 'delete_segments',
+                    '-hls_segment_filename', self.segment_pattern,
+                    str(self.playlist_path)
+                ]
+            else:
+                # 오디오가 없으면 비디오만
+                ffmpeg_cmd = [
+                    ffmpeg_path,
+                    '-f', 'rawvideo',
+                    '-pix_fmt', 'bgr24',
+                    '-s', f'{self.target_width}x{self.target_height}',
+                    '-r', str(self.target_fps),
+                    '-i', 'pipe:',
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',
+                    '-tune', 'zerolatency',
+                    '-f', 'hls',
+                    '-hls_time', str(self.segment_duration),
+                    '-hls_list_size', '10',
+                    '-hls_flags', 'delete_segments',
+                    '-hls_segment_filename', self.segment_pattern,
+                    str(self.playlist_path)
+                ]
+                print(f"[HLS 스트림] ⚠️ 오디오 스트림 없음: {video_path.name}")
+            
+            self.ffmpeg_process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            
+            print(f"[HLS 스트림] ✅ FFmpeg 프로세스 시작 성공 (PID: {self.ffmpeg_process.pid}, 오디오: {'포함' if has_audio else '없음'})")
+            
+            # FFmpeg stderr를 별도 스레드에서 읽어서 로그 출력
+            def read_stderr():
+                try:
+                    while self.is_running and self.ffmpeg_process:
+                        line = self.ffmpeg_process.stderr.readline()
+                        if line:
+                            decoded = line.decode('utf-8', errors='ignore').strip()
+                            if decoded and not decoded.startswith('frame='):  # 일반적인 프레임 정보는 제외
+                                if 'error' in decoded.lower() or 'failed' in decoded.lower():
+                                    print(f"[FFmpeg] {decoded}")
+                except Exception as e:
+                    print(f"[FFmpeg stderr 읽기 오류] {e}")
+            
+            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+            stderr_thread.start()
+            
+            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 5초)
+            for i in range(50):  # 0.1초씩 50번 = 5초
+                if self.playlist_path.exists():
+                    print(f"[HLS 스트림] ✅ HLS 플레이리스트 생성 완료: {self.playlist_path}")
+                    return
+                await asyncio.sleep(0.1)
+            
+            print(f"[HLS 스트림] ⚠️ 경고: HLS 플레이리스트가 생성되지 않았습니다. 계속 진행합니다...")
+            
+        except Exception as e:
+            print(f"[HLS 스트림] ❌ FFmpeg 프로세스 시작 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            self.ffmpeg_process = None
     
     def _resize_frame(self, frame):
         """프레임 크기 조정"""
