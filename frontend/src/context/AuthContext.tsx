@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { getAuthToken, removeAuthToken } from '../lib/auth'
+import { removeAuthToken } from '../lib/auth'
 import { API_BASE_URL } from '@/constants/api'
 
 export interface UserInfo {
@@ -41,24 +41,23 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+// 개발 환경에서만 로그 출력
+const IS_DEV = import.meta.env.DEV
+const devLog = (...args: any[]) => {
+  if (IS_DEV) console.log(...args)
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const fetchUserInfo = async (): Promise<void> => {
-    const token = getAuthToken()
-
-    if (!token) {
-      setUser(null)
-      setIsLoading(false)
-      return
-    }
-
+  const fetchUserInfo = async (isRetry: boolean = false): Promise<void> => {
+    // httpOnly Cookie를 사용하므로 토큰 확인 불필요
+    // 백엔드가 자동으로 Cookie에서 토큰을 읽음
+    
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',  // Cookie 자동 포함
       })
 
       if (response.ok) {
@@ -68,11 +67,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
           id: data.user_id || data.id,
           is_subscribed: Boolean(data.is_subscribed),
         })
-      } else if (response.status === 401) {
-        // 토큰 만료 또는 유효하지 않음
-        removeAuthToken()
-        setUser(null)
+      } else if (response.status === 401 && !isRetry) {
+        // Access Token 만료 - Refresh Token으로 갱신 시도 (최초 1회만)
+        devLog('[AuthContext] Access Token 만료, Refresh 시도...')
+        const refreshed = await refreshAccessToken()
+        
+        if (refreshed) {
+          // 토큰 갱신 성공, 다시 사용자 정보 조회 (재시도 플래그 설정)
+          devLog('[AuthContext] 토큰 갱신 성공, 사용자 정보 재조회')
+          await fetchUserInfo(true)  // isRetry = true로 재시도
+        } else {
+          // Refresh Token도 만료 - 로그아웃
+          devLog('[AuthContext] Refresh Token 만료, 로그아웃')
+          removeAuthToken()
+          setUser(null)
+        }
       } else {
+        // 401이지만 이미 재시도했거나, 다른 에러
+        devLog('[AuthContext] 인증 실패 또는 재시도 실패')
+        removeAuthToken()
         setUser(null)
       }
     } catch (error) {
@@ -83,28 +96,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  const refreshAccessToken = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',  // Cookie 자동 포함
+      })
+
+      if (response.ok) {
+        devLog('[AuthContext] Access Token 갱신 성공')
+        return true
+      } else {
+        devLog('[AuthContext] Refresh Token 만료 또는 무효')
+        return false
+      }
+    } catch (error) {
+      console.error('[AuthContext] 토큰 갱신 오류:', error)
+      return false
+    }
+  }
+
   const refreshUser = async (): Promise<void> => {
     setIsLoading(true)
     await fetchUserInfo()
   }
 
   const logout = async (): Promise<void> => {
-    const token = getAuthToken()
-
-    if (token) {
-      try {
-        await fetch(`${API_BASE_URL}/api/auth/logout-with-token`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-      } catch (error) {
-        console.error('[AuthContext] 로그아웃 오류:', error)
-      }
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout-with-token`, {
+        method: 'POST',
+        credentials: 'include',  // Cookie 자동 포함
+      })
+    } catch (error) {
+      console.error('[AuthContext] 로그아웃 오류:', error)
     }
 
-    removeAuthToken()
+    removeAuthToken()  // localStorage 정리
     setUser(null)
     // navigate는 컴포넌트에서 처리
     window.location.href = '/'

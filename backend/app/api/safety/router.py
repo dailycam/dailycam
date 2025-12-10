@@ -1,7 +1,7 @@
 """Safety Report API Router"""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -27,6 +27,10 @@ def get_safety_report_summary(
     특정 날짜의 하루치 데이터를 조회합니다. (최근 7일 이내)
     period_type은 트렌드 차트의 기간을 결정합니다.
     """
+    import time
+    start_time = time.time()
+    print(f"\n[Safety API] 🚀 요청 시작 - User: {user_id}, Date: {target_date}, Period: {period_type}")
+    
     # 조회할 날짜 설정 (기본값: 오늘)
     if target_date:
         try:
@@ -51,9 +55,10 @@ def get_safety_report_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    # 기간 내 분석 로그들
+    # 기간 내 분석 로그들 (관련 이벤트를 함께 로드하여 N+1 쿼리 방지)
     logs = (
         db.query(AnalysisLog)
+        .options(selectinload(AnalysisLog.safety_events))  # SafetyEvent를 미리 로드
         .filter(
             AnalysisLog.user_id == user_id,
             AnalysisLog.created_at >= start_date
@@ -367,6 +372,9 @@ def get_safety_report_summary(
         safety_insights = latest_log.safety_insights
     else:
         safety_insights = []
+    
+    elapsed_time = time.time() - start_time
+    print(f"[Safety API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "trendData": trend_data,  # 실시간

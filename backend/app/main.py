@@ -40,7 +40,7 @@ from app.database import SessionLocal
 
 # 모델 import (Base.metadata에 등록하기 위해 - 테이블 자동 생성용)
 from app.models import (
-    User, TokenBlacklist, AnalysisLog, SafetyEvent, DevelopmentEvent,
+    User, TokenBlacklist, RefreshToken, AnalysisLog, SafetyEvent, DevelopmentEvent,
     DailySummary, HighlightClip, CameraSetting, CameraVideo,
     DevelopmentScoreTracking, DevelopmentMilestoneTracking,
     RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport,
@@ -71,16 +71,24 @@ def create_app() -> FastAPI:
     cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
     origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
     
-    # 개발용 로컬호스트 기본 추가
-    default_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    
-    # 중복 제거하여 합치기
-    allow_origins = list(set(origins + default_origins))
-    
-    print(f"🌐 CORS 허용 도메인: {allow_origins}")
+    # 개발 환경에서만 로컬호스트 자동 추가
+    is_development = os.getenv("ENVIRONMENT", "development") != "production"
+    if is_development:
+        default_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+        # 중복 제거하여 합치기
+        allow_origins = list(set(origins + default_origins))
+        print(f"🌐 CORS 허용 도메인 (개발 모드): {allow_origins}")
+    else:
+        # 프로덕션에서는 환경 변수만 사용
+        if not origins:
+            raise ValueError(
+                "프로덕션 환경에서는 CORS_ALLOWED_ORIGINS 환경 변수를 반드시 설정해야 합니다."
+            )
+        allow_origins = origins
+        print(f"🌐 CORS 허용 도메인 (프로덕션): {allow_origins}")
 
     app.add_middleware(
         CORSMiddleware,
@@ -92,9 +100,12 @@ def create_app() -> FastAPI:
     )
 
     # 세션 미들웨어 추가 (OAuth에 필요)
+    # 워커에서는 세션 미들웨어가 필요 없으므로 환경 변수가 없어도 기본값 사용
+    session_secret = os.getenv("JWT_SECRET_KEY", "default-session-secret-for-worker")
+    
     app.add_middleware(
         SessionMiddleware,
-        secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
+        secret_key=session_secret,
     )
 
     # ----------------------------------------------------
@@ -193,8 +204,9 @@ def create_app() -> FastAPI:
                 # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
                 await start_hourly_aggregation_for_camera(camera_id)
                 
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                 print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
-                print(f"   스트림 URL: http://localhost:8000/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
+                print(f"   스트림 URL: {backend_url}/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
                 
             except Exception as e:
                 print(f"❌ HLS 자동 시작 실패: {e}")
@@ -230,9 +242,10 @@ def create_app() -> FastAPI:
 
         asyncio.create_task(clip_cleanup_worker())
 
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
         print("\n" + "=" * 60)
         print("✨ 서버가 준비되었습니다!")
-        print("   API 문서: http://localhost:8000/docs")
+        print(f"   API 문서: {backend_url}/docs")
         print("   HLS 스트림: 자동 시작 중...")
         print("   클립 정리: 24시간마다 자동 실행")
         print("=" * 60 + "\n")

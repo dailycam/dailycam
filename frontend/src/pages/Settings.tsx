@@ -20,7 +20,7 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react'
-import { getAuthToken, removeAuthToken } from '../lib/auth'
+import { removeAuthToken } from '../lib/auth'
 import { API_BASE_URL } from '@/constants/api'
 import { getUserCameras, uploadCameraVideo, deleteCameraVideo, getStorageUsage, type CameraSetting } from '@/lib/api'
 import {
@@ -238,15 +238,13 @@ export default function Settings() {
       const base64String = reader.result as string
 
       try {
-        const token = getAuthToken()
-
         // 즉시 서버에 저장
         const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
+          credentials: 'include',
           body: JSON.stringify({
             ...profileForm,
             picture: base64String
@@ -278,13 +276,12 @@ export default function Settings() {
 
     try {
       setIsCancelling(true)
-      const token = getAuthToken()
       const res = await fetch(`${API_BASE_URL}/api/payments/subscribe/basic/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
 
       if (!res.ok) {
@@ -341,15 +338,14 @@ export default function Settings() {
 
     try {
       setIsSavingProfile(true)
-      const token = getAuthToken()
 
       // 프로필 업데이트 API 호출
       const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(profileForm),
       })
 

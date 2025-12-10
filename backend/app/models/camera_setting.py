@@ -13,8 +13,8 @@ class CameraSetting(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    camera_id = Column(String, nullable=False, index=True)  # 예: "camera-1"
-    camera_name = Column(String, nullable=True)  # 사용자 지정 카메라 이름
+    camera_id = Column(String(255), nullable=False, index=True)  # 예: "camera-1"
+    camera_name = Column(String(255), nullable=True)  # 사용자 지정 카메라 이름
     
     # 스트리밍 설정
     is_active = Column(Boolean, default=True)  # 카메라 활성화 여부
@@ -34,8 +34,8 @@ class CameraVideo(Base):
     id = Column(Integer, primary_key=True, index=True)
     camera_setting_id = Column(Integer, ForeignKey("camera_settings.id"), nullable=False, index=True)
     
-    filename = Column(String, nullable=False)  # 파일명
-    file_path = Column(String, nullable=False)  # 저장 경로
+    filename = Column(String(500), nullable=False)  # 파일명
+    file_path = Column(String(1000), nullable=False)  # 저장 경로
     file_size = Column(Integer, nullable=True)  # 파일 크기 (bytes)
     duration = Column(Integer, nullable=True)  # 영상 길이 (초)
     

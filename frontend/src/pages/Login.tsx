@@ -22,7 +22,7 @@ export default function Login() {
 
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트
-        window.location.href = `${API_BASE_URL}/api/auth/google/login`
+        window.location.href = `${import.meta.env.VITE_API_BASE_URL}/api/auth/google/login`
     }
 
     return (

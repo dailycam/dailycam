@@ -17,8 +17,14 @@ export const useDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true)
+            setError(null)
+            // 날짜 변경 시 이전 데이터 초기화 (깜빡임 방지하려면 이 줄 제거)
+            setDashboardData(null)
+            
             try {
                 const dateStr = selectedDate.toISOString().split('T')[0] // YYYY-MM-DD 형식
+                console.log(`📅 [Dashboard] 날짜 변경: ${dateStr}`)
                 const data = await getDashboardData(dateStr)
                 console.log('📦 [Dashboard] 받은 데이터:', data)
                 setDashboardData(data)
@@ -177,12 +183,13 @@ export const useDashboard = () => {
 
     // 백엔드에서 받은 실제 데이터 직접 사용
     const dailyStats: DailyStats = useMemo(() => {
-        const now = new Date()
-        const currentHour = now.getHours()
-
-        // 자정 이후 (0시 0분~0시 59분)면 초기화
-        if (currentHour === 0) {
-            console.log('🌙 [Daily Stats] 자정 이후 - 점수 초기화 (0점)')
+        // 선택한 날짜가 오늘인지 확인
+        const today = new Date()
+        const isToday = selectedDate.toDateString() === today.toDateString()
+        
+        // 오늘이고 자정 직후 (0시)라면 초기화
+        if (isToday && today.getHours() === 0) {
+            console.log('🌙 [Daily Stats] 오늘 자정 이후 - 점수 초기화 (0점)')
             return {
                 safetyScore: 0,
                 developmentScore: 0,
@@ -193,6 +200,7 @@ export const useDashboard = () => {
 
         // 백엔드에서 받은 데이터를 직접 사용
         console.log('📊 [Daily Stats] 백엔드 데이터 사용:', {
+            selectedDate: selectedDate.toISOString().split('T')[0],
             safetyScore: dashboardData?.safetyScore,
             developmentScore: dashboardData?.developmentScore,
             monitoringHours: dashboardData?.monitoringHours,
@@ -207,7 +215,7 @@ export const useDashboard = () => {
             monitoringHours: dashboardData?.monitoringHours ?? 0,
             incidentCount: dashboardData?.incidentCount ?? 0
         }
-    }, [dashboardData])
+    }, [dashboardData, selectedDate])
 
     const handleEventClick = (events: any[], timeRange: string, category: string) => {
         setModalEvents(events)

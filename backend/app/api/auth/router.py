@@ -1,18 +1,22 @@
 """Google OAuth authentication router"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from starlette.requests import Request
+from datetime import datetime, timedelta
+from typing import Optional
 import os
 import traceback
 
 from app.database import get_db
 from app.models.user import User
-from app.utils.auth_utils import create_access_token, get_current_user_id
+from app.utils.auth_utils import create_access_token, create_refresh_token, get_current_user_id
+from app.models.refresh_token import RefreshToken
+from app.utils.logging_utils import dev_log, prod_log
 
 # OAuth 설정
 config = Config(environ=os.environ)
@@ -59,19 +63,20 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     """Google OAuth 콜백 처리
     
     사용자 정보를 받아서 데이터베이스에 저장하고 JWT 토큰 생성
+    토큰을 httpOnly Cookie로 설정하여 보안 강화
     """
     try:
         # 요청 파라미터 로깅 (디버깅용)
-        print(f"[OAuth Callback] Query params: {dict(request.query_params)}")
+        dev_log(f"[OAuth Callback] Query params: {dict(request.query_params)}")
         
         # Google에서 토큰 받기
         token = await oauth.google.authorize_access_token(request)
-        print(f"[OAuth Callback] Token received: {bool(token)}, keys: {list(token.keys()) if token else None}")
+        dev_log(f"[OAuth Callback] Token received: {bool(token)}")
         
         # 사용자 정보 가져오기
         user_info = token.get('userinfo')
         if not user_info:
-            print(f"[OAuth Callback] userinfo 없음, 토큰 전체 내용: {token}")
+            dev_log(f"[OAuth Callback] userinfo 없음, id_token 시도")
             # userinfo가 없으면 토큰에서 직접 가져오기 시도
             if 'id_token' in token:
                 from jose import jwt
@@ -80,9 +85,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
                     # id_token 디코딩 (검증 없이, 정보만 가져오기)
                     decoded = jwt.get_unverified_claims(id_token)
                     user_info = decoded
-                    print(f"[OAuth Callback] id_token에서 사용자 정보 추출 성공")
+                    dev_log(f"[OAuth Callback] id_token에서 사용자 정보 추출 성공")
                 except Exception as decode_error:
-                    print(f"[OAuth Callback] id_token 디코딩 실패: {decode_error}")
+                    dev_log(f"[OAuth Callback] id_token 디코딩 실패: {decode_error}")
             
             if not user_info:
                 raise HTTPException(
@@ -95,7 +100,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         name = user_info.get('name')
         picture = user_info.get('picture')
         
-        print(f"[OAuth Callback] User info: google_id={google_id}, email={email}, name={name}")
+        dev_log(f"[OAuth Callback] User info: google_id={google_id}, email={email}, name={name}")
         
         if not google_id or not email:
             raise HTTPException(
@@ -126,7 +131,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
         
-        # JWT 토큰 생성
+        # Access Token 생성 (짧은 만료 시간: 15분)
         access_token = create_access_token(
             data={
                 "user_id": user.id,
@@ -135,12 +140,57 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             }
         )
         
-        print(f"[OAuth Callback] 로그인 성공: user_id={user.id}, email={email}")
+        # Refresh Token 생성 (긴 만료 시간: 7일)
+        refresh_token_str, refresh_expires_at = create_refresh_token(user.id)
         
-        # 프론트엔드로 리다이렉트 (토큰 포함)
-        return RedirectResponse(
+        # Refresh Token DB에 저장
+        refresh_token_db = RefreshToken(
+            user_id=user.id,
+            token=refresh_token_str,
+            expires_at=refresh_expires_at
+        )
+        db.add(refresh_token_db)
+        db.commit()
+        
+        prod_log(f"[OAuth Callback] 로그인 성공: user_id={user.id}, email={email}")
+        dev_log(f"[OAuth Callback] Access Token 만료: 15분, Refresh Token 만료: 7일")
+        
+        # 프론트엔드로 리다이렉트 (쿼리 파라미터에 토큰 포함)
+        # 프론트엔드에서 토큰을 받아 Cookie에 설정
+        response = RedirectResponse(
             url=f"{FRONTEND_URL}/auth/callback?token={access_token}"
         )
+        
+        # httpOnly Cookie 설정 (JavaScript 접근 불가)
+        is_production = os.getenv("ENVIRONMENT", "development") == "production"
+        
+        # Access Token Cookie (짧은 만료: 15분)
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,        # JavaScript 접근 차단 (XSS 방어)
+            secure=is_production, # HTTPS에서만 전송 (프로덕션)
+            samesite="lax",       # CSRF 방어
+            max_age=900,          # 15분 (초 단위)
+            path="/"
+        )
+        
+        # Refresh Token Cookie (긴 만료: 7일)
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token_str,
+            httponly=True,        # JavaScript 접근 차단
+            secure=is_production,
+            samesite="lax",
+            max_age=604800,       # 7일 (초 단위)
+            path="/"
+        )
+        
+        dev_log(f"[OAuth Callback] httpOnly Cookies 설정 완료 (secure={is_production})")
+        dev_log(f"[OAuth Callback] - Access Token: 15분")
+        dev_log(f"[OAuth Callback] - Refresh Token: 7일")
+        
+        return response
         
     except HTTPException:
         raise
@@ -151,6 +201,110 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"인증 처리 중 오류가 발생했습니다: {str(e)}"
         )
+
+
+@router.post("/refresh")
+async def refresh_access_token(
+    refresh_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
+):
+    """Refresh Token으로 새로운 Access Token 발급
+    
+    - Access Token 만료 시 자동으로 호출
+    - Refresh Token도 함께 갱신 (Token Rotation)
+    - 보안: 사용된 Refresh Token은 즉시 무효화
+    """
+    from fastapi.responses import JSONResponse
+    from datetime import datetime
+    
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh Token이 없습니다"
+        )
+    
+    # Refresh Token 검증
+    token_db = db.query(RefreshToken).filter(
+        RefreshToken.token == refresh_token,
+        RefreshToken.is_revoked == False
+    ).first()
+    
+    if not token_db:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 Refresh Token입니다"
+        )
+    
+    # 만료 확인
+    if token_db.expires_at < datetime.utcnow():
+        # 만료된 토큰 삭제
+        db.delete(token_db)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh Token이 만료되었습니다. 다시 로그인해주세요."
+        )
+    
+    # 사용자 정보 조회
+    user = db.query(User).filter(User.id == token_db.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사용자를 찾을 수 없습니다"
+        )
+    
+    # 기존 Refresh Token 무효화 (Token Rotation)
+    token_db.is_revoked = True
+    token_db.last_used_at = datetime.utcnow()
+    
+    # 새로운 Access Token 생성
+    new_access_token = create_access_token(
+        data={
+            "user_id": user.id,
+            "email": user.email,
+            "name": user.name
+        }
+    )
+    
+    # 새로운 Refresh Token 생성 (Rotation)
+    new_refresh_token_str, new_refresh_expires_at = create_refresh_token(user.id)
+    new_refresh_token_db = RefreshToken(
+        user_id=user.id,
+        token=new_refresh_token_str,
+        expires_at=new_refresh_expires_at
+    )
+    db.add(new_refresh_token_db)
+    db.commit()
+    
+    prod_log(f"[Token Refresh] 토큰 갱신 성공: user_id={user.id}")
+    
+    # Cookie 갱신
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
+    response = JSONResponse(content={"message": "토큰이 갱신되었습니다"})
+    
+    # Access Token Cookie 갱신
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=900,  # 15분
+        path="/"
+    )
+    
+    # Refresh Token Cookie 갱신
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token_str,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=604800,  # 7일
+        path="/"
+    )
+    
+    return response
 
 
 @router.get("/me")
@@ -189,68 +343,103 @@ async def get_current_user(
 
 @router.post("/logout")
 async def logout(
-    user_id: int = Depends(get_current_user_id),
+    access_token: Optional[str] = Cookie(None),
+    refresh_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
-    """로그아웃 (토큰 블랙리스트 추가)"""
-    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    from fastapi import Request
-    from app.models.token_blacklist import TokenBlacklist
-    from jose import jwt
-    from datetime import datetime
+    """로그아웃 (간단 버전 - 쿠키 기반)
     
-    # 요청에서 토큰 추출
-    # Note: 이 방법은 간단하지만, 실제로는 Depends를 통해 토큰을 받는 것이 더 좋습니다
-    # 여기서는 get_current_user_id가 이미 토큰을 검증했으므로 안전합니다
-    
-    # 토큰을 블랙리스트에 추가하기 위해 다시 추출해야 합니다
-    # 이를 위해 별도의 의존성을 만들거나, 토큰을 반환하도록 수정할 수 있습니다
-    
-    return {"message": "로그아웃되었습니다. 클라이언트에서 토큰을 삭제해주세요."}
+    /logout-with-token과 동일한 기능을 제공합니다.
+    """
+    # 실제로는 logout-with-token으로 리다이렉트하는 것이 코드 중복을 줄입니다
+    return await logout_with_token(None, access_token, refresh_token, db)
 
 
 @router.post("/logout-with-token")
 async def logout_with_token(
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    access_token: Optional[str] = Cookie(None),
+    refresh_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
-    """로그아웃 (토큰 블랙리스트 추가)
+    """로그아웃 (Access Token 블랙리스트 추가 및 Refresh Token 무효화)
     
-    Authorization 헤더에서 토큰을 받아 블랙리스트에 추가합니다.
+    Authorization 헤더 또는 Cookie에서 토큰을 받아 처리합니다.
     """
     from app.models.token_blacklist import TokenBlacklist
     from jose import jwt
     from datetime import datetime
+    from fastapi.responses import JSONResponse
     import os
     
-    token = credentials.credentials
+    # Access Token 가져오기 (Cookie 우선)
+    token = access_token
+    if not token and credentials:
+        token = credentials.credentials
     
-    try:
-        # 토큰 디코딩하여 만료 시간 확인
-        SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        exp_timestamp = payload.get("exp")
-        
-        if exp_timestamp:
-            expires_at = datetime.fromtimestamp(exp_timestamp)
-        else:
-            # 만료 시간이 없으면 7일 후로 설정
-            from datetime import timedelta
-            expires_at = datetime.utcnow() + timedelta(days=7)
-        
-        # 블랙리스트에 토큰 추가
-        blacklist_entry = TokenBlacklist(
-            token=token,
-            expires_at=expires_at
-        )
-        db.add(blacklist_entry)
-        db.commit()
-        
-        return {"message": "로그아웃되었습니다. 토큰이 무효화되었습니다."}
-        
-    except Exception as e:
-        print(f"로그아웃 오류: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="로그아웃 처리 중 오류가 발생했습니다"
-        )
+    # Access Token이 있으면 블랙리스트 추가
+    if token:
+        try:
+            # 토큰 디코딩하여 만료 시간 확인
+            from app.utils.auth_utils import _get_secret_key
+            secret_key = _get_secret_key()
+            payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+            exp_timestamp = payload.get("exp")
+            user_id = payload.get("user_id")
+            
+            if exp_timestamp:
+                expires_at = datetime.fromtimestamp(exp_timestamp)
+            else:
+                # 만료 시간이 없으면 15분 후로 설정
+                from datetime import timedelta
+                expires_at = datetime.utcnow() + timedelta(minutes=15)
+            
+            # 블랙리스트에 Access Token 추가
+            blacklist_entry = TokenBlacklist(
+                token=token,
+                expires_at=expires_at
+            )
+            db.add(blacklist_entry)
+            
+            # Refresh Token 무효화 (해당 사용자의 모든 Refresh Token)
+            if user_id:
+                db.query(RefreshToken).filter(
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.is_revoked == False
+                ).update({"is_revoked": True, "last_used_at": datetime.utcnow()})
+            
+            db.commit()
+            dev_log(f"[Logout] Access Token 블랙리스트 추가 및 Refresh Token 무효화 완료")
+            
+        except Exception as e:
+            dev_log(f"[Logout] 토큰 처리 오류: {e}")
+            # 오류가 나도 로그아웃은 계속 진행
+    
+    # Refresh Token 무효화 (Cookie에서 직접 받은 경우)
+    if refresh_token:
+        try:
+            token_db = db.query(RefreshToken).filter(
+                RefreshToken.token == refresh_token
+            ).first()
+            if token_db:
+                token_db.is_revoked = True
+                token_db.last_used_at = datetime.utcnow()
+                db.commit()
+                dev_log(f"[Logout] Refresh Token 무효화 완료")
+        except Exception as e:
+            dev_log(f"[Logout] Refresh Token 무효화 오류: {e}")
+    
+    # Cookie 삭제를 포함한 응답 생성
+    response = JSONResponse(
+        content={"message": "로그아웃되었습니다. 모든 토큰이 무효화되었습니다."}
+    )
+    
+    # Access Token Cookie 삭제
+    response.delete_cookie(key="access_token", path="/")
+    
+    # Refresh Token Cookie 삭제
+    response.delete_cookie(key="refresh_token", path="/")
+    
+    prod_log(f"[Logout] 로그아웃 완료 - Cookies 삭제")
+    
+    return response

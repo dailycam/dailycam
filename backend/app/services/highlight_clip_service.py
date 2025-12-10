@@ -328,6 +328,10 @@ class HighlightClipService:
                         h, m, s = start_time_str.split(':')
                         timestamp_offset = int(h) * 3600 + int(m) * 60 + int(s)
                         
+                        print(f"[하이라이트] 🔍 안전 이벤트 파싱: {event.get('title', 'N/A')}")
+                        print(f"  - 원본 timestamp_range: {timestamp_range}")
+                        print(f"  - 계산된 offset: {timestamp_offset}초")
+                        
                         safety_events.append({
                             'type': 'safety',
                             'title': event.get('title', '안전 위험'),
@@ -335,7 +339,8 @@ class HighlightClipService:
                             'timestamp_offset': timestamp_offset,
                             'severity': severity
                         })
-                    except:
+                    except Exception as e:
+                        print(f"[하이라이트] ⚠️ 타임스탬프 파싱 실패: {timestamp_range}, 에러: {e}")
                         continue
         
         # 발달 이벤트 필터링 (최초발생, 다음단계징후만)
@@ -440,6 +445,12 @@ class HighlightClipService:
                 description = " / ".join(descriptions[:3]) if descriptions else " / ".join(titles[:3])
             
             print(f"[하이라이트] 📹 클립 생성: {title} ({duration}초)")
+            print(f"[하이라이트] 🕐 타임스탬프 정보:")
+            print(f"  - 이벤트 시작 오프셋: {group['start_offset']}초")
+            print(f"  - 이벤트 종료 오프셋: {group['end_offset']}초")
+            print(f"  - 클립 시작 시간: {start_time}초")
+            print(f"  - 클립 길이: {duration}초")
+            print(f"  - 원본 파일: {source_video.name}")
             
             result = self.create_highlight_clip(
                 source_video_path=str(source_video),
