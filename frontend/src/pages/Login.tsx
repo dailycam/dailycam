@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function Login() {
     const navigate = useNavigate()
