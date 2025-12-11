@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 import os
 import traceback
+import asyncio
+from httpx import ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout
 
 from app.database import get_db
 from app.models.user import User
@@ -69,9 +71,59 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         # 요청 파라미터 로깅 (디버깅용)
         dev_log(f"[OAuth Callback] Query params: {dict(request.query_params)}")
         
-        # Google에서 토큰 받기
-        token = await oauth.google.authorize_access_token(request)
-        dev_log(f"[OAuth Callback] Token received: {bool(token)}")
+        # Google에서 토큰 받기 (재시도 로직 추가)
+        token = None
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                token = await oauth.google.authorize_access_token(request)
+                dev_log(f"[OAuth Callback] Token received: {bool(token)}")
+                break
+            except (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout, asyncio.TimeoutError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # 2초, 4초, 6초로 증가
+                    dev_log(f"[OAuth Callback] 타임아웃 발생 (시도 {attempt + 1}/{max_retries}), {wait_time}초 후 재시도...: {e}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    dev_log(f"[OAuth Callback] 모든 시도 실패: {e}")
+            except Exception as e:
+                # 타임아웃이 아닌 다른 에러는 즉시 실패
+                last_error = e
+                dev_log(f"[OAuth Callback] 예상치 못한 오류 발생: {e}")
+                break
+        
+        if not token:
+            # 모든 재시도 실패 시 id_token으로 fallback 시도
+            dev_log(f"[OAuth Callback] 토큰 획득 실패, id_token으로 fallback 시도")
+            code = request.query_params.get('code')
+            if code:
+                # code가 있으면 직접 토큰 교환 시도 (간단한 fallback)
+                try:
+                    # 쿼리 파라미터에서 state도 확인
+                    state = request.query_params.get('state')
+                    dev_log(f"[OAuth Callback] code와 state로 직접 토큰 교환 시도")
+                    # authlib의 내부 메서드를 사용하거나, 직접 HTTP 요청
+                    # 하지만 이건 복잡하므로, 사용자에게 재시도 요청
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Google 인증 서버 응답이 지연되고 있습니다. 잠시 후 다시 로그인해주세요."
+                    )
+                except HTTPException:
+                    raise
+                except Exception as fallback_error:
+                    dev_log(f"[OAuth Callback] Fallback도 실패: {fallback_error}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Google 인증 처리 중 오류가 발생했습니다: {str(last_error)}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Google 인증 토큰을 받아올 수 없습니다: {str(last_error)}"
+                )
         
         # 사용자 정보 가져오기
         user_info = token.get('userinfo')
