@@ -194,7 +194,7 @@ class S3Service:
         Args:
             file_path: 업로드할 아카이브 파일 경로
             camera_id: 카메라 ID
-            segment_start: 세그먼트 시작 시간
+            segment_start: 세그먼트 시작 시간 (KST 또는 timezone-aware)
         
         Returns:
             S3 URL (성공 시) 또는 None (실패 시)
@@ -208,8 +208,18 @@ class S3Service:
             return None
         
         try:
+            # segment_start를 KST로 명시적으로 변환 (HLS 생성기에서 KST로 생성했으므로)
+            kst = timezone(timedelta(hours=9))
+            if segment_start.tzinfo is None:
+                # naive datetime이면 KST로 가정 (HLS 생성기에서 KST로 생성했으므로)
+                segment_start_kst = segment_start.replace(tzinfo=kst)
+            else:
+                # timezone-aware면 KST로 변환
+                segment_start_kst = segment_start.astimezone(kst)
+            
             # S3 키 생성: archives/{camera_id}/{YYYY}/{MM}/{DD}/archive_{timestamp}.mp4
-            s3_key = f"archives/{camera_id}/{segment_start.strftime('%Y/%m/%d')}/{file_path.name}"
+            # KST 기준으로 경로 생성하여 워커와 일치시킴
+            s3_key = f"archives/{camera_id}/{segment_start_kst.strftime('%Y/%m/%d')}/{file_path.name}"
             
             # 파일 업로드
             file_size_mb = file_path.stat().st_size / (1024 * 1024)

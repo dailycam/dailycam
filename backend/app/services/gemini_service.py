@@ -31,7 +31,7 @@ class GeminiService:
     변경 포인트:
       - timeline_observations 최대 400개, safety_observations 최대 150개로 잘라서 사용
       - metadata JSON은 pretty-print 대신 compact 형식으로 전송해 토큰 절감
-      - 비디오 최적화(_optimize_video) 유지: 480p / 1fps로 다운샘플링
+      - 비디오 최적화(_optimize_video) 유지: 480p / 15fps로 다운샘플링 (원본 30fps 기준)
     """
 
     # 메타데이터 상한 (토큰/시간 절감용)
@@ -333,8 +333,8 @@ class GeminiService:
         """
         비디오 최적화: 해상도 축소 및 FPS 조정
         - 해상도: 높이 480px (비율 유지)
-        - FPS: 1fps (초당 1프레임)
-        - 이미 충분히 낮은 경우(높이 <=480, fps <=2)는 원본 사용
+        - FPS: 15fps (초당 15프레임, 원본 30fps에서 다운샘플링)
+        - 이미 충분히 낮은 경우(높이 <=480, fps <=15)는 원본 사용
         - FFmpeg를 사용하여 moov atom을 파일 시작 부분에 배치 (faststart)
         """
         print("[비디오 최적화] 전처리 시작...")
@@ -359,10 +359,10 @@ class GeminiService:
             cap.release()
 
             target_height = 480
-            target_fps = 1.0
+            target_fps = 15.0  # 원본 30fps에서 15fps로 다운샘플링
 
-            # 이미 최적화된 상태면 패스
-            if orig_height <= target_height and orig_fps <= 2:
+            # 이미 최적화된 상태면 패스 (15fps 이하이면 원본 사용)
+            if orig_height <= target_height and orig_fps <= 15.0:
                 print(
                     f"[비디오 최적화] ✅ 이미 최적화된 상태 ({orig_width}x{orig_height}, {orig_fps}fps)"
                 )
