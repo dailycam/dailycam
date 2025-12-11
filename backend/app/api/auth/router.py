@@ -39,25 +39,70 @@ oauth.register(
     }
 )
 
+# httpx 타임아웃 설정 (Google OAuth 서버 연결용)
+import httpx
+def _configure_oauth_timeout():
+    """OAuth 클라이언트의 httpx 클라이언트에 타임아웃 설정"""
+    try:
+        # 전체 타임아웃 30초, 연결 타임아웃 10초
+        timeout = httpx.Timeout(30.0, connect=10.0)
+        
+        # OAuth 클라이언트의 httpx 클라이언트에 타임아웃 설정
+        if hasattr(oauth.google, 'client') and oauth.google.client:
+            oauth.google.client.timeout = timeout
+        elif hasattr(oauth.google, '_client') and oauth.google._client:
+            oauth.google._client.timeout = timeout
+        elif hasattr(oauth.google, 'http_client') and oauth.google.http_client:
+            oauth.google.http_client.timeout = timeout
+    except Exception as e:
+        dev_log(f"[OAuth 설정] 타임아웃 설정 중 오류 (무시): {e}")
+
+# 초기 설정 시도
+_configure_oauth_timeout()
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
-    try:
-        # BACKEND_URL을 사용하여 명시적으로 redirect_uri 생성
-        BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-        redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
-        
-        return await oauth.google.authorize_redirect(request, redirect_uri)
-    except Exception as e:
-        error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
-        )
+    # BACKEND_URL을 사용하여 명시적으로 redirect_uri 생성
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+    redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
+    
+    # 타임아웃 설정 확인
+    _configure_oauth_timeout()
+    
+    # 재시도 로직 추가
+    max_retries = 2
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            return await oauth.google.authorize_redirect(request, redirect_uri)
+        except (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout, asyncio.TimeoutError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2  # 2초, 4초로 증가
+                dev_log(f"[Google Login] 타임아웃 발생 (시도 {attempt + 1}/{max_retries}), {wait_time}초 후 재시도...: {e}")
+                await asyncio.sleep(wait_time)
+            else:
+                error_msg = f"Google 로그인 타임아웃: {repr(e)}"
+                print(error_msg)
+                dev_log(f"[Google Login] 모든 시도 실패: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Google 인증 서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요."
+                )
+        except Exception as e:
+            # 타임아웃이 아닌 다른 에러는 즉시 실패
+            error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            dev_log(f"[Google Login] 오류 발생: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
+            )
 
 
 @router.get("/google/callback")
