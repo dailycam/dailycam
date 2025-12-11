@@ -67,37 +67,45 @@ def create_app() -> FastAPI:
     # ----------------------------------------------------
     # CORS 설정 (라우터 등록 전에 먼저 설정해야 함)
     # ----------------------------------------------------
-    # 환경 변수에서 CORS 허용 도메인 읽기 (콤마로 구분)
-    cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
-    origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+    # 워커 모드인지 확인 (워커는 웹 서버가 아니므로 CORS 불필요)
+    # WORKER_ID 환경 변수가 있으면 워커 모드로 간주
+    is_worker_mode = os.getenv("WORKER_ID") is not None
     
-    # 개발 환경에서만 로컬호스트 자동 추가
-    is_development = os.getenv("ENVIRONMENT", "development") != "production"
-    if is_development:
-        default_origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ]
-        # 중복 제거하여 합치기
-        allow_origins = list(set(origins + default_origins))
-        print(f"🌐 CORS 허용 도메인 (개발 모드): {allow_origins}")
+    if is_worker_mode:
+        # 워커 모드에서는 CORS 설정 스킵
+        print("🔧 워커 모드: CORS 설정 스킵 (HTTP 요청을 받지 않으므로 불필요)")
     else:
-        # 프로덕션에서는 환경 변수만 사용
-        if not origins:
-            raise ValueError(
-                "프로덕션 환경에서는 CORS_ALLOWED_ORIGINS 환경 변수를 반드시 설정해야 합니다."
-            )
-        allow_origins = origins
-        print(f"🌐 CORS 허용 도메인 (프로덕션): {allow_origins}")
+        # 환경 변수에서 CORS 허용 도메인 읽기 (콤마로 구분)
+        cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+        origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+        
+        # 개발 환경에서만 로컬호스트 자동 추가
+        is_development = os.getenv("ENVIRONMENT", "development") != "production"
+        if is_development:
+            default_origins = [
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+            ]
+            # 중복 제거하여 합치기
+            allow_origins = list(set(origins + default_origins))
+            print(f"🌐 CORS 허용 도메인 (개발 모드): {allow_origins}")
+        else:
+            # 프로덕션에서는 환경 변수만 사용
+            if not origins:
+                raise ValueError(
+                    "프로덕션 환경에서는 CORS_ALLOWED_ORIGINS 환경 변수를 반드시 설정해야 합니다."
+                )
+            allow_origins = origins
+            print(f"🌐 CORS 허용 도메인 (프로덕션): {allow_origins}")
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+            allow_headers=["*"],
+            expose_headers=["*"],
+        )
 
     # 세션 미들웨어 추가 (OAuth에 필요)
     # 워커에서는 세션 미들웨어가 필요 없으므로 환경 변수가 없어도 기본값 사용
