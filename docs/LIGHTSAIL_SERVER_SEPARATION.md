@@ -125,6 +125,49 @@ docker exec -it dailycam-worker-1 python -c "from app.database.session import te
 
 ---
 
+---
+
+## 🌐 Nginx 설정 구조
+
+### 서버별 역할
+
+#### www.dailycam.net (메인 서버)
+- **역할**: 프론트엔드 + API 서버
+- **Nginx 설정**: `nginx/nginx.main.conf`
+- **기능**:
+  - 프론트엔드 정적 파일 서빙
+  - API 요청을 FastAPI로 프록시
+  - HLS 스트림 요청을 `stream.dailycam.net`으로 프록시
+
+#### stream.dailycam.net (스트리밍 서버)
+- **역할**: HLS 스트림만 제공
+- **Nginx 설정**: `nginx/nginx.streaming.conf`
+- **기능**:
+  - HLS 스트림 엔드포인트만 제공 (`/api/live-monitoring/hls/`)
+  - 프론트엔드 없음 (루트 경로는 404)
+  - CORS 헤더로 `www.dailycam.net`에서 접근 허용
+
+### 사용자 접근 흐름
+
+```
+사용자 → www.dailycam.net 접속
+  ↓
+프론트엔드 로드 (www.dailycam.net)
+  ↓
+모니터링 페이지에서 HLS 스트림 요청
+  ↓
+www.dailycam.net의 Nginx가 stream.dailycam.net으로 프록시
+  ↓
+stream.dailycam.net에서 HLS 스트림 제공
+```
+
+### Docker Compose 파일
+
+- **메인 서버**: `docker-compose.production.yml` → `nginx.main.conf` 사용
+- **스트리밍 서버**: `docker-compose.streaming.yml` → `nginx.streaming.conf` 사용
+
+---
+
 **작성일**: 2025-12-12  
-**버전**: 1.0
+**버전**: 2.0
 
