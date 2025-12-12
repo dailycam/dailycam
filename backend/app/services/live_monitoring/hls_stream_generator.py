@@ -140,14 +140,19 @@ class HLSStreamGenerator:
             # 10분 단위 아카이브 시작
             self._start_archive_streaming(concat_file)
             
-            # 프로세스 모니터링
+            # 프로세스 모니터링 (10초 간격으로 CPU 절약)
             while self.is_running:
-                await asyncio.sleep(1)
+                await asyncio.sleep(10)  # 1초 → 10초로 변경 (CPU 절약)
                 
                 # HLS 프로세스 상태 확인
-                if self.ffmpeg_process and self.ffmpeg_process.poll() is not None:
-                    print(f"[HLS 스트림] ⚠️ FFmpeg 프로세스 종료됨, 재시작...")
-                    await self._start_hls_streaming(concat_file, playlist_path, segment_pattern)
+                if self.ffmpeg_process:
+                    try:
+                        returncode = self.ffmpeg_process.poll()
+                        if returncode is not None:
+                            print(f"[HLS 스트림] ⚠️ FFmpeg 프로세스 종료됨 (exit code: {returncode}), 재시작...")
+                            await self._start_hls_streaming(concat_file, playlist_path, segment_pattern)
+                    except Exception as e:
+                        print(f"[HLS 스트림] ⚠️ 프로세스 상태 확인 오류: {e}")
                 
                 # 아카이브 10분 체크 및 교체
                 if self.archive_start_time:
