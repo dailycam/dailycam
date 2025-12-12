@@ -93,40 +93,8 @@ services:
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
     volumes:
       # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
-      - temp_videos:/app/temp_videos
-      - videos:/app/videos
-    command: python app/workers/analysis_worker.py
-    restart: unless-stopped
-    networks:
-      - dailycam-network
-
-  vlm-worker-2:
-    build: ./backend
-    container_name: dailycam-worker-2-prod
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=dailycam_user
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=dailycam
-      - PYTHONUNBUFFERED=1
-      - TZ=Asia/Seoul
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - WORKER_ID=worker-2
-      - DELETE_VIDEO_AFTER_ANALYSIS=false
-      - ENVIRONMENT=production
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
-    volumes:
-      # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
-      - temp_videos:/app/temp_videos
-      - videos:/app/videos
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
     command: python app/workers/analysis_worker.py
     restart: unless-stopped
     networks:

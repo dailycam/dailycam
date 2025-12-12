@@ -34,7 +34,7 @@ class AnalysisWorker:
         self.worker_id = worker_id
         self.gemini_service = GeminiService()
         self.is_running = False
-        self.poll_interval = 5  # 5초마다 폴링
+        self.poll_interval = 30  # 30초마다 폴링 (리소스 절약)
         
     def start(self):
         """워커 시작"""
@@ -197,7 +197,7 @@ class AnalysisWorker:
             
             # 3. 파일 크기 검증
             file_size = video_path.stat().st_size
-            min_size_mb = 1
+            min_size_mb = 0.01  # 1MB -> 0.01MB (10KB)로 완화 (최적화 영상 대응)
             
             if file_size < min_size_mb * 1024 * 1024:
                 raise ValueError(f"비디오 파일이 너무 작음: {file_size / (1024 * 1024):.2f}MB (최소 {min_size_mb}MB 필요)")
@@ -211,8 +211,7 @@ class AnalysisWorker:
             
             for attempt in range(max_retries):
                 try:
-                    with open(video_path, 'rb') as f:
-                        video_bytes = f.read()
+                    # 파일 읽기(bytes loading) 제거 - GeminiService가 직접 파일 경로를 처리함
                     
                     if attempt > 0:
                         print(f"[워커 {self.worker_id}] 🔄 Gemini VLM 분석 재시도 중... ({attempt + 1}/{max_retries})")
@@ -238,8 +237,9 @@ class AnalysisWorker:
                     else:
                         print(f"[워커 {self.worker_id}] ⚠️ 아이 생일 정보 없음 (User ID: {user_id})")
 
+                    # VLM 분석 호출 (파일 경로 전달)
                     analysis_result = await self.gemini_service.analyze_video_vlm(
-                        video_bytes=video_bytes,
+                        video_path=str(video_path),
                         content_type="video/mp4",
                         stage=None,
                         age_months=age_months
@@ -341,23 +341,20 @@ class AnalysisWorker:
                 # 클립 생성 실패해도 분석은 성공으로 처리
             
             # 8. S3 아카이브 삭제 (분석 완료 후 즉시 삭제 - 비용 절감)
-            # 클립 생성 성공/실패와 관계없이 분석 완료 후 즉시 삭제
-            from app.services.s3_service import S3Service
-            s3_service = S3Service()
-            if s3_service.is_enabled():
-                # segment_start를 사용하여 S3 키 생성
-                segment_start_utc = segment_analysis.segment_start
-                if segment_start_utc.tzinfo is None:
-                    segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
-                
-                delete_success = s3_service.delete_archive(
-                    camera_id=job.camera_id,
-                    segment_start=segment_start_utc
-                )
-                if delete_success:
-                    print(f"[워커 {self.worker_id}] 🗑️ S3 아카이브 삭제 완료 (비용 절감)")
-                else:
-                    print(f"[워커 {self.worker_id}] ⚠️ S3 아카이브 삭제 실패 (수동 확인 필요)")
+            # 주의: 원본 영상을 보관하려면 이 로직을 비활성화하고 S3 Lifecycle 정책 사용 권장
+            # from app.services.s3_service import S3Service
+            # s3_service = S3Service()
+            # if s3_service.is_enabled():
+            #     # segment_start를 사용하여 S3 키 생성
+            #     segment_start_utc = segment_analysis.segment_start
+            #     if segment_start_utc.tzinfo is None:
+            #         segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+            #     
+            #     # delete_success = s3_service.delete_archive(
+            #     #     camera_id=job.camera_id,
+            #     #     segment_start=segment_start_utc
+            #     # )
+            #     pass
             
             # 9. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"

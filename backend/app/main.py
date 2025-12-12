@@ -211,13 +211,7 @@ def create_app() -> FastAPI:
                 
                 if not cameras_to_start:
                     print("⚠️  HLS 자동 시작 스킵: 활성 영상이 있는 카메라가 없습니다")
-                    # 폴백: 로컬 파일 시스템 확인 (camera-1 디렉토리가 있으면 시작)
-                    video_dir = Path(f"videos/camera-1")
-                    if video_dir.exists() and any(video_dir.glob("*.mp4")):
-                        print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
-                        cameras_to_start = ["camera-1"]
-                    else:
-                        return
+                    return
                 
                 print(f"📹 HLS 자동 시작 대상 카메라: {', '.join(cameras_to_start)}")
                 
@@ -225,13 +219,7 @@ def create_app() -> FastAPI:
                 print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
                 import traceback
                 print(traceback.format_exc())
-                # 폴백: camera-1 확인
-                video_dir = Path(f"videos/camera-1")
-                if video_dir.exists() and any(video_dir.glob("*.mp4")):
-                    print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
-                    cameras_to_start = ["camera-1"]
-                else:
-                    return
+                return
             
             # 짧은 대기 후 시작 (다른 초기화 작업 완료 대기)
             await asyncio.sleep(2)
@@ -240,9 +228,10 @@ def create_app() -> FastAPI:
             for camera_id in cameras_to_start:
                 try:
                     video_dir = Path(f"videos/{camera_id}")
+                    # 디렉토리가 없으면 생성 (S3 다운로드 대비)
                     if not video_dir.exists():
-                        print(f"⚠️  HLS 자동 시작 스킵: 영상 디렉토리가 없습니다 ({video_dir})")
-                        continue
+                        print(f"📁 영상 디렉토리 생성: {video_dir}")
+                        video_dir.mkdir(parents=True, exist_ok=True)
                     
                     print(f"\n🎥 HLS 스트림 자동 시작 중: {camera_id}")
                     

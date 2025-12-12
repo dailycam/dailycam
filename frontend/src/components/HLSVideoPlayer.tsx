@@ -73,7 +73,7 @@ export default function HLSVideoPlayer({
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS Player] 에러:', data.type, data.details)
-        
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -121,8 +121,31 @@ export default function HLSVideoPlayer({
       if (onError) onError(errorMsg)
     }
 
+    // Page Visibility API 연동 (탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약)
+    const handleVisibilityChange = () => {
+      const video = videoRef.current
+      if (!hlsRef.current || !video) return
+
+      if (document.hidden) {
+        if (!video.paused) {
+          console.log('[HLS Player] 탭 비활성화: 절전 모드 진입 (스트림 중지)')
+          video.pause() // 비디오 일시정지 (이게 먼저여야 함)
+          hlsRef.current.stopLoad() // 네트워크 요청 중단
+        }
+      } else {
+        console.log('[HLS Player] 탭 활성화: 스트림 재개')
+        hlsRef.current.startLoad() // 네트워크 요청 재개
+        if (autoPlay) {
+          video.play().catch(e => console.log('자동 재생 재개 실패:', e))
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     // 클린업
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange) // 리스너 제거
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
@@ -183,7 +206,7 @@ export default function HLSVideoPlayer({
         playsInline
         controls
       />
-      
+
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-center">

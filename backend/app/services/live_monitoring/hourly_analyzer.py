@@ -102,11 +102,9 @@ class HourlyAnalysisScheduler:
             print(f"[분석 스케줄러] 분석 중: {video_path.name}")
             
             # 5. Gemini로 상세 분석
-            with open(video_path, 'rb') as f:
-                video_bytes = f.read()
-            
+
             analysis_result = await self.gemini_service.analyze_video_vlm(
-                video_bytes=video_bytes,
+                video_path=str(video_path),
                 content_type="video/mp4",
                 stage=None,  # 자동 판단
                 age_months=None  # 설정에서 가져오기 (추후 구현)

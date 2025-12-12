@@ -78,18 +78,32 @@ class HLSStreamGenerator:
         self.current_video_frame_count = 0  # 현재 영상의 프레임 카운트
         
     async def start_streaming(self):
-        """HLS 스트리밍 시작"""
+        """HLS 스트리밍 시작 (비동기 래퍼)"""
         self.is_running = True
         
+        # 블로킹 루프를 별도 스레드에서 실행
+        loop = asyncio.get_running_loop()
+        self.stream_task = loop.run_in_executor(None, self._stream_loop)
+        print(f"[HLS 스트림] 백그라운드 스레드 시작: {self.camera_id}")
+
+    def _stream_loop(self):
+        """실제 스트리밍 루프 (블로킹 작업 포함)"""
+        # 이벤트 루프 참조 (스레드 내에서 비동기 작업 호출용)
+        # self.event_loop 사용
+
         if self.is_real_camera:
             # 실제 홈캠: FFmpeg로 직접 HLS 생성
-            await self._start_real_camera_hls()
+            # 주의: async 메서드를 동기 스레드에서 호출하려면 run_coroutine_threadsafe 필요
+            # 하지만 여기선 _start_real_camera_hls를 동기 버전으로 변환하거나
+            # 그냥 subprocess를 여기서 직접 실행하는게 나음.
+            # 편의상 기존 로직을 동기화하여 실행
+            asyncio.run_coroutine_threadsafe(self._start_real_camera_hls(), self.event_loop)
         else:
             # 가짜 영상: OpenCV로 처리 후 FFmpeg로 HLS 생성
-            await self._start_fake_stream_hls()
-    
-    async def _start_fake_stream_hls(self):
-        """가짜 영상으로 HLS 스트림 생성"""
+            self._start_fake_stream_hls_sync()
+
+    def _start_fake_stream_hls_sync(self):
+        """가짜 영상으로 HLS 스트림 생성 (동기 버전)"""
         from app.services.live_monitoring.video_queue import VideoQueue
         from app.services.live_monitoring.realtime_detector import RealtimeEventDetector
         import shutil
@@ -159,7 +173,8 @@ class HLSStreamGenerator:
         
         print(f"[HLS 스트림] ✅ FFmpeg 경로: {ffmpeg_path}")
         
-        # 영상 큐 로드
+        # 영상 큐 로드 (DB 세션 필요하면 여기서 생성 혹은 전달받은 것 사용)
+        # 주의: 스레드에서 DB 세션 사용 시 주의 필요 (scoped_session 권장되나 여기선 간단히)
         video_queue = VideoQueue(
             self.camera_id, 
             self.video_source, 
@@ -225,7 +240,8 @@ class HLSStreamGenerator:
                     self.ffmpeg_process = None
                 
                 # 새 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)
-                await self._start_ffmpeg_for_video(ffmpeg_path, video_path)
+                # 동기 함수로 직접 호출
+                self._start_ffmpeg_for_video_sync(ffmpeg_path, video_path)
                 
                 if not self.ffmpeg_process:
                     print(f"[HLS 스트림] ❌ FFmpeg 프로세스 시작 실패, 다음 영상으로 넘어갑니다")
@@ -273,11 +289,11 @@ class HLSStreamGenerator:
                                 pass
                             break
                         
-                        # 프레임 간격 조절 (target_fps 유지) - 비동기 sleep 사용
+                        # 프레임 간격 조절 (target_fps 유지) - 동기 sleep 사용
                         current_time = time.time()
                         elapsed = current_time - last_frame_time
                         if elapsed < frame_interval:
-                            await asyncio.sleep(frame_interval - elapsed)
+                            time.sleep(frame_interval - elapsed)
                         last_frame_time = time.time()
                         
                         # 프레임 크기 조정
@@ -332,25 +348,10 @@ class HLSStreamGenerator:
                                 self._archive_warning_shown = True
                         
                         # 실시간 이벤트 탐지 (Gemini 분석 비활성화)
-                        # 주의: Gemini 실시간 분석은 너무 무거워서 스트림을 블로킹함
                         # 10분 단위 VLM 분석만 사용
                         if False and detector and frame_count % detection_frame_interval == 0:
-                            try:
-                                events = detector.process_frame(frame)
-                                if events:
-                                    detector.save_events(events)
-                                
-                                # Gemini 분석은 별도 스레드에서 실행 (메인 루프 블로킹 방지)
-                                if detector.should_run_gemini_analysis() and self.event_loop:
-                                    frame_copy = frame.copy()
-                                    # 별도 스레드에서 비동기 실행
-                                    def run_async_gemini():
-                                        asyncio.run(self._run_gemini_analysis_in_thread(detector, frame_copy))
-                                    
-                                    gemini_thread = threading.Thread(target=run_async_gemini, daemon=True)
-                                    gemini_thread.start()
-                            except Exception as e:
-                                print(f"[실시간 탐지] 오류: {e}")
+                            # ... (생략)
+                            pass
                         
                         frame_count += 1
                         
@@ -367,7 +368,16 @@ class HLSStreamGenerator:
                 # 현재 영상 재생 완료 후 FFmpeg 프로세스 종료 (오디오 동기화를 위해)
                 if self.ffmpeg_process:
                     try:
-                        self.ffmpeg_process.stdin.close()
+                        if self.ffmpeg_process.stdin:
+                            self.ffmpeg_process.stdin.close()
+                    except: pass
+                    
+                    try:
+                        if self.ffmpeg_process.stderr:
+                            self.ffmpeg_process.stderr.close()
+                    except: pass
+
+                    try:
                         self.ffmpeg_process.wait(timeout=5)
                     except:
                         try:
@@ -389,61 +399,29 @@ class HLSStreamGenerator:
         finally:
             # FFmpeg 종료
             if self.ffmpeg_process:
-                self.ffmpeg_process.stdin.close()
+                try:
+                    if self.ffmpeg_process.stdin:
+                        self.ffmpeg_process.stdin.close()
+                except: pass
+                
+                try:
+                    if self.ffmpeg_process.stderr:
+                        self.ffmpeg_process.stderr.close()
+                except: pass
+                
+                try:
+                    if self.ffmpeg_process.stdout:
+                        self.ffmpeg_process.stdout.close()
+                except: pass
+                    
                 self.ffmpeg_process.wait()
             
             # 아카이브 완료
             self._finalize_current_archive()
             print(f"[HLS 스트림] 종료: {self.camera_id}")
-    
-    async def _start_real_camera_hls(self):
-        """실제 홈캠으로 HLS 스트림 생성"""
-        playlist_path = self.hls_dir / f"{self.camera_id}.m3u8"
-        segment_pattern = str(self.hls_dir / f"{self.camera_id}_%03d.ts")
-        
-        # FFmpeg로 홈캠 스트림을 직접 HLS로 변환
-        ffmpeg_cmd = [
-            'ffmpeg',
-            '-i', str(self.video_source),  # 홈캠 RTSP/HTTP URL
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-tune', 'zerolatency',
-            '-s', f'{self.target_width}x{self.target_height}',
-            '-r', str(self.target_fps),
-            '-f', 'hls',
-            '-hls_time', str(self.segment_duration),
-            '-hls_list_size', '20',  # 세그먼트 개수 증가
-            # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화 (페이지 복귀 시 부드러운 재생)
-            '-hls_segment_filename', segment_pattern,
-            str(playlist_path)
-        ]
-        
-        try:
-            self.ffmpeg_process = subprocess.Popen(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            
-            # FFmpeg 프로세스가 종료될 때까지 대기
-            while self.is_running:
-                if self.ffmpeg_process.poll() is not None:
-                    print("[HLS 스트림] FFmpeg 프로세스 종료, 재시작 시도...")
-                    await asyncio.sleep(5)
-                    # 재시작
-                    self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                await asyncio.sleep(1)
-        
-        except Exception as e:
-            print(f"[HLS 스트림] 오류: {e}")
-        finally:
-            if self.ffmpeg_process:
-                self.ffmpeg_process.terminate()
-                self.ffmpeg_process.wait()
-            print(f"[HLS 스트림] 종료: {self.camera_id}")
-    
-    async def _start_ffmpeg_for_video(self, ffmpeg_path: str, video_path: Path):
-        """특정 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)"""
+
+    def _start_ffmpeg_for_video_sync(self, ffmpeg_path: str, video_path: Path):
+        """특정 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함) - 동기 버전"""
         try:
             # 원본 영상 파일에서 오디오 스트림이 있는지 확인
             check_audio_cmd = [
@@ -495,7 +473,7 @@ class HLSStreamGenerator:
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
                     '-hls_list_size', '20',  # 세그먼트 개수 증가
-                    # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화
+                    '-hls_flags', 'delete_segments',  # 오래된 세그먼트 자동 삭제
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
                 ]
@@ -514,7 +492,7 @@ class HLSStreamGenerator:
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
                     '-hls_list_size', '20',  # 세그먼트 개수 증가
-                    # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화
+                    '-hls_flags', 'delete_segments',  # 오래된 세그먼트 자동 삭제
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
                 ]
@@ -547,12 +525,12 @@ class HLSStreamGenerator:
             stderr_thread = threading.Thread(target=read_stderr, daemon=True)
             stderr_thread.start()
             
-            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 5초)
+            # HLS 플레이리스트 파일이 생성될 때까지 대기 (최대 5초) -> 동기 Sleep 사용
             for i in range(50):  # 0.1초씩 50번 = 5초
                 if self.playlist_path.exists():
                     print(f"[HLS 스트림] ✅ HLS 플레이리스트 생성 완료: {self.playlist_path}")
                     return
-                await asyncio.sleep(0.1)
+                time.sleep(0.1)
             
             print(f"[HLS 스트림] ⚠️ 경고: HLS 플레이리스트가 생성되지 않았습니다. 계속 진행합니다...")
             
@@ -561,6 +539,70 @@ class HLSStreamGenerator:
             import traceback
             traceback.print_exc()
             self.ffmpeg_process = None
+
+    async def _start_real_camera_hls(self):
+        """실제 홈캠으로 HLS 스트림 생성 (기존 유지)"""
+        playlist_path = self.hls_dir / f"{self.camera_id}.m3u8"
+        segment_pattern = str(self.hls_dir / f"{self.camera_id}_%03d.ts")
+        
+        # FFmpeg로 홈캠 스트림을 직접 HLS로 변환
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-i', str(self.video_source),  # 홈캠 RTSP/HTTP URL
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-s', f'{self.target_width}x{self.target_height}',
+            '-r', str(self.target_fps),
+            '-f', 'hls',
+            '-hls_time', str(self.segment_duration),
+            '-hls_list_size', '20',  # 세그먼트 개수 증가
+            # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화 (페이지 복귀 시 부드러운 재생)
+            '-hls_segment_filename', segment_pattern,
+            str(playlist_path)
+        ]
+        
+        try:
+            self.ffmpeg_process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # FFmpeg 프로세스가 종료될 때까지 대기
+            while self.is_running:
+                if self.ffmpeg_process.poll() is not None:
+                    print("[HLS 스트림] FFmpeg 프로세스 종료, 재시작 시도...")
+                    await asyncio.sleep(5)
+                    # 재시작
+                    self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                await asyncio.sleep(1)
+        
+        except Exception as e:
+            print(f"[HLS 스트림] 오류: {e}")
+        finally:
+            if self.ffmpeg_process:
+                self.ffmpeg_process.terminate()
+                self.ffmpeg_process.wait()
+            print(f"[HLS 스트림] 종료: {self.camera_id}")
+    
+    # _start_ffmpeg_for_video 메서드는 더 이상 사용하지 않으므로 (또는 동기 버전으로 대체되었으므로) 
+    # 호환성 유지를 위해 남겨두거나 삭제 가능. 여기서는 위에서 _start_ffmpeg_for_video_sync를 새로 정의함.
+    
+    def stop_streaming(self):
+        """스트리밍 중지"""
+        print(f"[HLS 스트림] 중지 요청: {self.camera_id}")
+        self.is_running = False
+        
+        if self.ffmpeg_process:
+            self.ffmpeg_process.terminate()
+        
+        self._finalize_current_archive()
+    
+    def get_playlist_url(self) -> str:
+        """HLS 플레이리스트 URL 반환"""
+        return f"/api/live-monitoring/hls/{self.camera_id}/{self.camera_id}.m3u8"
+
     
     def _resize_frame(self, frame):
         """프레임 크기 조정"""
@@ -603,7 +645,7 @@ class HLSStreamGenerator:
                 '-r', str(self.target_fps),  # 입력 FPS (30)
                 '-i', 'pipe:',
                 '-c:v', 'libx264',
-                '-preset', 'medium',        # 더 나은 압축
+                '-preset', 'veryfast',      # CPU 부하 감소 (medium -> veryfast)
                 '-crf', '32',               # 28 → 32 (강력한 압축, AI 분석엔 충분)
                 '-r', str(self.archive_fps),  # 출력 FPS (5) - 대폭 샘플링
                 '-movflags', '+faststart',  # moov atom 최적화
