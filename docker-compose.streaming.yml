@@ -59,6 +59,7 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
+      - ENABLE_HLS_STREAMING=true  # 스트리밍 서버에서는 HLS 스트림 활성화
     volumes:
       - temp_videos:/app/temp_videos
       - videos:/app/videos

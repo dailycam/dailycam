@@ -208,59 +208,66 @@ async def upload_camera_video(
     print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초)")
     
     # 영상 업로드 후 자동으로 HLS 스트림 시작 (백그라운드에서 계속 실행)
-    try:
-        from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
-        import asyncio
-        
-        # 이미 스트림이 실행 중이면 재시작 (새 영상 반영)
-        if camera_id in active_hls_streams:
-            print(f"[비디오 업로드] 기존 스트림 재시작 중: {camera_id}")
-            generator = active_hls_streams[camera_id]
-            generator.stop_streaming()
-            
-            if camera_id in hls_stream_tasks:
-                task = hls_stream_tasks[camera_id]
-                if not task.done():
-                    task.cancel()
-                del hls_stream_tasks[camera_id]
-            del active_hls_streams[camera_id]
-        
-        # 새 스트림 시작 (백그라운드 태스크)
-        from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
-        
-        video_dir = Path(f"videos/{camera_id}")
-        output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
-        
-        # 이벤트 루프 가져오기 (비동기 컨텍스트에서)
+    # 환경 변수로 제어: ENABLE_HLS_STREAMING=true일 때만 실행 (스트리밍 서버에서만)
+    import os
+    enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
+    
+    if not enable_hls_streaming:
+        print(f"[비디오 업로드] ⏭️ HLS 스트림 자동 시작 스킵: ENABLE_HLS_STREAMING=false (메인 서버에서는 비활성화)")
+    else:
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # 실행 중인 루프가 없으면 새로 생성
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        generator = HLSStreamGenerator(
-            camera_id=camera_id,
-            video_source=video_dir,
-            output_dir=output_dir,
-            is_real_camera=False,
-            segment_duration=10,
-            enable_realtime_detection=True,
-            event_loop=loop,
-            db_session=db,
-            user_id=user_id
-        )
-        
-        active_hls_streams[camera_id] = generator
-        task = asyncio.create_task(generator.start_streaming())
-        hls_stream_tasks[camera_id] = task
-        
-        print(f"[비디오 업로드] ✅ HLS 스트림 자동 시작됨 (백그라운드 실행): {camera_id}")
-        
-    except Exception as e:
-        print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
-        import traceback
-        traceback.print_exc()
+            from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
+            import asyncio
+            
+            # 이미 스트림이 실행 중이면 재시작 (새 영상 반영)
+            if camera_id in active_hls_streams:
+                print(f"[비디오 업로드] 기존 스트림 재시작 중: {camera_id}")
+                generator = active_hls_streams[camera_id]
+                generator.stop_streaming()
+                
+                if camera_id in hls_stream_tasks:
+                    task = hls_stream_tasks[camera_id]
+                    if not task.done():
+                        task.cancel()
+                    del hls_stream_tasks[camera_id]
+                del active_hls_streams[camera_id]
+            
+            # 새 스트림 시작 (백그라운드 태스크)
+            from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
+            
+            video_dir = Path(f"videos/{camera_id}")
+            output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+            
+            # 이벤트 루프 가져오기 (비동기 컨텍스트에서)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            generator = HLSStreamGenerator(
+                camera_id=camera_id,
+                video_source=video_dir,
+                output_dir=output_dir,
+                is_real_camera=False,
+                segment_duration=10,
+                enable_realtime_detection=True,
+                event_loop=loop,
+                db_session=db,
+                user_id=user_id
+            )
+            
+            active_hls_streams[camera_id] = generator
+            task = asyncio.create_task(generator.start_streaming())
+            hls_stream_tasks[camera_id] = task
+            
+            print(f"[비디오 업로드] ✅ HLS 스트림 자동 시작됨 (백그라운드 실행): {camera_id}")
+            
+        except Exception as e:
+            print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
+            import traceback
+            traceback.print_exc()
     
     return {
         "id": camera_video.id,

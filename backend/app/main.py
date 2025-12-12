@@ -168,8 +168,15 @@ def create_app() -> FastAPI:
         asyncio.create_task(billing_worker())
 
         # ✅ 3) HLS 스트림 자동 시작 (DB에 활성 영상이 있는 모든 카메라)
+        # 환경 변수로 제어: ENABLE_HLS_STREAMING=true일 때만 실행 (스트리밍 서버에서만)
+        enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
+        
         async def auto_start_hls_streams():
             """서버 시작 시 자동으로 HLS 스트림 시작 (DB에 활성 영상이 있는 모든 카메라)"""
+            
+            if not enable_hls_streaming:
+                print("⏭️  HLS 자동 시작 스킵: ENABLE_HLS_STREAMING=false (메인 서버에서는 비활성화)")
+                return
             
             # DB에서 활성 영상이 있는 모든 카메라 조회 (동기 DB 작업을 별도 스레드에서 실행)
             def get_cameras_with_active_videos():
