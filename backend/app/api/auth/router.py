@@ -5,12 +5,15 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.httpx_client import AsyncOAuth2Client
 from starlette.config import Config
 from starlette.requests import Request
 from datetime import datetime, timedelta
 from typing import Optional
 import os
 import traceback
+import httpx
+import asyncio
 
 from app.database import get_db
 from app.models.user import User
@@ -26,7 +29,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-# Google OAuth 클라이언트 등록
+# Google OAuth 클라이언트 등록 (타임아웃 설정 포함)
 oauth.register(
     name='google',
     client_id=GOOGLE_CLIENT_ID,
@@ -34,7 +37,14 @@ oauth.register(
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={
         'scope': 'openid email profile'
-    }
+    },
+    # httpx 클라이언트에 타임아웃 설정 추가
+    client=AsyncOAuth2Client(
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        timeout=httpx.Timeout(30.0, connect=10.0),
+        limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+    )
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -43,19 +53,36 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
-    try:
-        # BACKEND_URL을 사용하여 명시적으로 redirect_uri 생성
-        BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-        redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
-        
-        return await oauth.google.authorize_redirect(request, redirect_uri)
-    except Exception as e:
-        error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
-        )
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+    redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
+    
+    # 최대 3번 재시도
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            return await oauth.google.authorize_redirect(request, redirect_uri)
+        except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            if attempt < max_retries - 1:
+                print(f"[OAuth] 연결 타임아웃, {retry_delay}초 후 재시도 ({attempt + 1}/{max_retries})")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # 지수 백오프
+                continue
+            else:
+                error_msg = f"Google 로그인 오류 (재시도 {max_retries}회 실패): {repr(e)}"
+                print(error_msg)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Google OAuth 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요."
+                )
+        except Exception as e:
+            error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
+            )
 
 
 @router.get("/google/callback")

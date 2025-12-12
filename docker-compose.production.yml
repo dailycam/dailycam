@@ -61,10 +61,9 @@ services:
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
     volumes:
-      # 프로덕션에서는 영상을 S3에 저장하고 로컬은 임시 버퍼로만 사용
-      - temp_videos:/app/temp_videos  # Docker 볼륨 사용 (컨테이너 간 공유)
-      - videos:/app/videos            # Docker 볼륨 사용 (컨테이너 간 공유)
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
     restart: unless-stopped
     networks:
       - dailycam-network
