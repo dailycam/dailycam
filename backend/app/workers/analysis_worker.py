@@ -34,7 +34,7 @@ class AnalysisWorker:
         self.worker_id = worker_id
         self.gemini_service = GeminiService()
         self.is_running = False
-        self.poll_interval = 30  # 30초마다 폴링 (리소스 절약)
+        self.poll_interval = 20  # 20초마다 폴링
         
     def start(self):
         """워커 시작"""
