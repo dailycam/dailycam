@@ -61,6 +61,7 @@ services:
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
       - ENABLE_HLS_STREAMING=false  # 메인 서버에서는 HLS 스트림 비활성화
+      - STREAMING_SERVER_URL=https://stream.dailycam.net  # 스트리밍 서버 URL
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos

@@ -1,12 +1,15 @@
 """Camera settings API routes"""
 
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, Request
+from starlette.requests import Request
 from sqlalchemy.orm import Session
 from pathlib import Path
 from datetime import datetime
 from typing import List
 import cv2
 import shutil
+import os
+import httpx
 
 from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
@@ -103,6 +106,7 @@ async def create_camera(
 async def upload_camera_video(
     camera_id: str,
     video: UploadFile = File(..., description="업로드할 비디오 파일"),
+    request: Request,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
@@ -207,14 +211,12 @@ async def upload_camera_video(
     
     print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초)")
     
-    # 영상 업로드 후 자동으로 HLS 스트림 시작 (백그라운드에서 계속 실행)
-    # 환경 변수로 제어: ENABLE_HLS_STREAMING=true일 때만 실행 (스트리밍 서버에서만)
-    import os
+    # 영상 업로드 후 자동으로 HLS 스트림 시작
     enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
+    streaming_server_url = os.getenv("STREAMING_SERVER_URL", "https://stream.dailycam.net")
     
-    if not enable_hls_streaming:
-        print(f"[비디오 업로드] ⏭️ HLS 스트림 자동 시작 스킵: ENABLE_HLS_STREAMING=false (메인 서버에서는 비활성화)")
-    else:
+    if enable_hls_streaming:
+        # 스트리밍 서버에서 직접 시작 (로컬 실행)
         try:
             from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
             import asyncio
@@ -266,6 +268,60 @@ async def upload_camera_video(
             
         except Exception as e:
             print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        # 메인 서버에서는 스트리밍 서버의 API를 호출
+        try:
+            import asyncio
+            
+            async def call_streaming_server():
+                """스트리밍 서버의 HLS 시작 API 호출"""
+                try:
+                    url = f"{streaming_server_url}/api/live-monitoring/start-hls-stream/{camera_id}"
+                    params = {
+                        "enable_analysis": True,
+                        "enable_realtime_detection": True
+                    }
+                    
+                    # 쿠키 가져오기 (인증용)
+                    cookies = {}
+                    if request:
+                        cookies = dict(request.cookies)
+                    
+                    headers = {}
+                    if request and "authorization" in request.headers:
+                        headers["authorization"] = request.headers["authorization"]
+                    
+                    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                        response = await client.post(
+                            url, 
+                            params=params,
+                            cookies=cookies,
+                            headers=headers
+                        )
+                        if response.status_code == 200:
+                            print(f"[비디오 업로드] ✅ 스트리밍 서버에서 HLS 스트림 시작 요청 성공: {camera_id}")
+                        else:
+                            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 HLS 시작 요청 실패: {response.status_code} - {response.text}")
+                except Exception as e:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 실패: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # 비동기로 실행 (백그라운드)
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # 백그라운드 태스크로 실행
+            asyncio.create_task(call_streaming_server())
+            print(f"[비디오 업로드] 📡 스트리밍 서버로 HLS 시작 요청 전송: {camera_id}")
+            
+        except Exception as e:
+            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 설정 실패: {e}")
             import traceback
             traceback.print_exc()
     
