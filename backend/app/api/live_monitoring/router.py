@@ -1,11 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, Response, FileResponse
 from pathlib import Path
 from datetime import datetime, timedelta
 import asyncio
 import cv2
 import numpy as np
-from typing import Dict
+from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -148,15 +148,46 @@ async def start_stream(
     }
 
 
+def get_current_user_id_optional(request: Request) -> Optional[int]:
+    """선택적 사용자 ID 가져오기 (인증 실패 시 None 반환)"""
+    try:
+        from app.utils.auth_utils import get_current_user_id
+        # get_current_user_id는 Depends이므로 직접 호출할 수 없음
+        # 대신 토큰을 직접 파싱
+        from jose import jwt, JWTError
+        import os
+        
+        # 쿠키에서 토큰 가져오기
+        token = request.cookies.get("access_token")
+        if not token:
+            # Authorization 헤더에서 가져오기
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        
+        if token:
+            secret_key = os.getenv("JWT_SECRET_KEY")
+            if secret_key:
+                try:
+                    payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+                    return payload.get("user_id")
+                except JWTError:
+                    pass
+        return None
+    except Exception:
+        return None
+
+
 @router.post("/start-hls-stream/{camera_id}")
 async def start_hls_stream(
     camera_id: str,
+    request: Request,
     camera_url: str = Query(None, description="홈캠 RTSP/HTTP URL (실제 카메라인 경우)"),
     enable_analysis: bool = Query(True, description="10분 단위 분석 활성화"),
     enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
     age_months: int = Query(None, description="아이의 개월 수"),
-    db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    s3_keys: Optional[str] = Query(None, description="S3 키 목록 (쉼표로 구분, 메인 서버에서 전달 시 DB 조회 생략)"),
+    db: Session = Depends(get_db)
 ):
     """
     HLS 스트림 시작 (진짜 실시간 스트림)
@@ -196,58 +227,95 @@ async def start_hls_stream(
         video_source = camera_url
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     else:
-        # 사용자 업로드 영상 (DB 기반 확인)
+        # 사용자 업로드 영상
         from app.models.camera_setting import CameraSetting, CameraVideo
+        from app.services.s3_service import S3Service
         
         video_dir = Path(f"videos/{camera_id}")
         if not video_dir.exists():
             video_dir.mkdir(parents=True, exist_ok=True)
         
-        # DB에서 활성화된 영상 확인
-        camera_setting = db.query(CameraSetting).filter(
-            CameraSetting.camera_id == camera_id,
-            CameraSetting.user_id == user_id,
-            CameraSetting.is_active == True
-        ).first()
-        
-        if not camera_setting:
-            raise HTTPException(
-                400, 
-                "카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
-            )
-        
-        active_videos_list = db.query(CameraVideo).filter(
-            CameraVideo.camera_setting_id == camera_setting.id,
-            CameraVideo.is_active == True
-        ).all()
-        
-        if len(active_videos_list) == 0:
-            raise HTTPException(
-                400, 
-                "활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
-            )
-        
-        # S3에서 영상 다운로드 (스트리밍 서버에서 실행 시)
-        from app.services.s3_service import S3Service
+        user_id = get_current_user_id_optional(request)
         s3_service = S3Service()
+        active_videos_list = []
         
-        if s3_service.is_enabled():
-            print(f"[HLS 스트림 시작] S3에서 영상 다운로드 시작: {camera_id}")
-            for camera_video in active_videos_list:
-                if camera_video.s3_key:
-                    # S3 키가 있으면 S3에서 다운로드
-                    local_video_path = video_dir / camera_video.filename
-                    if not local_video_path.exists():
-                        # 파일이 없으면 S3에서 다운로드
-                        success = s3_service.download_camera_video(camera_video.s3_key, local_video_path)
-                        if not success:
-                            print(f"[HLS 스트림 시작] ⚠️ S3 다운로드 실패: {camera_video.s3_key}, 기존 파일 사용 시도")
-                    else:
-                        print(f"[HLS 스트림 시작] ✅ 로컬 파일 존재: {camera_video.filename}")
+        # S3 키가 직접 전달된 경우 (메인 서버에서 호출, DB 조회 생략)
+        if s3_keys and s3_service.is_enabled():
+            print(f"[HLS 스트림 시작] S3 키 직접 전달됨 (DB 조회 생략): {s3_keys}")
+            s3_key_list = [key.strip() for key in s3_keys.split(",") if key.strip()]
+            
+            for s3_key in s3_key_list:
+                # S3 키에서 파일명 추출 (예: videos/camera-1/filename.mp4 -> filename.mp4)
+                filename = s3_key.split("/")[-1]
+                local_video_path = video_dir / filename
+                
+                # S3에서 다운로드
+                if not local_video_path.exists():
+                    print(f"[HLS 스트림 시작] 📥 S3에서 다운로드 중: {s3_key}")
+                    success = s3_service.download_camera_video(s3_key, local_video_path)
+                    if not success:
+                        print(f"[HLS 스트림 시작] ❌ S3 다운로드 실패: {s3_key}")
+                        continue
                 else:
-                    print(f"[HLS 스트림 시작] ⚠️ S3 키 없음: {camera_video.filename}, 로컬 파일만 사용")
+                    print(f"[HLS 스트림 시작] ✅ 로컬 파일 존재: {filename}")
+                
+                # HLSStreamGenerator에서 사용할 수 있는 형태로 저장
+                active_videos_list.append({
+                    'filename': filename,
+                    's3_key': s3_key,
+                    'local_path': local_video_path
+                })
+            
+            if len(active_videos_list) == 0:
+                raise HTTPException(
+                    400,
+                    "S3에서 영상을 다운로드할 수 없습니다."
+                )
         else:
-            print(f"[HLS 스트림 시작] ⚠️ S3가 비활성화되어 있습니다. 로컬 파일만 사용")
+            # 기존 방식: DB에서 조회 (로컬 실행 또는 직접 호출 시)
+            if not user_id:
+                raise HTTPException(
+                    401,
+                    "인증이 필요합니다. S3 키를 직접 전달하거나 로그인해주세요."
+                )
+            
+            camera_setting = db.query(CameraSetting).filter(
+                CameraSetting.camera_id == camera_id,
+                CameraSetting.user_id == user_id,
+                CameraSetting.is_active == True
+            ).first()
+            
+            if not camera_setting:
+                raise HTTPException(
+                    400, 
+                    "카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
+                )
+            
+            active_videos_list = db.query(CameraVideo).filter(
+                CameraVideo.camera_setting_id == camera_setting.id,
+                CameraVideo.is_active == True
+            ).order_by(CameraVideo.order_index).all()
+            
+            if len(active_videos_list) == 0:
+                raise HTTPException(
+                    400, 
+                    "활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+                )
+            
+            # S3에서 영상 다운로드 (DB 조회 후)
+            if s3_service.is_enabled():
+                print(f"[HLS 스트림 시작] S3에서 영상 다운로드 시작: {camera_id}")
+                for camera_video in active_videos_list:
+                    if camera_video.s3_key:
+                        local_video_path = video_dir / camera_video.filename
+                        if not local_video_path.exists():
+                            success = s3_service.download_camera_video(camera_video.s3_key, local_video_path)
+                            if not success:
+                                print(f"[HLS 스트림 시작] ⚠️ S3 다운로드 실패: {camera_video.s3_key}")
+                    else:
+                        print(f"[HLS 스트림 시작] ⚠️ S3 키 없음: {camera_video.filename}, 로컬 파일만 사용")
+            else:
+                print(f"[HLS 스트림 시작] ⚠️ S3가 비활성화되어 있습니다. 로컬 파일만 사용")
         
         video_source = video_dir
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
@@ -256,6 +324,9 @@ async def start_hls_stream(
     loop = asyncio.get_running_loop()
     
     # HLS 스트림 생성기 생성 (DB 세션 전달)
+    # user_id 가져오기 (S3 키가 전달된 경우 None일 수 있음)
+    final_user_id = get_current_user_id_optional(request)
+    
     generator = HLSStreamGenerator(
         camera_id=camera_id,
         video_source=video_source,
@@ -266,7 +337,7 @@ async def start_hls_stream(
         age_months=age_months,
         event_loop=loop,
         db_session=db,  # DB 세션 전달
-        user_id=user_id  # 사용자 ID 전달
+        user_id=final_user_id  # 사용자 ID 전달 (None일 수 있음)
     )
     active_hls_streams[camera_id] = generator
     

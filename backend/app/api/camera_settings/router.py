@@ -291,12 +291,29 @@ async def upload_camera_video(
                 """스트리밍 서버의 HLS 시작 API 호출"""
                 try:
                     url = f"{streaming_server_url}/api/live-monitoring/start-hls-stream/{camera_id}"
+                    
+                    # 활성화된 모든 영상의 S3 키 가져오기
+                    active_videos = db.query(CameraVideo).filter(
+                        CameraVideo.camera_setting_id == camera_setting.id,
+                        CameraVideo.is_active == True
+                    ).order_by(CameraVideo.order_index).all()
+                    
+                    s3_key_list = []
+                    for video in active_videos:
+                        if video.s3_key:
+                            s3_key_list.append(video.s3_key)
+                    
                     params = {
                         "enable_analysis": True,
                         "enable_realtime_detection": True
                     }
                     
-                    # 쿠키 가져오기 (인증용)
+                    # S3 키가 있으면 파라미터로 전달 (DB 조회 생략)
+                    if s3_key_list:
+                        params["s3_keys"] = ",".join(s3_key_list)
+                        print(f"[비디오 업로드] 📤 S3 키 전달: {len(s3_key_list)}개")
+                    
+                    # 쿠키 가져오기 (인증용, S3 키가 없을 경우를 대비)
                     cookies = dict(request.cookies)
                     
                     headers = {}
