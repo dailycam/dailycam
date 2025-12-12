@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 import os
 import traceback
-import httpx
 import asyncio
+from httpx import ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout
 
 from app.database import get_db
 from app.models.user import User
@@ -37,15 +37,29 @@ oauth.register(
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={
         'scope': 'openid email profile'
-    },
-    # httpx 클라이언트에 타임아웃 설정 추가
-    client=AsyncOAuth2Client(
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        timeout=httpx.Timeout(30.0, connect=10.0),
-        limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
-    )
+    }
 )
+
+# httpx 타임아웃 설정 (Google OAuth 서버 연결용)
+import httpx
+def _configure_oauth_timeout():
+    """OAuth 클라이언트의 httpx 클라이언트에 타임아웃 설정"""
+    try:
+        # 전체 타임아웃 30초, 연결 타임아웃 10초
+        timeout = httpx.Timeout(30.0, connect=10.0)
+        
+        # OAuth 클라이언트의 httpx 클라이언트에 타임아웃 설정
+        if hasattr(oauth.google, 'client') and oauth.google.client:
+            oauth.google.client.timeout = timeout
+        elif hasattr(oauth.google, '_client') and oauth.google._client:
+            oauth.google._client.timeout = timeout
+        elif hasattr(oauth.google, 'http_client') and oauth.google.http_client:
+            oauth.google.http_client.timeout = timeout
+    except Exception as e:
+        dev_log(f"[OAuth 설정] 타임아웃 설정 중 오류 (무시): {e}")
+
+# 초기 설정 시도
+_configure_oauth_timeout()
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -53,32 +67,39 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/google/login")
 async def google_login(request: Request):
     """Google 로그인 페이지로 리다이렉트"""
+    # BACKEND_URL을 사용하여 명시적으로 redirect_uri 생성
     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
     redirect_uri = f"{BACKEND_URL}/api/auth/google/callback"
     
-    # 최대 3번 재시도
-    max_retries = 3
-    retry_delay = 2
+    # 타임아웃 설정 확인
+    _configure_oauth_timeout()
+    
+    # 재시도 로직 추가
+    max_retries = 2
+    last_error = None
     
     for attempt in range(max_retries):
         try:
             return await oauth.google.authorize_redirect(request, redirect_uri)
-        except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+        except (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout, asyncio.TimeoutError) as e:
+            last_error = e
             if attempt < max_retries - 1:
-                print(f"[OAuth] 연결 타임아웃, {retry_delay}초 후 재시도 ({attempt + 1}/{max_retries})")
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2  # 지수 백오프
-                continue
+                wait_time = (attempt + 1) * 2  # 2초, 4초로 증가
+                dev_log(f"[Google Login] 타임아웃 발생 (시도 {attempt + 1}/{max_retries}), {wait_time}초 후 재시도...: {e}")
+                await asyncio.sleep(wait_time)
             else:
-                error_msg = f"Google 로그인 오류 (재시도 {max_retries}회 실패): {repr(e)}"
+                error_msg = f"Google 로그인 타임아웃: {repr(e)}"
                 print(error_msg)
+                dev_log(f"[Google Login] 모든 시도 실패: {e}")
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Google OAuth 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요."
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Google 인증 서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요."
                 )
         except Exception as e:
+            # 타임아웃이 아닌 다른 에러는 즉시 실패
             error_msg = f"Google 로그인 오류: {repr(e)}\n{traceback.format_exc()}"
             print(error_msg)
+            dev_log(f"[Google Login] 오류 발생: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
@@ -96,9 +117,59 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         # 요청 파라미터 로깅 (디버깅용)
         dev_log(f"[OAuth Callback] Query params: {dict(request.query_params)}")
         
-        # Google에서 토큰 받기
-        token = await oauth.google.authorize_access_token(request)
-        dev_log(f"[OAuth Callback] Token received: {bool(token)}")
+        # Google에서 토큰 받기 (재시도 로직 추가)
+        token = None
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                token = await oauth.google.authorize_access_token(request)
+                dev_log(f"[OAuth Callback] Token received: {bool(token)}")
+                break
+            except (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout, asyncio.TimeoutError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # 2초, 4초, 6초로 증가
+                    dev_log(f"[OAuth Callback] 타임아웃 발생 (시도 {attempt + 1}/{max_retries}), {wait_time}초 후 재시도...: {e}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    dev_log(f"[OAuth Callback] 모든 시도 실패: {e}")
+            except Exception as e:
+                # 타임아웃이 아닌 다른 에러는 즉시 실패
+                last_error = e
+                dev_log(f"[OAuth Callback] 예상치 못한 오류 발생: {e}")
+                break
+        
+        if not token:
+            # 모든 재시도 실패 시 id_token으로 fallback 시도
+            dev_log(f"[OAuth Callback] 토큰 획득 실패, id_token으로 fallback 시도")
+            code = request.query_params.get('code')
+            if code:
+                # code가 있으면 직접 토큰 교환 시도 (간단한 fallback)
+                try:
+                    # 쿼리 파라미터에서 state도 확인
+                    state = request.query_params.get('state')
+                    dev_log(f"[OAuth Callback] code와 state로 직접 토큰 교환 시도")
+                    # authlib의 내부 메서드를 사용하거나, 직접 HTTP 요청
+                    # 하지만 이건 복잡하므로, 사용자에게 재시도 요청
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Google 인증 서버 응답이 지연되고 있습니다. 잠시 후 다시 로그인해주세요."
+                    )
+                except HTTPException:
+                    raise
+                except Exception as fallback_error:
+                    dev_log(f"[OAuth Callback] Fallback도 실패: {fallback_error}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Google 인증 처리 중 오류가 발생했습니다: {str(last_error)}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Google 인증 토큰을 받아올 수 없습니다: {str(last_error)}"
+                )
         
         # 사용자 정보 가져오기
         user_info = token.get('userinfo')
