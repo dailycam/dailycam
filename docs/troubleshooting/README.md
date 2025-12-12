@@ -6,6 +6,10 @@
 각 이슈는 별도의 마크다운 파일로 작성합니다.
 예: `issue_001_api_404.md`
 
+## 문서 목록
+
+- [CPU 최적화: HLS 스트리밍 성능 개선](./CPU_OPTIMIZATION_HLS_STREAMING.md) - OpenCV 제거 및 FFmpeg 직접 입력 방식으로 전환하여 CPU 사용량 30-40% 절감
+
 ## 템플릿
 - **이슈 요약**:
 - **발생 일시**:

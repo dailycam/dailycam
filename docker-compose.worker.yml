@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  vlm-worker-1:
+    build: ./backend
+    container_name: dailycam-worker-1
+    environment:
+      # 스트리밍 서버의 MySQL에 접근
+      - MYSQL_HOST=${MYSQL_REMOTE_HOST}
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_REMOTE_PASSWORD}
+      - MYSQL_DATABASE=dailycam
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_ID=worker-1
+      - DELETE_VIDEO_AFTER_ANALYSIS=false
+      - ENVIRONMENT=production
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+      - ./backend:/app
+    command: python app/workers/analysis_worker.py
+    restart: unless-stopped
+
+  vlm-worker-2:
+    build: ./backend
+    container_name: dailycam-worker-2
+    environment:
+      - MYSQL_HOST=${MYSQL_REMOTE_HOST}
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_REMOTE_PASSWORD}
+      - MYSQL_DATABASE=dailycam
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_ID=worker-2
+      - DELETE_VIDEO_AFTER_ANALYSIS=false
+      - ENVIRONMENT=production
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+      - ./backend:/app
+    command: python app/workers/analysis_worker.py
+    restart: unless-stopped
+
