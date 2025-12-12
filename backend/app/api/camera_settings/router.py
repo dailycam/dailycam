@@ -104,9 +104,9 @@ async def create_camera(
 
 @router.post("/cameras/{camera_id}/upload-video")
 async def upload_camera_video(
+    request: Request,
     camera_id: str,
     video: UploadFile = File(..., description="업로드할 비디오 파일"),
-    request: Request,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
@@ -285,12 +285,10 @@ async def upload_camera_video(
                     }
                     
                     # 쿠키 가져오기 (인증용)
-                    cookies = {}
-                    if request:
-                        cookies = dict(request.cookies)
+                    cookies = dict(request.cookies)
                     
                     headers = {}
-                    if request and "authorization" in request.headers:
+                    if "authorization" in request.headers:
                         headers["authorization"] = request.headers["authorization"]
                     
                     async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
