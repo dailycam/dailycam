@@ -60,8 +60,8 @@ class HLSStreamGenerator:
         self.archive_duration_minutes = 10
         self.target_fps = 30.0  # HLS 스트림용 (부드러운 스트리밍)
         self.archive_fps = 5.0  # 아카이브(분석)용 낮은 FPS (10→5, 용량 대폭 절약)
-        self.target_width = 640
-        self.target_height = 480
+        self.target_width = 480   # 640 → 480 (트래픽 40% 절감)
+        self.target_height = 360  # 480 → 360
         
         self.current_archive_process = None  # FFmpeg 프로세스 (아카이브용)
         self.current_archive_path = None
@@ -226,22 +226,28 @@ class HLSStreamGenerator:
                 
                 print(f"[HLS 스트림] 영상 재생 시작: {video_path.name}")
                 
-                # 이전 FFmpeg 프로세스 종료 (있다면)
-                if self.ffmpeg_process:
-                    try:
-                        self.ffmpeg_process.stdin.close()
-                        self.ffmpeg_process.wait(timeout=2)
-                    except:
+                # 이전 영상과 다른 경우에만 FFmpeg 프로세스 재시작
+                if self.current_video_path != video_path:
+                    print(f"[HLS 스트림] 영상 전환: {self.current_video_path.name if self.current_video_path else 'None'} → {video_path.name}")
+                    
+                    # 이전 FFmpeg 프로세스 종료 (있다면)
+                    if self.ffmpeg_process:
                         try:
-                            self.ffmpeg_process.terminate()
+                            self.ffmpeg_process.stdin.close()
                             self.ffmpeg_process.wait(timeout=2)
                         except:
-                            pass
-                    self.ffmpeg_process = None
+                            try:
+                                self.ffmpeg_process.terminate()
+                                self.ffmpeg_process.wait(timeout=2)
+                            except:
+                                pass
+                        self.ffmpeg_process = None
+                    
+                    # 새 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)
+                    self._start_ffmpeg_for_video_sync(ffmpeg_path, video_path)
+                else:
+                    print(f"[HLS 스트림] 같은 영상 반복 재생: {video_path.name} (FFmpeg 재시작 안 함)")
                 
-                # 새 영상에 대한 FFmpeg 프로세스 시작 (오디오 포함)
-                # 동기 함수로 직접 호출
-                self._start_ffmpeg_for_video_sync(ffmpeg_path, video_path)
                 
                 if not self.ffmpeg_process:
                     print(f"[HLS 스트림] ❌ FFmpeg 프로세스 시작 실패, 다음 영상으로 넘어갑니다")
@@ -472,7 +478,7 @@ class HLSStreamGenerator:
                     # '-shortest',  # 라이브 스트리밍에서는 제거 (오디오 동기화 지연 방지)
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
-                    '-hls_list_size', '20',  # 세그먼트 개수 증가
+                    '-hls_list_size', '60',  # 10분 = 60개 세그먼트 유지
                     '-hls_flags', 'delete_segments',  # 오래된 세그먼트 자동 삭제
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
@@ -491,7 +497,7 @@ class HLSStreamGenerator:
                     '-tune', 'zerolatency',
                     '-f', 'hls',
                     '-hls_time', str(self.segment_duration),
-                    '-hls_list_size', '20',  # 세그먼트 개수 증가
+                    '-hls_list_size', '60',  # 10분 = 60개 세그먼트 유지
                     '-hls_flags', 'delete_segments',  # 오래된 세그먼트 자동 삭제
                     '-hls_segment_filename', self.segment_pattern,
                     str(self.playlist_path)
@@ -556,7 +562,7 @@ class HLSStreamGenerator:
             '-r', str(self.target_fps),
             '-f', 'hls',
             '-hls_time', str(self.segment_duration),
-            '-hls_list_size', '20',  # 세그먼트 개수 증가
+            '-hls_list_size', '60',  # 10분 = 60개 세그먼트 유지
             # '-hls_flags', 'delete_segments',  # 세그먼트 삭제 비활성화 (페이지 복귀 시 부드러운 재생)
             '-hls_segment_filename', segment_pattern,
             str(playlist_path)

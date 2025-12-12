@@ -9,6 +9,7 @@ interface HLSVideoPlayerProps {
   onPause?: () => void
   onError?: (error: string) => void
   className?: string
+  keepAliveOnHidden?: boolean  // 탭 비활성화 시에도 재생 유지 (모니터링 페이지용)
 }
 
 export default function HLSVideoPlayer({
@@ -19,6 +20,7 @@ export default function HLSVideoPlayer({
   onPause,
   onError,
   className = '',
+  keepAliveOnHidden = false,  // 기본값: 탭 전환 시 멈춤 (트래픽 절약)
 }: HLSVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -121,15 +123,19 @@ export default function HLSVideoPlayer({
       if (onError) onError(errorMsg)
     }
 
-    // Page Visibility API 연동 (탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약)
+    // Page Visibility API 연동 (keepAliveOnHidden=false일 때만)
+    // 탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약
     const handleVisibilityChange = () => {
+      // keepAliveOnHidden=true면 탭 전환해도 계속 재생 (모니터링 페이지용)
+      if (keepAliveOnHidden) return
+
       const video = videoRef.current
       if (!hlsRef.current || !video) return
 
       if (document.hidden) {
         if (!video.paused) {
           console.log('[HLS Player] 탭 비활성화: 절전 모드 진입 (스트림 중지)')
-          video.pause() // 비디오 일시정지 (이게 먼저여야 함)
+          video.pause() // 비디오 일시정지
           hlsRef.current.stopLoad() // 네트워크 요청 중단
         }
       } else {
@@ -145,13 +151,13 @@ export default function HLSVideoPlayer({
 
     // 클린업
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange) // 리스너 제거
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
       }
     }
-  }, [src, autoPlay, onError])
+  }, [src, autoPlay, onError, keepAliveOnHidden])
 
   // 비디오 이벤트 핸들러
   useEffect(() => {

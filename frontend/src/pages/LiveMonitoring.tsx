@@ -33,7 +33,7 @@ export default function LiveMonitoring() {
           { credentials: 'include' }  // httpOnly Cookie 전송
         )
         const data = await status.json()
-        
+
         if (data.is_active && data.is_running) {
           // 서버에서 스트림이 이미 실행 중이면 HLS URL 설정
           const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
@@ -44,7 +44,7 @@ export default function LiveMonitoring() {
         console.error('[HLS] 스트림 상태 확인 실패:', error)
       }
     }
-    
+
     checkStreamStatus()
   }, [selectedCamera])
 
@@ -72,7 +72,7 @@ export default function LiveMonitoring() {
       // Settings API를 통해 업로드 (카메라 설정 API 사용)
       const formData = new FormData()
       formData.append('video', videoFile)
-      
+
       const response = await fetch(`${API_BASE_URL}/api/camera-settings/cameras/${selectedCamera}/upload-video`, {
         method: 'POST',
         body: formData,
@@ -84,13 +84,13 @@ export default function LiveMonitoring() {
 
       // 잠시 대기 후 스트림 상태 확인
       await new Promise(resolve => setTimeout(resolve, 2000))
-      
+
       const status = await fetch(
         `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
         { credentials: 'include' }  // httpOnly Cookie 전송
       )
       const data = await status.json()
-      
+
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
         setHlsUrl(url)
@@ -179,6 +179,7 @@ export default function LiveMonitoring() {
                   onPause={handleHlsPause}
                   onError={handleHlsError}
                   className="w-full h-full"
+                  keepAliveOnHidden={true}  // 모니터링 페이지: 탭 전환해도 계속 재생
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">

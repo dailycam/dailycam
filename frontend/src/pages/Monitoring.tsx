@@ -43,16 +43,16 @@ export default function Monitoring() {
   useEffect(() => {
     const handleVideoDeleted = async () => {
       console.log('영상 삭제 감지, 스트림 상태 확인 중...')
-      
+
       // 스트림 상태 확인
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
         )
-        
+
         if (response.ok) {
           const data = await response.json()
-          
+
           // 스트림이 중지되었으면 UI 업데이트
           if (!data.is_active || !data.is_running) {
             console.log('스트림이 중지되었습니다. UI 업데이트 중...')
@@ -84,24 +84,6 @@ export default function Monitoring() {
   // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
   useEffect(() => {
     const checkAndConnectStream = async () => {
-      // 이미 HLS 플레이어가 있고 비디오가 재생 중이면 라이브 엣지로 이동하고 표시
-      if (hlsRef.current && videoRef.current) {
-        if (videoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA 이상
-          console.log('기존 플레이어 재사용, 라이브 엣지로 이동')
-          // 라이브 엣지로 이동
-          if (videoRef.current.duration && isFinite(videoRef.current.duration)) {
-            videoRef.current.currentTime = Math.max(0, videoRef.current.duration - 3)
-          }
-          // 재생 중이 아니면 재생
-          if (videoRef.current.paused) {
-            videoRef.current.play().catch(e => console.warn('재생 실패:', e))
-          }
-          setIsStreamActive(true)
-          setIsPlaying(true)
-          return
-        }
-      }
-      
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
@@ -117,28 +99,6 @@ export default function Monitoring() {
             const fullPlaylistUrl = `${API_BASE_URL}${data.playlist_url}`
 
             if (Hls.isSupported() && videoRef.current) {
-              // 기존 플레이어가 있고 같은 URL이면 재사용 (라이브 엣지로 이동)
-              if (hlsRef.current && hlsRef.current.url === fullPlaylistUrl) {
-                console.log('기존 플레이어 재사용, 라이브 엣지로 이동')
-                hlsRef.current.startLoad() // 라이브 엣지에서 다시 로드
-                if (videoRef.current) {
-                  // 라이브 엣지로 이동
-                  const moveToLiveEdge = () => {
-                    if (videoRef.current && videoRef.current.duration && isFinite(videoRef.current.duration)) {
-                      videoRef.current.currentTime = Math.max(0, videoRef.current.duration - 3)
-                    }
-                  }
-                  videoRef.current.addEventListener('loadedmetadata', moveToLiveEdge, { once: true })
-                  if (videoRef.current.readyState >= 1) {
-                    moveToLiveEdge()
-                  }
-                  videoRef.current.play().catch(e => console.warn('재생 실패:', e))
-                }
-                setIsStreamActive(true)
-                setIsPlaying(true)
-                return
-              }
-              
               // 기존 플레이어가 있으면 파괴하고 새로 생성
               if (hlsRef.current) {
                 hlsRef.current.destroy()
@@ -150,15 +110,15 @@ export default function Monitoring() {
                 lowLatencyMode: true,
                 startPosition: -1,  // 라이브 엣지에서 시작
                 liveSyncDuration: 3,
-                liveMaxLatencyDuration: 15,  // VLM 분석 중에도 끊기지 않도록
-                maxBufferLength: 20,
-                maxMaxBufferLength: 40,
-                backBufferLength: 0,  // 0으로 되돌림 (백엔드가 세그먼트 삭제하므로)
-                manifestLoadingTimeOut: 60000,
+                liveMaxLatencyDuration: 15,
+                maxBufferLength: 30,        // 20 → 30 (더 많은 버퍼)
+                maxMaxBufferLength: 60,     // 40 → 60
+                backBufferLength: 10,       // 0 → 10 (이전 세그먼트 유지)
+                manifestLoadingTimeOut: 10000,   // 60초 → 10초 (더 빠른 응답)
                 manifestLoadingMaxRetry: 10,
-                levelLoadingTimeOut: 60000,
+                levelLoadingTimeOut: 10000,      // 60초 → 10초
                 levelLoadingMaxRetry: 10,
-                fragLoadingTimeOut: 60000,
+                fragLoadingTimeOut: 10000,       // 60초 → 10초
                 fragLoadingMaxRetry: 10,
               })
 
@@ -175,12 +135,13 @@ export default function Monitoring() {
                   if (duration && isFinite(duration) && duration > 3) {
                     videoRef.current.currentTime = Math.max(0, duration - 3)
                   }
-                  videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
+                  // play()는 isPlaying useEffect에서 처리하도록 상태만 변경
+                  setIsPlaying(true)
                 }
               })
 
               hls.on(Hls.Events.LEVEL_LOADED, () => {
-                console.log('HLS 레벨 로드 완료')
+                // 로그 제거 (너무 자주 발생)
                 setIsStreamActive(true)
               })
 
@@ -227,15 +188,7 @@ export default function Monitoring() {
 
     checkAndConnectStream()
 
-    // 주기적으로 스트림 상태 확인 (다른 페이지에서 돌아왔을 때)
-    const interval = setInterval(() => {
-      if (!isStreamActive) {
-        checkAndConnectStream()
-      }
-    }, 5000) // 5초마다 확인
-
     return () => {
-      clearInterval(interval)
       // cleanup 시 플레이어와 비디오는 유지 (백그라운드에서 계속 재생)
       // 다른 페이지로 가도 영상은 계속 돌아가고, 돌아오면 즉시 보임
     }
