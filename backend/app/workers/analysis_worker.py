@@ -46,8 +46,12 @@ class AnalysisWorker:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
+        # 메인 루프 전, 비정상 종료된 Job 복구
+        self._recover_stuck_jobs()
+
         # 메인 루프
         asyncio.run(self._main_loop())
+
     
     def _signal_handler(self, signum, frame):
         """시그널 핸들러 (Ctrl+C 등)"""
@@ -63,7 +67,18 @@ class AnalysisWorker:
                 job = self._get_next_job()
                 
                 if job:
-                    print(f"\n[워커 {self.worker_id}] 📋 Job 발견: ID={job.id}, 구간={job.segment_start.strftime('%H:%M:%S')}~{job.segment_end.strftime('%H:%M:%S')}")
+                    # UTC -> KST 변환하여 로그 출력
+                    from datetime import timezone
+                    import pytz
+                    kst = pytz.timezone('Asia/Seoul')
+                    
+                    # job.segment_start/end는 naive datetime (UTC)
+                    start_utc = job.segment_start.replace(tzinfo=timezone.utc)
+                    end_utc = job.segment_end.replace(tzinfo=timezone.utc)
+                    start_kst = start_utc.astimezone(kst)
+                    end_kst = end_utc.astimezone(kst)
+                    
+                    print(f"\n[워커 {self.worker_id}] 📋 Job 발견: ID={job.id}, 구간={start_kst.strftime('%H:%M:%S')}~{end_kst.strftime('%H:%M:%S')} (KST)")
                     await self._process_job(job)
                 else:
                     # Job이 없으면 대기
@@ -420,6 +435,35 @@ class AnalysisWorker:
             "운동": DevelopmentCategory.MOTOR,  # 구분 불가능할 때
         }
         return category_map.get(category_str)
+
+    def _recover_stuck_jobs(self):
+        """비정상 종료로 PROCESSING 상태에 멈춰있는 Job 복구"""
+        db = next(get_db())
+        try:
+            # 내 worker_id로 할당되어 있는데 처리 중인 Job들
+            stuck_jobs = db.query(AnalysisJob).filter(
+                AnalysisJob.status == JobStatus.PROCESSING,
+                AnalysisJob.worker_id == self.worker_id
+            ).all()
+            
+            if stuck_jobs:
+                print(f"[워커 {self.worker_id}] ⚠️ 비정상 종료된 Job {len(stuck_jobs)}개 발견 - 초기화 진행")
+                for job in stuck_jobs:
+                    print(f"  - Job ID={job.id} 재시도 대기열로 복귀")
+                    job.status = JobStatus.PENDING
+                    job.worker_id = None
+                    job.started_at = None
+                
+                db.commit()
+                print(f"[워커 {self.worker_id}] ✅ 복구 완료")
+            else:
+                print(f"[워커 {self.worker_id}] ✅ 복구할 stuck job 없음")
+                
+        except Exception as e:
+            print(f"[워커 {self.worker_id}] ❌ 복구 중 오류: {e}")
+        finally:
+            db.close()
+
 
 
 if __name__ == "__main__":
