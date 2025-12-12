@@ -275,6 +275,110 @@ class S3Service:
             print(f"[S3Service] ⚠️ 파일 존재 확인 중 오류 발생: {e}")
             return False
     
+    def upload_camera_video(
+        self,
+        file_path: Path,
+        camera_id: str,
+        filename: str
+    ) -> Optional[str]:
+        """
+        카메라 영상을 S3에 업로드
+        
+        Args:
+            file_path: 업로드할 영상 파일 경로
+            camera_id: 카메라 ID
+            filename: 파일명
+        
+        Returns:
+            S3 키 (성공 시) 또는 None (실패 시)
+        """
+        if not self.is_enabled():
+            print(f"[S3Service] ⚠️ S3가 비활성화되어 있습니다. 카메라 영상 업로드 스킵: {filename}")
+            return None
+        
+        if not file_path.exists():
+            print(f"[S3Service] ❌ 파일이 존재하지 않습니다: {file_path}")
+            return None
+        
+        try:
+            # S3 키 생성: videos/{camera_id}/{filename}
+            s3_key = f"videos/{camera_id}/{filename}"
+            
+            # 파일 업로드
+            file_size_mb = file_path.stat().st_size / (1024 * 1024)
+            print(f"[S3Service] 📤 카메라 영상 업로드 시작: {filename} ({file_size_mb:.2f}MB) → s3://{self.bucket_name}/{s3_key}")
+            
+            self.s3_client.upload_file(
+                str(file_path),
+                self.bucket_name,
+                s3_key,
+                ExtraArgs={
+                    'ContentType': 'video/mp4',
+                    'Metadata': {
+                        'camera_id': camera_id,
+                        'uploaded_at': datetime.now(timezone.utc).isoformat(),
+                        'type': 'camera_video'
+                    }
+                }
+            )
+            
+            print(f"[S3Service] ✅ 카메라 영상 업로드 완료: {s3_key}")
+            return s3_key
+            
+        except ClientError as e:
+            print(f"[S3Service] ❌ 카메라 영상 S3 업로드 실패: {e}")
+            return None
+        except Exception as e:
+            print(f"[S3Service] ❌ 카메라 영상 업로드 중 오류 발생: {e}")
+            return None
+    
+    def download_camera_video(
+        self,
+        s3_key: str,
+        local_path: Path
+    ) -> bool:
+        """
+        S3에서 카메라 영상을 다운로드
+        
+        Args:
+            s3_key: S3 키 (예: videos/camera-1/filename.mp4)
+            local_path: 다운로드할 로컬 경로
+        
+        Returns:
+            다운로드 성공 여부
+        """
+        if not self.is_enabled():
+            print(f"[S3Service] ⚠️ S3가 비활성화되어 있습니다. 다운로드 스킵: {s3_key}")
+            return False
+        
+        try:
+            # 로컬 디렉토리 생성
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            print(f"[S3Service] 📥 카메라 영상 다운로드 시작: s3://{self.bucket_name}/{s3_key} → {local_path}")
+            
+            self.s3_client.download_file(
+                self.bucket_name,
+                s3_key,
+                str(local_path)
+            )
+            
+            file_size_mb = local_path.stat().st_size / (1024 * 1024)
+            print(f"[S3Service] ✅ 카메라 영상 다운로드 완료: {local_path.name} ({file_size_mb:.2f}MB)")
+            
+            return True
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == 'NoSuchKey':
+                print(f"[S3Service] ❌ S3에 파일이 존재하지 않습니다: {s3_key}")
+            else:
+                print(f"[S3Service] ❌ 카메라 영상 S3 다운로드 실패: {e}")
+            return False
+        except Exception as e:
+            print(f"[S3Service] ❌ 다운로드 중 오류 발생: {e}")
+            return False
+    
     def download_archive(
         self,
         s3_key: str,

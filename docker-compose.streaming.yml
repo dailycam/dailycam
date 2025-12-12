@@ -61,8 +61,8 @@ services:
       - ENVIRONMENT=production
       - ENABLE_HLS_STREAMING=true  # 스트리밍 서버에서는 HLS 스트림 활성화
     volumes:
-      - temp_videos:/app/temp_videos
-      - videos:/app/videos
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
     restart: unless-stopped
     networks:
@@ -85,10 +85,6 @@ services:
 
 volumes:
   mysql_data:
-    driver: local
-  temp_videos:
-    driver: local
-  videos:
     driver: local
 
 networks:

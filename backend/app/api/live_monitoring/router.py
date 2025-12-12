@@ -216,16 +216,38 @@ async def start_hls_stream(
                 "카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
             )
         
-        active_videos = db.query(CameraVideo).filter(
+        active_videos_list = db.query(CameraVideo).filter(
             CameraVideo.camera_setting_id == camera_setting.id,
             CameraVideo.is_active == True
-        ).count()
+        ).all()
         
-        if active_videos == 0:
+        if len(active_videos_list) == 0:
             raise HTTPException(
                 400, 
                 "활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
             )
+        
+        # S3에서 영상 다운로드 (스트리밍 서버에서 실행 시)
+        from app.services.s3_service import S3Service
+        s3_service = S3Service()
+        
+        if s3_service.is_enabled():
+            print(f"[HLS 스트림 시작] S3에서 영상 다운로드 시작: {camera_id}")
+            for camera_video in active_videos_list:
+                if camera_video.s3_key:
+                    # S3 키가 있으면 S3에서 다운로드
+                    local_video_path = video_dir / camera_video.filename
+                    if not local_video_path.exists():
+                        # 파일이 없으면 S3에서 다운로드
+                        success = s3_service.download_camera_video(camera_video.s3_key, local_video_path)
+                        if not success:
+                            print(f"[HLS 스트림 시작] ⚠️ S3 다운로드 실패: {camera_video.s3_key}, 기존 파일 사용 시도")
+                    else:
+                        print(f"[HLS 스트림 시작] ✅ 로컬 파일 존재: {camera_video.filename}")
+                else:
+                    print(f"[HLS 스트림 시작] ⚠️ S3 키 없음: {camera_video.filename}, 로컬 파일만 사용")
+        else:
+            print(f"[HLS 스트림 시작] ⚠️ S3가 비활성화되어 있습니다. 로컬 파일만 사용")
         
         video_source = video_dir
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")

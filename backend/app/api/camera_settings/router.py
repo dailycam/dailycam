@@ -174,7 +174,7 @@ async def upload_camera_video(
     safe_filename = f"user_uploaded_{timestamp}_{video.filename}"
     file_path = video_dir / safe_filename
     
-    # 파일 저장
+    # 파일 저장 (로컬에 임시 저장)
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -191,6 +191,17 @@ async def upload_camera_video(
     except Exception as e:
         print(f"[영상 정보 추출 오류] {e}")
     
+    # S3에 업로드 (두 서버 간 공유를 위해)
+    s3_key = None
+    from app.services.s3_service import S3Service
+    s3_service = S3Service()
+    if s3_service.is_enabled():
+        s3_key = s3_service.upload_camera_video(file_path, camera_id, safe_filename)
+        if s3_key:
+            print(f"[비디오 업로드] ✅ S3 업로드 완료: {s3_key}")
+            # 로컬 파일 삭제 (선택사항 - S3에 저장되었으므로)
+            # file_path.unlink()  # 필요시 주석 해제
+    
     # 기존 영상들의 order_index 가져오기
     max_order = db.query(CameraVideo).filter(
         CameraVideo.camera_setting_id == camera_setting.id
@@ -200,16 +211,17 @@ async def upload_camera_video(
     camera_video = CameraVideo(
         camera_setting_id=camera_setting.id,
         filename=safe_filename,
-        file_path=str(file_path),
+        file_path=str(file_path),  # 로컬 경로 또는 S3 URL
         file_size=len(content),
         duration=duration,
+        s3_key=s3_key,  # S3 키 저장
         order_index=max_order
     )
     db.add(camera_video)
     db.commit()
     db.refresh(camera_video)
     
-    print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초)")
+    print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초, S3: {s3_key or '없음'})")
     
     # 영상 업로드 후 자동으로 HLS 스트림 시작
     enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
