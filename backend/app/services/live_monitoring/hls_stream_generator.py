@@ -215,16 +215,25 @@ class HLSStreamGenerator:
                 # 영상을 여러 번 반복하여 긴 재생 목록 생성
                 for _ in range(20):  # 충분히 긴 재생 시간 확보
                     for video in video_list:
+                        # 절대 경로로 변환 (FFmpeg가 파일을 찾을 수 있도록)
+                        video_absolute = video.resolve()
                         # FFmpeg concat 형식: file '경로'
                         # Windows 경로는 백슬래시를 슬래시로 변환
-                        video_path = str(video).replace('\\', '/')
+                        video_path = str(video_absolute).replace('\\', '/')
                         f.write(f"file '{video_path}'\n")
             
             print(f"[HLS 스트림] ✅ concat 파일 생성: {len(video_list)}개 영상, 20회 반복")
+            print(f"[HLS 스트림] concat 파일 경로: {concat_file.resolve()}")
+            # concat 파일 내용 샘플 출력 (디버깅용)
+            with open(concat_file, 'r') as f:
+                first_line = f.readline().strip()
+                print(f"[HLS 스트림] concat 파일 첫 줄 샘플: {first_line}")
             return concat_file
             
         except Exception as e:
             print(f"[HLS 스트림] ❌ concat 파일 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     async def _start_hls_streaming(self, concat_file: Path, playlist_path: Path, segment_pattern: str):
@@ -238,12 +247,27 @@ class HLSStreamGenerator:
                 except:
                     pass
             
+            # 절대 경로로 변환 (FFmpeg가 파일을 찾을 수 있도록)
+            concat_file_absolute = concat_file.resolve()
+            playlist_path_absolute = playlist_path.resolve()
+            # segment_pattern은 문자열이고 %03d 같은 패턴이 포함되어 있음
+            # hls_dir을 절대 경로로 변환하고 파일명만 추출하여 조합
+            hls_dir_absolute = self.hls_dir.resolve()
+            # segment_pattern에서 파일명만 추출 (예: "camera-1_%03d.ts")
+            segment_filename = Path(segment_pattern).name
+            segment_pattern_absolute = str(hls_dir_absolute / segment_filename)
+            
+            # concat 파일 존재 확인
+            if not concat_file_absolute.exists():
+                print(f"[HLS 스트림] ❌ concat 파일이 존재하지 않음: {concat_file_absolute}")
+                return
+            
             # FFmpeg 명령: concat 파일에서 읽어서 HLS 출력
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-f', 'concat',
                 '-safe', '0',
-                '-i', str(concat_file),
+                '-i', str(concat_file_absolute),  # 절대 경로 사용
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
@@ -253,15 +277,21 @@ class HLSStreamGenerator:
                 '-hls_time', str(self.segment_duration),
                 '-hls_list_size', '10',
                 '-hls_flags', 'delete_segments',
-                '-hls_segment_filename', segment_pattern,
+                '-hls_segment_filename', segment_pattern_absolute,  # 절대 경로 사용
                 '-stream_loop', '-1',  # 무한 반복
-                str(playlist_path)
+                str(playlist_path_absolute)  # 절대 경로 사용
             ]
+            
+            print(f"[HLS 스트림] FFmpeg 명령어:")
+            print(f"  입력 파일: {concat_file_absolute}")
+            print(f"  출력 플레이리스트: {playlist_path_absolute}")
+            print(f"  세그먼트 패턴: {segment_pattern_absolute}")
             
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                cwd='/app',  # 작업 디렉토리를 /app으로 명시 (Docker 컨테이너 내부)
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
             

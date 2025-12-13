@@ -9,6 +9,7 @@
 ## 문서 목록
 
 - [CPU 최적화: HLS 스트리밍 성능 개선](./CPU_OPTIMIZATION_HLS_STREAMING.md) - OpenCV 제거 및 FFmpeg 직접 입력 방식으로 전환하여 CPU 사용량 30-40% 절감
+- [스트리밍 서버 설정 이슈](./STREAMING_SERVER_SETUP_ISSUES.md) - 영상 업로드 후 스트리밍 미작동 문제 해결 과정 (2025-12-13)
 
 ## 템플릿
 - **이슈 요약**:
