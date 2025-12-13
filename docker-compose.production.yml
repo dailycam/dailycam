@@ -11,7 +11,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
     ports:
-      - "127.0.0.1:3306:3306" # 외부 접근 제한
+      - "0.0.0.0:3306:3306"  # 스트리밍 서버 접근 허용 (Lightsail 방화벽에서 스트리밍 서버 IP만 허용)
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql

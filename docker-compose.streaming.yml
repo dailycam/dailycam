@@ -1,44 +1,20 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: dailycam-mysql-streaming
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: dailycam
-      MYSQL_USER: dailycam_user
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      TZ: Asia/Seoul
-    ports:
-      - "0.0.0.0:3306:3306"  # 워커 서버 접근 허용 (보안 그룹에서 제한 필요)
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
-      - ./backend/app/commands/db/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
-      timeout: 5s
-      retries: 10
-      interval: 10s
-    restart: unless-stopped
-    networks:
-      - dailycam-network
+  # MySQL 서비스 제거 - 메인 서버의 DB를 사용합니다
+  # 메인 서버의 DB에 접근하려면 MYSQL_REMOTE_HOST 환경 변수를 설정하세요
 
   fastapi:
     build: ./backend
     container_name: dailycam-fastapi-streaming
     ports:
       - "127.0.0.1:8000:8000"  # Nginx를 통해서만 접근
-    depends_on:
-      mysql:
-        condition: service_healthy
+    # depends_on 제거 (메인 서버의 DB 사용)
     environment:
-      - MYSQL_HOST=mysql
+      - MYSQL_HOST=${MYSQL_REMOTE_HOST:-메인서버IP}  # 메인 서버의 Static IP 또는 Private IP
       - MYSQL_PORT=3306
       - MYSQL_USER=dailycam_user
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}  # 메인 서버와 동일한 비밀번호
       - MYSQL_DATABASE=dailycam
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -83,9 +59,7 @@ services:
     networks:
       - dailycam-network
 
-volumes:
-  mysql_data:
-    driver: local
+# MySQL 볼륨 제거 (메인 서버의 DB 사용)
 
 networks:
   dailycam-network:
