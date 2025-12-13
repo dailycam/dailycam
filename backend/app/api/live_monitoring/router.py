@@ -8,6 +8,8 @@ import numpy as np
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+import os
+import httpx
 
 from app.database.session import get_db
 from app.utils.auth_utils import get_current_user_id
@@ -365,25 +367,70 @@ async def start_hls_stream(
 @router.get("/stream-status/{camera_id}")
 async def get_stream_status(camera_id: str):
     """HLS 스트림 상태 확인"""
-    is_active = camera_id in active_hls_streams
+    # 메인 서버에서는 스트리밍 서버의 상태를 확인
+    enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
     
-    if is_active:
-        generator = active_hls_streams[camera_id]
-        return {
-            "camera_id": camera_id,
-            "is_active": True,
-            "is_running": generator.is_running,
-            "playlist_url": f"/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8",
-            "message": "스트림 실행 중"
-        }
+    if enable_hls_streaming:
+        # 스트리밍 서버에서 직접 확인 (로컬 실행)
+        is_active = camera_id in active_hls_streams
+        
+        if is_active:
+            generator = active_hls_streams[camera_id]
+            return {
+                "camera_id": camera_id,
+                "is_active": True,
+                "is_running": generator.is_running,
+                "playlist_url": f"/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8",
+                "message": "스트림 실행 중"
+            }
+        else:
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 중지됨"
+            }
     else:
-        return {
-            "camera_id": camera_id,
-            "is_active": False,
-            "is_running": False,
-            "playlist_url": None,
-            "message": "스트림 중지됨"
-        }
+        # 메인 서버에서는 스트리밍 서버의 상태를 확인
+        streaming_server_url = os.getenv("STREAMING_SERVER_URL", "https://stream.dailycam.net")
+        
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=5.0) as client:
+                response = await client.get(
+                    f"{streaming_server_url}/api/live-monitoring/stream-status/{camera_id}"
+                )
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"[스트림 상태 확인] 스트리밍 서버 응답 오류: {response.status_code} - {response.text}")
+                    return {
+                        "camera_id": camera_id,
+                        "is_active": False,
+                        "is_running": False,
+                        "playlist_url": None,
+                        "message": "스트림 상태 확인 실패"
+                    }
+        except httpx.TimeoutException:
+            print(f"[스트림 상태 확인] 스트리밍 서버 타임아웃: {camera_id}")
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 상태 확인 타임아웃"
+            }
+        except Exception as e:
+            print(f"[스트림 상태 확인] 스트리밍 서버 호출 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 상태 확인 실패"
+            }
 
 
 @router.post("/stop-hls-stream/{camera_id}")

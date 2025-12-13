@@ -328,9 +328,17 @@ async def upload_camera_video(
                             headers=headers
                         )
                         if response.status_code == 200:
+                            result = response.json()
                             print(f"[비디오 업로드] ✅ 스트리밍 서버에서 HLS 스트림 시작 요청 성공: {camera_id}")
+                            print(f"[비디오 업로드]   - 플레이리스트 URL: {result.get('playlist_url', 'N/A')}")
                         else:
-                            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 HLS 시작 요청 실패: {response.status_code} - {response.text}")
+                            error_detail = response.text[:200] if response.text else "응답 없음"
+                            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 HLS 시작 요청 실패: {response.status_code}")
+                            print(f"[비디오 업로드]   - 오류 내용: {error_detail}")
+                except httpx.TimeoutException:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 타임아웃: {camera_id}")
+                except httpx.ConnectError as e:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 연결 실패: {e}")
                 except Exception as e:
                     print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 실패: {e}")
                     import traceback
