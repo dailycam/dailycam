@@ -1,6 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
 import HLSVideoPlayer from '../HLSVideoPlayer'
