@@ -21,7 +21,6 @@ export default function LiveMonitoring() {
     setSelectedCamera: (camera: string) => void
   }>()
   
-  const [isMuted] = useState(false)
   const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
   const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
   const [isUploading, setIsUploading] = useState(false)
@@ -144,19 +143,7 @@ export default function LiveMonitoring() {
     }
   }
 
-  // HLS 플레이어 이벤트 핸들러
-  const handleHlsPlay = () => {
-    setIsStreamActive(true)
-  }
-
-  const handleHlsPause = () => {
-    // 필요시 추가 로직
-  }
-
-  const handleHlsError = (error: string) => {
-    setHlsError(error)
-    console.error('[HLS] 에러:', error)
-  }
+  // HLS 플레이어 이벤트 핸들러는 AppLayout의 플레이어에서 처리됨
 
   return (
     <div className="space-y-6">

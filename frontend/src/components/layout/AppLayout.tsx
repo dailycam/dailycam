@@ -2,7 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
-import HLSVideoPlayer from '../components/HLSVideoPlayer'
+import HLSVideoPlayer from '../HLSVideoPlayer'
 import { API_BASE_URL } from '@/constants/api'
 
 /**
