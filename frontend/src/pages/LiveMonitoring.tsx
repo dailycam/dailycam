@@ -193,12 +193,18 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed - 플레이어는 AppLayout에서 표시됨 */}
+          {/* Main Camera Feed - 플레이어는 AppLayout 상단에 표시됨 */}
           <div className="card p-0 overflow-hidden">
-            <div className="relative bg-gray-900 aspect-video">
+            <div 
+              className="relative bg-gray-900 aspect-video"
+              style={{
+                pointerEvents: 'none',
+                overflow: 'hidden'
+              }}
+            >
               {/* 플레이어는 AppLayout 상단에 표시되므로 여기서는 안내 메시지만 */}
-              {!hlsUrl ? (
-                <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-0">
+                {!hlsUrl ? (
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
                     <p className="text-base">카메라 피드</p>
@@ -213,17 +219,15 @@ export default function LiveMonitoring() {
                       비디오 파일을 업로드하여 스트리밍을 시작하세요
                     </p>
                   </div>
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
+                ) : (
                   <div className="text-center text-gray-400">
                     <p className="text-base">라이브 스트림 재생 중</p>
                     <p className="text-xs mt-2 text-gray-500">
                       비디오 플레이어는 상단에 표시됩니다
                     </p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Live Indicator */}
               {hlsUrl && isStreamActive && (
