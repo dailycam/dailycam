@@ -42,7 +42,9 @@ export default function HLSVideoPlayer({
         const { videoTime, timestamp } = JSON.parse(savedData)
         const elapsed = (Date.now() - timestamp) / 1000  // 경과 시간 (초)
         targetTime = videoTime + elapsed  // 예상 재생 시간
-        console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
+        if (targetTime !== null) {
+          console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
+        }
       } catch (e) {
         console.error('[HLS Player] 저장된 데이터 파싱 실패:', e)
       }
@@ -200,12 +202,15 @@ export default function HLSVideoPlayer({
     // Page Visibility API 연동 (keepAliveOnHidden=false일 때만)
     // 탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약
     const handleVisibilityChange = () => {
+      const currentVideo = videoRef.current
+      if (!currentVideo) return
+
       // keepAliveOnHidden=true면 탭 전환해도 계속 재생 (모니터링 페이지용)
       if (keepAliveOnHidden) {
         // 재생 시간 저장
-        if (video && !video.paused && video.currentTime > 0) {
+        if (!currentVideo.paused && currentVideo.currentTime > 0) {
           const data = {
-            videoTime: video.currentTime,
+            videoTime: currentVideo.currentTime,
             timestamp: Date.now()
           }
           sessionStorage.setItem(storageKey, JSON.stringify(data))
@@ -213,20 +218,19 @@ export default function HLSVideoPlayer({
         return
       }
 
-      const video = videoRef.current
-      if (!hlsRef.current || !video) return
+      if (!hlsRef.current || !currentVideo) return
 
       if (document.hidden) {
-        if (!video.paused) {
+        if (!currentVideo.paused) {
           console.log('[HLS Player] 탭 비활성화: 절전 모드 진입 (스트림 중지)')
-          video.pause() // 비디오 일시정지
+          currentVideo.pause() // 비디오 일시정지
           hlsRef.current.stopLoad() // 네트워크 요청 중단
         }
       } else {
         console.log('[HLS Player] 탭 활성화: 스트림 재개')
         hlsRef.current.startLoad() // 네트워크 요청 재개
         if (autoPlay) {
-          video.play().catch(e => console.log('자동 재생 재개 실패:', e))
+          currentVideo.play().catch(e => console.log('자동 재생 재개 실패:', e))
         }
       }
     }
