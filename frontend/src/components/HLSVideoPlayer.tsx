@@ -59,13 +59,13 @@ export default function HLSVideoPlayer({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
-        // 라이브 스트리밍 최적화 설정
-        backBufferLength: 10,        // 이미 재생한 10초만 유지 (90 → 10)
-        maxBufferLength: 10,          // 앞으로 10초만 미리 다운로드 (30 → 10)
-        maxMaxBufferLength: 20,       // 최대 20초까지만 (60 → 20)
-        liveBackBufferLength: 5,      // 라이브 모드에서는 5초만 유지
-        liveSyncDurationCount: 3,     // 라이브 엣지와의 동기화 (3개 세그먼트)
-        liveMaxLatencyDurationCount: 10, // 최대 지연 허용 (10개 세그먼트)
+        // 라이브 스트리밍 최적화 설정 (버퍼 증가로 끊김 방지)
+        backBufferLength: 20,        // 이미 재생한 20초 유지 (10 → 20)
+        maxBufferLength: 30,          // 앞으로 30초 미리 다운로드 (10 → 30)
+        maxMaxBufferLength: 60,       // 최대 60초까지 (20 → 60)
+        liveBackBufferLength: 10,     // 라이브 모드에서는 10초 유지 (5 → 10)
+        liveSyncDurationCount: 5,     // 라이브 엣지와의 동기화 완화 (3 → 5)
+        liveMaxLatencyDurationCount: 15, // 최대 지연 허용 증가 (10 → 15)
         // 재시도 설정
         manifestLoadingTimeOut: 10000,
         manifestLoadingMaxRetry: 10,
@@ -127,6 +127,16 @@ export default function HLSVideoPlayer({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
+              // 404 에러는 스트림이 중지된 것으로 간주
+              if (data.details === 'manifestLoadError' || data.details === 'levelLoadError') {
+                console.log('[HLS Player] 스트림 중지 감지 (404)')
+                const errorMsg = '스트림이 중지되었습니다'
+                setError(errorMsg)
+                if (onError) onError(errorMsg)
+                hls.destroy()
+                return
+              }
+              
               console.log('[HLS Player] 네트워크 에러, 재시도 중...')
               setError('네트워크 연결 문제 - 재연결 시도 중...')
               setTimeout(() => {

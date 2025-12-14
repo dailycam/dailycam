@@ -21,13 +21,8 @@ export default function AppLayout() {
         setIsCollapsed(!isCollapsed)
     }
 
-    // 모니터링 페이지일 때만 스트림 상태 확인
+    // 스트림 상태 확인 (모니터링 페이지가 아니어도 확인하여 플레이어 유지)
     useEffect(() => {
-        if (!isMonitoringPage) {
-            setHlsUrl(null)
-            return
-        }
-
         const checkStreamStatus = async () => {
             try {
                 const status = await fetch(
@@ -40,6 +35,7 @@ export default function AppLayout() {
                     const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
                     setHlsUrl(url)
                 } else {
+                    // 스트림이 중지되었으면 플레이어도 정지
                     setHlsUrl(null)
                 }
             } catch (error) {
@@ -50,10 +46,10 @@ export default function AppLayout() {
 
         checkStreamStatus()
         
-        // 주기적으로 상태 확인 (30초마다)
-        const interval = setInterval(checkStreamStatus, 30000)
+        // 주기적으로 상태 확인 (5초마다 - 영상 삭제 등 즉시 반영)
+        const interval = setInterval(checkStreamStatus, 5000)
         return () => clearInterval(interval)
-    }, [isMonitoringPage, selectedCamera])
+    }, [selectedCamera])
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -67,14 +63,29 @@ export default function AppLayout() {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
-                    {/* 전역 비디오 플레이어 (모니터링 페이지일 때만, 라우트 밖에 배치) */}
-                    {isMonitoringPage && hlsUrl && (
-                        <div id="global-video-player-container" style={{ display: 'none' }}>
+                    {/* 전역 비디오 플레이어 (항상 마운트 상태 유지, LiveMonitoring에서 Portal로 렌더링) */}
+                    {hlsUrl && (
+                        <div 
+                            id="global-video-player-container" 
+                            style={{ 
+                                display: 'none', 
+                                position: 'absolute',
+                                left: '-9999px',
+                                top: '-9999px'
+                            }}
+                        >
                             <HLSVideoPlayer
                                 src={hlsUrl}
                                 autoPlay={true}
                                 muted={false}
                                 keepAliveOnHidden={true}
+                                onError={(error) => {
+                                    // 스트림 중지 에러 시 즉시 플레이어 정지
+                                    if (error.includes('404') || error.includes('스트림 중지') || error.includes('스트림이 중지되었습니다')) {
+                                        console.log('[AppLayout] 스트림 중지 감지, 플레이어 정지')
+                                        setHlsUrl(null)
+                                    }
+                                }}
                                 className="w-full h-full"
                             />
                         </div>

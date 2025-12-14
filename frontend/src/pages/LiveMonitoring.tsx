@@ -47,7 +47,7 @@ export default function LiveMonitoring() {
     }
   }, [selectedCamera, outletContext])
 
-  // 플레이어를 카드 영역으로 포털링 (DOM 조작 방식)
+  // 플레이어를 카드 영역으로 포털링 (AppLayout의 플레이어를 Portal로 렌더링)
   useEffect(() => {
     if (!hlsUrl || !videoContainerRef.current) return
 
@@ -77,7 +77,7 @@ export default function LiveMonitoring() {
     }
   }, [hlsUrl])
 
-  // 페이지 로드 시 스트림 상태 확인
+  // 페이지 로드 시 스트림 상태 확인 (AppLayout에서도 확인하므로 여기서는 초기 로드만)
   useEffect(() => {
     const checkStreamStatus = async () => {
       try {
@@ -106,11 +106,8 @@ export default function LiveMonitoring() {
       }
     }
 
+    // 초기 로드 시 한 번만 확인 (AppLayout에서 주기적으로 확인함)
     checkStreamStatus()
-    
-    // 주기적으로 상태 확인
-    const interval = setInterval(checkStreamStatus, 10000)
-    return () => clearInterval(interval)
   }, [selectedCamera, outletContext])
 
   // 비디오 파일 선택
@@ -228,8 +225,9 @@ export default function LiveMonitoring() {
           {/* Main Camera Feed */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {/* 플레이어 컨테이너 - AppLayout의 플레이어가 여기에 렌더링됨 */}
+              {/* 플레이어 컨테이너 - AppLayout의 플레이어가 DOM 조작으로 여기에 이동됨 */}
               <div ref={videoContainerRef} className="absolute inset-0 w-full h-full">
+                {/* 플레이어는 AppLayout에서 렌더링되고 DOM 조작으로 여기로 이동됨 */}
                 {!hlsUrl && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center text-gray-400">
