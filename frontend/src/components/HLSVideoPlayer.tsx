@@ -32,25 +32,15 @@ export default function HLSVideoPlayer({
     const video = videoRef.current
     if (!video || !src) return
 
-    // 저장된 재생 정보 복원 (keepAliveOnHidden일 때만)
-    const storageKey = `hls_player_${src.replace(/[^a-zA-Z0-9]/g, '_')}`
-    const savedData = sessionStorage.getItem(storageKey)
-    let targetTime: number | null = null
-
-    if (savedData && keepAliveOnHidden) {
-      try {
-        const { videoTime, timestamp } = JSON.parse(savedData)
-        const elapsed = (Date.now() - timestamp) / 1000  // 경과 시간 (초)
-        targetTime = videoTime + elapsed  // 예상 재생 시간
-        if (targetTime !== null) {
-          console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
-        }
-      } catch (e) {
-        console.error('[HLS Player] 저장된 데이터 파싱 실패:', e)
-      }
+    // src가 변경되지 않았으면 재초기화하지 않음 (페이지 이동 시에도 유지)
+    const prevSrc = video.getAttribute('data-hls-src')
+    if (prevSrc === src && hlsRef.current) {
+      console.log('[HLS Player] src 동일, 재초기화 스킵:', src)
+      return
     }
 
     console.log('[HLS Player] 초기화:', src)
+    video.setAttribute('data-hls-src', src)
     setIsLoading(true)
     setError(null)
 
@@ -249,16 +239,22 @@ export default function HLSVideoPlayer({
 
     // 클린업
     return () => {
-      // 재생 시간 저장 (keepAliveOnHidden일 때)
-      if (keepAliveOnHidden && video && video.currentTime > 0) {
-        const data = {
-          videoTime: video.currentTime,
-          timestamp: Date.now()
+      // keepAliveOnHidden일 때는 HLS 인스턴스를 파괴하지 않음 (페이지 이동 시에도 유지)
+      if (keepAliveOnHidden) {
+        // 재생 시간 저장
+        if (video && video.currentTime > 0) {
+          const data = {
+            videoTime: video.currentTime,
+            timestamp: Date.now()
+          }
+          sessionStorage.setItem(storageKey, JSON.stringify(data))
+          console.log(`[HLS Player] 페이지 떠남, 재생 시간 저장: ${video.currentTime.toFixed(1)}초 (인스턴스 유지)`)
         }
-        sessionStorage.setItem(storageKey, JSON.stringify(data))
-        console.log(`[HLS Player] 페이지 떠남, 재생 시간 저장: ${video.currentTime.toFixed(1)}초`)
+        // HLS 인스턴스는 파괴하지 않음
+        return
       }
 
+      // keepAliveOnHidden이 false일 때만 정리
       if (timeUpdateIntervalRef.current) {
         clearInterval(timeUpdateIntervalRef.current)
       }

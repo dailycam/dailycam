@@ -21,7 +21,7 @@ export default function AppLayout() {
         setIsCollapsed(!isCollapsed)
     }
 
-    // 스트림 상태 확인 (모니터링 페이지가 아니어도 확인하여 플레이어 유지)
+    // 스트림 상태 확인 (항상 확인하여 플레이어 유지)
     useEffect(() => {
         const checkStreamStatus = async () => {
             try {
@@ -33,7 +33,11 @@ export default function AppLayout() {
 
                 if (data.is_active && data.is_running) {
                     const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
-                    setHlsUrl(url)
+                    // URL이 변경되지 않으면 플레이어를 재초기화하지 않음
+                    setHlsUrl(prevUrl => {
+                        if (prevUrl === url) return prevUrl
+                        return url
+                    })
                 } else {
                     // 스트림이 중지되었으면 플레이어도 정지
                     setHlsUrl(null)
@@ -63,15 +67,17 @@ export default function AppLayout() {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
-                    {/* 전역 비디오 플레이어 (항상 마운트 상태 유지, LiveMonitoring에서 Portal로 렌더링) */}
+                    {/* 전역 비디오 플레이어 (항상 마운트 상태 유지, 모니터링 페이지일 때만 표시) */}
                     {hlsUrl && (
                         <div 
-                            id="global-video-player-container" 
+                            className="w-full bg-black" 
                             style={{ 
-                                display: 'none', 
-                                position: 'absolute',
-                                left: '-9999px',
-                                top: '-9999px'
+                                height: isMonitoringPage ? '300px' : '1px',
+                                position: isMonitoringPage ? 'relative' : 'absolute',
+                                left: isMonitoringPage ? 'auto' : '-9999px',
+                                top: isMonitoringPage ? 'auto' : '-9999px',
+                                visibility: isMonitoringPage ? 'visible' : 'hidden',
+                                overflow: 'hidden'
                             }}
                         >
                             <HLSVideoPlayer
@@ -86,7 +92,7 @@ export default function AppLayout() {
                                         setHlsUrl(null)
                                     }
                                 }}
-                                className="w-full h-full"
+                                className="w-full h-full object-contain"
                             />
                         </div>
                     )}

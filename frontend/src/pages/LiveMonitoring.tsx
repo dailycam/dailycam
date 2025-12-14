@@ -30,7 +30,6 @@ export default function LiveMonitoring() {
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [hlsError, setHlsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // AppLayout의 상태와 동기화
   useEffect(() => {
@@ -47,35 +46,7 @@ export default function LiveMonitoring() {
     }
   }, [selectedCamera, outletContext])
 
-  // 플레이어를 카드 영역으로 포털링 (AppLayout의 플레이어를 Portal로 렌더링)
-  useEffect(() => {
-    if (!hlsUrl || !videoContainerRef.current) return
-
-    const movePlayer = () => {
-      const globalContainer = document.getElementById('global-video-player-container')
-      if (!globalContainer) return
-
-      const videoElement = globalContainer.querySelector('video')
-      if (videoElement && videoContainerRef.current) {
-        // 이미 올바른 위치에 있으면 스킵
-        if (videoElement.parentElement === videoContainerRef.current) return
-
-        // 플레이어를 카드 영역으로 이동
-        videoContainerRef.current.appendChild(videoElement)
-      }
-    }
-
-    // 약간의 지연 후 실행 (플레이어가 렌더링될 시간 확보)
-    const timeout = setTimeout(movePlayer, 100)
-    
-    // 주기적으로 확인 (플레이어가 나중에 렌더링될 수 있음)
-    const interval = setInterval(movePlayer, 500)
-    
-    return () => {
-      clearTimeout(timeout)
-      clearInterval(interval)
-    }
-  }, [hlsUrl])
+  // 플레이어는 AppLayout에서 관리됨 (DOM 조작 제거)
 
   // 페이지 로드 시 스트림 상태 확인 (AppLayout에서도 확인하므로 여기서는 초기 로드만)
   useEffect(() => {
@@ -222,31 +193,37 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed */}
+          {/* Main Camera Feed - 플레이어는 AppLayout에서 표시됨 */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {/* 플레이어 컨테이너 - AppLayout의 플레이어가 DOM 조작으로 여기에 이동됨 */}
-              <div ref={videoContainerRef} className="absolute inset-0 w-full h-full">
-                {/* 플레이어는 AppLayout에서 렌더링되고 DOM 조작으로 여기로 이동됨 */}
-                {!hlsUrl && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center text-gray-400">
-                      <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
-                      <p className="text-base">카메라 피드</p>
-                      <p className="text-sm mt-2">
-                        {selectedCamera === 'camera-1'
-                          ? '거실 카메라'
-                          : selectedCamera === 'camera-2'
-                            ? '아이방 카메라'
-                            : '주방 카메라'}
-                      </p>
-                      <p className="text-xs mt-2 text-gray-500">
-                        비디오 파일을 업로드하여 스트리밍을 시작하세요
-                      </p>
-                    </div>
+              {/* 플레이어는 AppLayout 상단에 표시되므로 여기서는 안내 메시지만 */}
+              {!hlsUrl ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
+                    <p className="text-base">카메라 피드</p>
+                    <p className="text-sm mt-2">
+                      {selectedCamera === 'camera-1'
+                        ? '거실 카메라'
+                        : selectedCamera === 'camera-2'
+                          ? '아이방 카메라'
+                          : '주방 카메라'}
+                    </p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      비디오 파일을 업로드하여 스트리밍을 시작하세요
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <p className="text-base">라이브 스트림 재생 중</p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      비디오 플레이어는 상단에 표시됩니다
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Live Indicator */}
               {hlsUrl && isStreamActive && (
