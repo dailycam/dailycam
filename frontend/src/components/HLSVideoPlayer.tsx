@@ -39,6 +39,24 @@ export default function HLSVideoPlayer({
       return
     }
 
+    // 저장된 재생 정보 복원 (keepAliveOnHidden일 때만)
+    const storageKey = `hls_player_${src.replace(/[^a-zA-Z0-9]/g, '_')}`
+    const savedData = sessionStorage.getItem(storageKey)
+    let targetTime: number | null = null
+
+    if (savedData && keepAliveOnHidden) {
+      try {
+        const { videoTime, timestamp } = JSON.parse(savedData)
+        const elapsed = (Date.now() - timestamp) / 1000  // 경과 시간 (초)
+        targetTime = videoTime + elapsed  // 예상 재생 시간
+        if (targetTime !== null) {
+          console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
+        }
+      } catch (e) {
+        console.error('[HLS Player] 저장된 데이터 파싱 실패:', e)
+      }
+    }
+
     console.log('[HLS Player] 초기화:', src)
     video.setAttribute('data-hls-src', src)
     setIsLoading(true)
