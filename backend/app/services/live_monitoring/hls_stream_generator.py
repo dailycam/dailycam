@@ -253,6 +253,8 @@ class HLSStreamGenerator:
             # segment_pattern은 문자열이고 %03d 같은 패턴이 포함되어 있음
             # hls_dir을 절대 경로로 변환하고 파일명만 추출하여 조합
             hls_dir_absolute = self.hls_dir.resolve()
+            # hls 디렉토리 생성 확인
+            hls_dir_absolute.mkdir(parents=True, exist_ok=True)
             # segment_pattern에서 파일명만 추출 (예: "camera-1_%03d.ts")
             segment_filename = Path(segment_pattern).name
             segment_pattern_absolute = str(hls_dir_absolute / segment_filename)
@@ -263,10 +265,12 @@ class HLSStreamGenerator:
                 return
             
             # FFmpeg 명령: concat 파일에서 읽어서 HLS 출력
+            # -stream_loop는 입력 옵션이므로 -i 앞에 위치해야 함
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-f', 'concat',
                 '-safe', '0',
+                '-stream_loop', '-1',  # 입력 스트림 무한 반복 (입력 옵션 위치)
                 '-i', str(concat_file_absolute),  # 절대 경로 사용
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
@@ -278,7 +282,6 @@ class HLSStreamGenerator:
                 '-hls_list_size', '10',
                 '-hls_flags', 'delete_segments',
                 '-hls_segment_filename', segment_pattern_absolute,  # 절대 경로 사용
-                '-stream_loop', '-1',  # 무한 반복
                 str(playlist_path_absolute)  # 절대 경로 사용
             ]
             
@@ -297,15 +300,17 @@ class HLSStreamGenerator:
             
             print(f"[HLS 스트림] ✅ FFmpeg HLS 프로세스 시작 (PID: {self.ffmpeg_process.pid})")
             
-            # stderr 모니터링 스레드
+            # stderr 모니터링 스레드 (더 자세한 에러 로그 출력)
             def read_stderr():
                 try:
                     while self.is_running and self.ffmpeg_process:
                         line = self.ffmpeg_process.stderr.readline()
                         if line:
                             decoded = line.decode('utf-8', errors='ignore').strip()
-                            if decoded and ('error' in decoded.lower() or 'failed' in decoded.lower()):
-                                print(f"[FFmpeg HLS] {decoded}")
+                            if decoded:
+                                # 에러나 경고 메시지 출력
+                                if 'error' in decoded.lower() or 'failed' in decoded.lower() or 'warning' in decoded.lower():
+                                    print(f"[FFmpeg HLS] {decoded}")
                 except:
                     pass
             

@@ -219,7 +219,7 @@ async def start_hls_stream(
         del active_hls_streams[camera_id]
         
         # 분석 스케줄러 중지
-        stop_segment_analysis_for_camera(camera_id)
+        await stop_segment_analysis_for_camera(camera_id)
     
     # 실제 카메라인지 가짜 영상인지 판단
     is_real_camera = camera_url is not None
@@ -457,7 +457,7 @@ async def stop_hls_stream(camera_id: str):
     del active_hls_streams[camera_id]
     
     # 분석 스케줄러 중지
-    stop_segment_analysis_for_camera(camera_id)
+    await stop_segment_analysis_for_camera(camera_id)
     
     print(f"[API] HLS 스트림 중지: {camera_id}")
     
