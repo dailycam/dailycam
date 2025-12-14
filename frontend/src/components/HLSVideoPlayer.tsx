@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 
+// 전역 비디오 인스턴스 저장 (keepAliveOnHidden일 때 사용)
+const globalVideoInstances = new Map<string, { video: HTMLVideoElement; hls: Hls }>()
+
 interface HLSVideoPlayerProps {
   src: string
   autoPlay?: boolean
@@ -30,6 +33,33 @@ export default function HLSVideoPlayer({
   useEffect(() => {
     const video = videoRef.current
     if (!video || !src) return
+
+    // keepAliveOnHidden일 때 전역 인스턴스 재사용
+    if (keepAliveOnHidden && globalVideoInstances.has(src)) {
+      const globalInstance = globalVideoInstances.get(src)!
+      console.log('[HLS Player] 전역 인스턴스 재사용:', src)
+      
+      // 기존 비디오 엘리먼트를 현재 비디오로 연결
+      if (globalInstance.video && globalInstance.hls) {
+        // HLS 인스턴스를 현재 비디오에 다시 연결
+        globalInstance.hls.detachMedia()
+        globalInstance.hls.attachMedia(video)
+        hlsRef.current = globalInstance.hls
+        
+        // 비디오 상태 복원
+        if (globalInstance.video.currentTime > 0) {
+          video.currentTime = globalInstance.video.currentTime
+        }
+        
+        setIsLoading(false)
+        if (autoPlay && globalInstance.video.paused) {
+          video.play().catch(e => {
+            console.log('[HLS Player] 자동 재생 실패:', e)
+          })
+        }
+        return
+      }
+    }
 
     console.log('[HLS Player] 초기화:', src)
     setIsLoading(true)
@@ -62,6 +92,12 @@ export default function HLSVideoPlayer({
       hlsRef.current = hls
       hls.loadSource(src)
       hls.attachMedia(video)
+
+      // keepAliveOnHidden일 때 전역 인스턴스에 저장
+      if (keepAliveOnHidden) {
+        globalVideoInstances.set(src, { video, hls })
+        console.log('[HLS Player] 전역 인스턴스에 저장:', src)
+      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[HLS Player] 매니페스트 로드 완료')
@@ -106,7 +142,22 @@ export default function HLSVideoPlayer({
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // 네이티브 HLS 지원 (Safari)
       console.log('[HLS Player] Safari 네이티브 HLS 사용')
+      
+      // keepAliveOnHidden일 때 전역 인스턴스 재사용
+      if (keepAliveOnHidden && globalVideoInstances.has(src)) {
+        const globalInstance = globalVideoInstances.get(src)!
+        if (globalInstance.video && globalInstance.video.currentTime > 0) {
+          video.currentTime = globalInstance.video.currentTime
+        }
+      }
+      
       video.src = src
+      
+      // keepAliveOnHidden일 때 전역 인스턴스에 저장
+      if (keepAliveOnHidden) {
+        globalVideoInstances.set(src, { video, hls: null as any })
+      }
+      
       video.addEventListener('loadedmetadata', () => {
         console.log('[HLS Player] 메타데이터 로드 완료')
         setIsLoading(false)
@@ -152,9 +203,28 @@ export default function HLSVideoPlayer({
     // 클린업
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      // keepAliveOnHidden=true면 컴포넌트 언마운트 시에도 비디오를 계속 재생
+      if (keepAliveOnHidden) {
+        // 비디오는 계속 재생되도록 유지 (destroy하지 않음)
+        // 전역 인스턴스는 유지하되, 현재 비디오에서만 detach
+        if (hlsRef.current && video) {
+          hlsRef.current.detachMedia()
+          console.log('[HLS Player] keepAliveOnHidden=true: 비디오 계속 재생 유지 (detach만)')
+        }
+        return
+      }
+      // keepAliveOnHidden=false면 정상적으로 정리
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
+      }
+      // 전역 인스턴스도 제거
+      if (globalVideoInstances.has(src)) {
+        const instance = globalVideoInstances.get(src)!
+        if (instance.hls) {
+          instance.hls.destroy()
+        }
+        globalVideoInstances.delete(src)
       }
     }
   }, [src, autoPlay, onError, keepAliveOnHidden])

@@ -272,7 +272,7 @@ class HLSStreamGenerator:
                 '-stream_loop', '-1',  # 입력 스트림 무한 반복 (입력 옵션 위치)
                 '-i', str(concat_file_absolute),  # 절대 경로 사용
                 '-c:v', 'libx264',
-                '-preset', 'veryfast',  # 'ultrafast' → 'veryfast' (품질 유지하면서 CPU 절약)
+                '-preset', 'ultrafast',  # 가장 빠른 preset (최소 CPU 사용)
                 '-tune', 'zerolatency',
                 '-s', f'{self.target_width}x{self.target_height}',
                 '-r', str(self.target_fps),
@@ -353,15 +353,17 @@ class HLSStreamGenerator:
             self.archive_start_time = time.time()
             
             # FFmpeg 명령: concat 파일에서 읽어서 아카이브 출력
+            # stream_loop를 사용하여 HLS 스트림과 동기화 (같은 시점부터 시작)
             # filter로 FPS를 5fps로 다운샘플링하여 CPU 절약
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-f', 'concat',
                 '-safe', '0',
+                '-stream_loop', '-1',  # HLS 스트림과 동일하게 무한 반복하여 동기화
                 '-i', str(concat_file),
                 '-vf', f'fps={self.archive_fps},scale={self.target_width}:{self.target_height}',  # 5fps로 다운샘플링
                 '-c:v', 'libx264',
-                '-preset', 'veryfast',
+                '-preset', 'ultrafast',  # 아카이브도 최소 CPU 사용
                 '-crf', '32',
                 '-t', str(self.archive_duration_minutes * 60),  # 정확히 10분만
                 '-movflags', '+faststart',
