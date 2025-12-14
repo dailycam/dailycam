@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 
-// 전역 비디오 인스턴스 저장 (keepAliveOnHidden일 때 사용)
-const globalVideoInstances = new Map<string, { video: HTMLVideoElement; hls: Hls }>()
-
 interface HLSVideoPlayerProps {
   src: string
   autoPlay?: boolean
@@ -29,35 +26,25 @@ export default function HLSVideoPlayer({
   const hlsRef = useRef<Hls | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || !src) return
 
-    // keepAliveOnHidden일 때 전역 인스턴스 재사용
-    if (keepAliveOnHidden && globalVideoInstances.has(src)) {
-      const globalInstance = globalVideoInstances.get(src)!
-      console.log('[HLS Player] 전역 인스턴스 재사용:', src)
-      
-      // 기존 비디오 엘리먼트를 현재 비디오로 연결
-      if (globalInstance.video && globalInstance.hls) {
-        // HLS 인스턴스를 현재 비디오에 다시 연결
-        globalInstance.hls.detachMedia()
-        globalInstance.hls.attachMedia(video)
-        hlsRef.current = globalInstance.hls
-        
-        // 비디오 상태 복원
-        if (globalInstance.video.currentTime > 0) {
-          video.currentTime = globalInstance.video.currentTime
-        }
-        
-        setIsLoading(false)
-        if (autoPlay && globalInstance.video.paused) {
-          video.play().catch(e => {
-            console.log('[HLS Player] 자동 재생 실패:', e)
-          })
-        }
-        return
+    // 저장된 재생 정보 복원 (keepAliveOnHidden일 때만)
+    const storageKey = `hls_player_${src.replace(/[^a-zA-Z0-9]/g, '_')}`
+    const savedData = sessionStorage.getItem(storageKey)
+    let targetTime: number | null = null
+
+    if (savedData && keepAliveOnHidden) {
+      try {
+        const { videoTime, timestamp } = JSON.parse(savedData)
+        const elapsed = (Date.now() - timestamp) / 1000  // 경과 시간 (초)
+        targetTime = videoTime + elapsed  // 예상 재생 시간
+        console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
+      } catch (e) {
+        console.error('[HLS Player] 저장된 데이터 파싱 실패:', e)
       }
     }
 
@@ -93,21 +80,44 @@ export default function HLSVideoPlayer({
       hls.loadSource(src)
       hls.attachMedia(video)
 
-      // keepAliveOnHidden일 때 전역 인스턴스에 저장
-      if (keepAliveOnHidden) {
-        globalVideoInstances.set(src, { video, hls })
-        console.log('[HLS Player] 전역 인스턴스에 저장:', src)
-      }
-
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[HLS Player] 매니페스트 로드 완료')
         setIsLoading(false)
+        
+        // 저장된 시간으로 seek 시도 (HLS는 라이브 스트림이므로 제한적)
+        if (targetTime !== null && keepAliveOnHidden) {
+          // HLS는 라이브 스트림이므로 seek가 제한적
+          // 가능한 범위 내에서 seek 시도
+          setTimeout(() => {
+            if (video.duration > 0) {
+              const seekTime = Math.min(targetTime!, video.duration - 1)
+              if (seekTime > 0 && seekTime < video.duration) {
+                console.log(`[HLS Player] seek 시도: ${seekTime.toFixed(1)}초`)
+                video.currentTime = seekTime
+              }
+            }
+          }, 1000)
+        }
+        
         if (autoPlay) {
           video.play().catch(e => {
             console.log('[HLS Player] 자동 재생 실패 (사용자 상호작용 필요):', e)
           })
         }
       })
+
+      // 재생 시간 주기적으로 저장 (keepAliveOnHidden일 때만)
+      if (keepAliveOnHidden) {
+        timeUpdateIntervalRef.current = setInterval(() => {
+          if (video && !video.paused && video.currentTime > 0) {
+            const data = {
+              videoTime: video.currentTime,
+              timestamp: Date.now()
+            }
+            sessionStorage.setItem(storageKey, JSON.stringify(data))
+          }
+        }, 2000)  // 2초마다 저장
+      }
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS Player] 에러:', data.type, data.details)
@@ -143,19 +153,32 @@ export default function HLSVideoPlayer({
       // 네이티브 HLS 지원 (Safari)
       console.log('[HLS Player] Safari 네이티브 HLS 사용')
       
-      // keepAliveOnHidden일 때 전역 인스턴스 재사용
-      if (keepAliveOnHidden && globalVideoInstances.has(src)) {
-        const globalInstance = globalVideoInstances.get(src)!
-        if (globalInstance.video && globalInstance.video.currentTime > 0) {
-          video.currentTime = globalInstance.video.currentTime
-        }
+      // 저장된 시간으로 seek 시도
+      if (targetTime !== null && keepAliveOnHidden) {
+        setTimeout(() => {
+          if (video.duration > 0) {
+            const seekTime = Math.min(targetTime!, video.duration - 1)
+            if (seekTime > 0 && seekTime < video.duration) {
+              console.log(`[HLS Player] seek 시도: ${seekTime.toFixed(1)}초`)
+              video.currentTime = seekTime
+            }
+          }
+        }, 1000)
       }
       
       video.src = src
       
-      // keepAliveOnHidden일 때 전역 인스턴스에 저장
+      // 재생 시간 주기적으로 저장 (keepAliveOnHidden일 때만)
       if (keepAliveOnHidden) {
-        globalVideoInstances.set(src, { video, hls: null as any })
+        timeUpdateIntervalRef.current = setInterval(() => {
+          if (video && !video.paused && video.currentTime > 0) {
+            const data = {
+              videoTime: video.currentTime,
+              timestamp: Date.now()
+            }
+            sessionStorage.setItem(storageKey, JSON.stringify(data))
+          }
+        }, 2000)
       }
       
       video.addEventListener('loadedmetadata', () => {
@@ -178,7 +201,17 @@ export default function HLSVideoPlayer({
     // 탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약
     const handleVisibilityChange = () => {
       // keepAliveOnHidden=true면 탭 전환해도 계속 재생 (모니터링 페이지용)
-      if (keepAliveOnHidden) return
+      if (keepAliveOnHidden) {
+        // 재생 시간 저장
+        if (video && !video.paused && video.currentTime > 0) {
+          const data = {
+            videoTime: video.currentTime,
+            timestamp: Date.now()
+          }
+          sessionStorage.setItem(storageKey, JSON.stringify(data))
+        }
+        return
+      }
 
       const video = videoRef.current
       if (!hlsRef.current || !video) return
@@ -202,29 +235,23 @@ export default function HLSVideoPlayer({
 
     // 클린업
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      // keepAliveOnHidden=true면 컴포넌트 언마운트 시에도 비디오를 계속 재생
-      if (keepAliveOnHidden) {
-        // 비디오는 계속 재생되도록 유지 (destroy하지 않음)
-        // 전역 인스턴스는 유지하되, 현재 비디오에서만 detach
-        if (hlsRef.current && video) {
-          hlsRef.current.detachMedia()
-          console.log('[HLS Player] keepAliveOnHidden=true: 비디오 계속 재생 유지 (detach만)')
+      // 재생 시간 저장 (keepAliveOnHidden일 때)
+      if (keepAliveOnHidden && video && video.currentTime > 0) {
+        const data = {
+          videoTime: video.currentTime,
+          timestamp: Date.now()
         }
-        return
+        sessionStorage.setItem(storageKey, JSON.stringify(data))
+        console.log(`[HLS Player] 페이지 떠남, 재생 시간 저장: ${video.currentTime.toFixed(1)}초`)
       }
-      // keepAliveOnHidden=false면 정상적으로 정리
+
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
-      }
-      // 전역 인스턴스도 제거
-      if (globalVideoInstances.has(src)) {
-        const instance = globalVideoInstances.get(src)!
-        if (instance.hls) {
-          instance.hls.destroy()
-        }
-        globalVideoInstances.delete(src)
       }
     }
   }, [src, autoPlay, onError, keepAliveOnHidden])
