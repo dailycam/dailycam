@@ -1,7 +1,9 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
+import HLSVideoPlayer from '../HLSVideoPlayer'
 import { API_BASE_URL } from '@/constants/api'
 
 /**
@@ -66,6 +68,19 @@ export default function AppLayout() {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
+                    {/* 전역 비디오 플레이어 (모니터링 페이지일 때만, 라우트 밖에 배치) */}
+                    {isMonitoringPage && hlsUrl && (
+                        <div id="global-video-player-container" style={{ display: 'none' }}>
+                            <HLSVideoPlayer
+                                src={hlsUrl}
+                                autoPlay={true}
+                                muted={false}
+                                keepAliveOnHidden={true}
+                                className="w-full h-full"
+                            />
+                        </div>
+                    )}
+                    
                     <Outlet context={{ hlsUrl, setHlsUrl, selectedCamera, setSelectedCamera, isMonitoringPage }} />
                 </main>
             </div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Camera,
   AlertTriangle,
@@ -11,7 +12,6 @@ import {
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 import { useOutletContext } from 'react-router-dom'
-import HLSVideoPlayer from '../components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
   // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
@@ -31,6 +31,7 @@ export default function LiveMonitoring() {
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [hlsError, setHlsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // AppLayout의 상태와 동기화
   useEffect(() => {
@@ -46,6 +47,36 @@ export default function LiveMonitoring() {
       outletContext.setSelectedCamera(selectedCamera)
     }
   }, [selectedCamera, outletContext])
+
+  // 플레이어를 카드 영역으로 포털링 (DOM 조작 방식)
+  useEffect(() => {
+    if (!hlsUrl || !videoContainerRef.current) return
+
+    const movePlayer = () => {
+      const globalContainer = document.getElementById('global-video-player-container')
+      if (!globalContainer) return
+
+      const videoElement = globalContainer.querySelector('video')
+      if (videoElement && videoContainerRef.current) {
+        // 이미 올바른 위치에 있으면 스킵
+        if (videoElement.parentElement === videoContainerRef.current) return
+
+        // 플레이어를 카드 영역으로 이동
+        videoContainerRef.current.appendChild(videoElement)
+      }
+    }
+
+    // 약간의 지연 후 실행 (플레이어가 렌더링될 시간 확보)
+    const timeout = setTimeout(movePlayer, 100)
+    
+    // 주기적으로 확인 (플레이어가 나중에 렌더링될 수 있음)
+    const interval = setInterval(movePlayer, 500)
+    
+    return () => {
+      clearTimeout(timeout)
+      clearInterval(interval)
+    }
+  }, [hlsUrl])
 
   // 페이지 로드 시 스트림 상태 확인
   useEffect(() => {
@@ -64,6 +95,12 @@ export default function LiveMonitoring() {
             outletContext.setHlsUrl(url)
           }
           setIsStreamActive(true)
+        } else {
+          setHlsUrl(null)
+          if (outletContext?.setHlsUrl) {
+            outletContext.setHlsUrl(null)
+          }
+          setIsStreamActive(false)
         }
       } catch (error) {
         console.error('[HLS] 스트림 상태 확인 실패:', error)
@@ -71,6 +108,10 @@ export default function LiveMonitoring() {
     }
 
     checkStreamStatus()
+    
+    // 주기적으로 상태 확인
+    const interval = setInterval(checkStreamStatus, 10000)
+    return () => clearInterval(interval)
   }, [selectedCamera, outletContext])
 
   // 비디오 파일 선택
@@ -188,37 +229,27 @@ export default function LiveMonitoring() {
           {/* Main Camera Feed */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {hlsUrl ? (
-                <HLSVideoPlayer
-                  src={hlsUrl}
-                  autoPlay={true}
-                  muted={false}
-                  onPlay={() => setIsStreamActive(true)}
-                  onError={(error) => {
-                    setHlsError(error)
-                    console.error('[HLS] 에러:', error)
-                  }}
-                  className="w-full h-full"
-                  keepAliveOnHidden={true}  // 페이지 이동 시에도 재생 유지
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center text-gray-400">
-                    <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
-                    <p className="text-base">카메라 피드</p>
-                    <p className="text-sm mt-2">
-                      {selectedCamera === 'camera-1'
-                        ? '거실 카메라'
-                        : selectedCamera === 'camera-2'
-                          ? '아이방 카메라'
-                          : '주방 카메라'}
-                    </p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      비디오 파일을 업로드하여 스트리밍을 시작하세요
-                    </p>
+              {/* 플레이어 컨테이너 - AppLayout의 플레이어가 여기에 렌더링됨 */}
+              <div ref={videoContainerRef} className="absolute inset-0 w-full h-full">
+                {!hlsUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
+                      <p className="text-base">카메라 피드</p>
+                      <p className="text-sm mt-2">
+                        {selectedCamera === 'camera-1'
+                          ? '거실 카메라'
+                          : selectedCamera === 'camera-2'
+                            ? '아이방 카메라'
+                            : '주방 카메라'}
+                      </p>
+                      <p className="text-xs mt-2 text-gray-500">
+                        비디오 파일을 업로드하여 스트리밍을 시작하세요
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Live Indicator */}
               {hlsUrl && isStreamActive && (
