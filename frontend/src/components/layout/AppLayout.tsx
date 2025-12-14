@@ -1,18 +1,59 @@
-import { Outlet } from 'react-router-dom'
-import { useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
+import HLSVideoPlayer from '../components/HLSVideoPlayer'
+import { API_BASE_URL } from '@/constants/api'
 
 /**
  * 앱 내부 페이지용 레이아웃
  * 사이드바와 헤더 포함
+ * 전역 비디오 플레이어 포함 (라우트 밖에 배치하여 페이지 이동 시에도 유지)
  */
 export default function AppLayout() {
     const [isCollapsed, setIsCollapsed] = useState(false)
+    const location = useLocation()
+    const [hlsUrl, setHlsUrl] = useState<string | null>(null)
+    const [selectedCamera, setSelectedCamera] = useState('camera-1')
+    const isMonitoringPage = location.pathname === '/monitoring'
 
     const toggleSidebar = () => {
         setIsCollapsed(!isCollapsed)
     }
+
+    // 모니터링 페이지일 때만 스트림 상태 확인
+    useEffect(() => {
+        if (!isMonitoringPage) {
+            setHlsUrl(null)
+            return
+        }
+
+        const checkStreamStatus = async () => {
+            try {
+                const status = await fetch(
+                    `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+                    { credentials: 'include' }
+                )
+                const data = await status.json()
+
+                if (data.is_active && data.is_running) {
+                    const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
+                    setHlsUrl(url)
+                } else {
+                    setHlsUrl(null)
+                }
+            } catch (error) {
+                console.error('[AppLayout] 스트림 상태 확인 실패:', error)
+                setHlsUrl(null)
+            }
+        }
+
+        checkStreamStatus()
+        
+        // 주기적으로 상태 확인 (30초마다)
+        const interval = setInterval(checkStreamStatus, 30000)
+        return () => clearInterval(interval)
+    }, [isMonitoringPage, selectedCamera])
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -24,9 +65,22 @@ export default function AppLayout() {
                 {/* Header */}
                 <Header isSidebarOpen={!isCollapsed} />
 
+                {/* 전역 비디오 플레이어 (모니터링 페이지일 때만 표시, 라우트 밖에 배치) */}
+                {isMonitoringPage && hlsUrl && (
+                    <div className="w-full bg-black" style={{ height: '300px' }}>
+                        <HLSVideoPlayer
+                            src={hlsUrl}
+                            autoPlay={true}
+                            muted={false}
+                            keepAliveOnHidden={true}
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
+                )}
+
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
-                    <Outlet />
+                    <Outlet context={{ hlsUrl, setHlsUrl, selectedCamera, setSelectedCamera, isMonitoringPage }} />
                 </main>
             </div>
         </div>

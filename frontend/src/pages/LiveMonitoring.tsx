@@ -10,12 +10,20 @@ import {
 } from 'lucide-react'
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
-import HLSVideoPlayer from '../components/HLSVideoPlayer'
+import { useOutletContext } from 'react-router-dom'
 
 export default function LiveMonitoring() {
+  // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
+  const outletContext = useOutletContext<{
+    hlsUrl: string | null
+    setHlsUrl: (url: string | null) => void
+    selectedCamera: string
+    setSelectedCamera: (camera: string) => void
+  }>()
+  
   const [isMuted] = useState(false)
-  const [selectedCamera, setSelectedCamera] = useState('camera-1')
-  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
+  const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
+  const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -24,20 +32,37 @@ export default function LiveMonitoring() {
   const [hlsError, setHlsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 페이지 로드 시 스트림 상태 확인 및 자동 재생
+  // AppLayout의 상태와 동기화
+  useEffect(() => {
+    if (outletContext) {
+      setHlsUrl(outletContext.hlsUrl)
+      setSelectedCamera(outletContext.selectedCamera)
+    }
+  }, [outletContext])
+
+  // 카메라 변경 시 AppLayout에 알림
+  useEffect(() => {
+    if (outletContext?.setSelectedCamera) {
+      outletContext.setSelectedCamera(selectedCamera)
+    }
+  }, [selectedCamera, outletContext])
+
+  // 페이지 로드 시 스트림 상태 확인
   useEffect(() => {
     const checkStreamStatus = async () => {
       try {
         const status = await fetch(
           `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
-          { credentials: 'include' }  // httpOnly Cookie 전송
+          { credentials: 'include' }
         )
         const data = await status.json()
 
         if (data.is_active && data.is_running) {
-          // 서버에서 스트림이 이미 실행 중이면 HLS URL 설정
           const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
           setHlsUrl(url)
+          if (outletContext?.setHlsUrl) {
+            outletContext.setHlsUrl(url)
+          }
           setIsStreamActive(true)
         }
       } catch (error) {
@@ -46,7 +71,7 @@ export default function LiveMonitoring() {
     }
 
     checkStreamStatus()
-  }, [selectedCamera])
+  }, [selectedCamera, outletContext])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,22 +191,11 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed */}
+          {/* Main Camera Feed - 플레이어는 AppLayout에서 표시됨 */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {/* HLS Video Player */}
-              {hlsUrl ? (
-                <HLSVideoPlayer
-                  src={hlsUrl}
-                  autoPlay={true}
-                  muted={isMuted}
-                  onPlay={handleHlsPlay}
-                  onPause={handleHlsPause}
-                  onError={handleHlsError}
-                  className="w-full h-full"
-                  keepAliveOnHidden={true}  // 모니터링 페이지: 탭 전환해도 계속 재생
-                />
-              ) : (
+              {/* 플레이어는 AppLayout에서 표시되므로 여기서는 안내 메시지만 표시 */}
+              {!hlsUrl ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
@@ -195,6 +209,15 @@ export default function LiveMonitoring() {
                     </p>
                     <p className="text-xs mt-2 text-gray-500">
                       비디오 파일을 업로드하여 스트리밍을 시작하세요
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <p className="text-base">라이브 스트림 재생 중</p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      비디오 플레이어는 상단에 표시됩니다
                     </p>
                   </div>
                 </div>
@@ -237,8 +260,6 @@ export default function LiveMonitoring() {
                   <span className="text-sm">데드존 근처 접근 감지</span>
                 </div>
               </div>
-
-              {/* 비디오 컨트롤은 HLS 플레이어 자체 컨트롤 사용 */}
             </div>
           </div>
 
