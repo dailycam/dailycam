@@ -2,7 +2,6 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
-import HLSVideoPlayer from '../HLSVideoPlayer'
 import { API_BASE_URL } from '@/constants/api'
 
 /**
@@ -64,19 +63,6 @@ export default function AppLayout() {
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
                 <Header isSidebarOpen={!isCollapsed} />
-
-                {/* 전역 비디오 플레이어 (모니터링 페이지일 때만 표시, 라우트 밖에 배치) */}
-                {isMonitoringPage && hlsUrl && (
-                    <div className="w-full bg-black" style={{ height: '300px' }}>
-                        <HLSVideoPlayer
-                            src={hlsUrl}
-                            autoPlay={true}
-                            muted={false}
-                            keepAliveOnHidden={true}
-                            className="w-full h-full object-contain"
-                        />
-                    </div>
-                )}
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">

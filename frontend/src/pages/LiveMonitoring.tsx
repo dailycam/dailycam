@@ -11,6 +11,7 @@ import {
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 import { useOutletContext } from 'react-router-dom'
+import HLSVideoPlayer from '../components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
   // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
@@ -118,6 +119,9 @@ export default function LiveMonitoring() {
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
         setHlsUrl(url)
+        if (outletContext?.setHlsUrl) {
+          outletContext.setHlsUrl(url)
+        }
         setIsStreamActive(true)
         setShowUploadModal(false)
       } else {
@@ -136,6 +140,9 @@ export default function LiveMonitoring() {
     try {
       await stopStream(selectedCamera)
       setHlsUrl(null)
+      if (outletContext?.setHlsUrl) {
+        outletContext.setHlsUrl(null)
+      }
       setIsStreamActive(false)
       setHlsError(null)
     } catch (error: any) {
@@ -178,11 +185,23 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed - 플레이어는 AppLayout에서 표시됨 */}
+          {/* Main Camera Feed */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {/* 플레이어는 AppLayout에서 표시되므로 여기서는 안내 메시지만 표시 */}
-              {!hlsUrl ? (
+              {hlsUrl ? (
+                <HLSVideoPlayer
+                  src={hlsUrl}
+                  autoPlay={true}
+                  muted={false}
+                  onPlay={() => setIsStreamActive(true)}
+                  onError={(error) => {
+                    setHlsError(error)
+                    console.error('[HLS] 에러:', error)
+                  }}
+                  className="w-full h-full"
+                  keepAliveOnHidden={true}  // 페이지 이동 시에도 재생 유지
+                />
+              ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
@@ -196,15 +215,6 @@ export default function LiveMonitoring() {
                     </p>
                     <p className="text-xs mt-2 text-gray-500">
                       비디오 파일을 업로드하여 스트리밍을 시작하세요
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center text-gray-400">
-                    <p className="text-base">라이브 스트림 재생 중</p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      비디오 플레이어는 상단에 표시됩니다
                     </p>
                   </div>
                 </div>
