@@ -58,7 +58,7 @@ class HLSStreamGenerator:
         
         # 10분 단위 아카이브 설정
         self.archive_duration_minutes = 10
-        self.target_fps = 30.0
+        self.target_fps = 15.0  # 30.0 → 15.0 (CPU 사용량 약 50% 감소)
         self.archive_fps = 5.0
         self.target_width = 640
         self.target_height = 480
@@ -101,7 +101,7 @@ class HLSStreamGenerator:
             user_id=self.user_id,
             db=self.db_session
         )
-        video_queue.load_videos(shuffle=True, target_duration_minutes=60)
+        video_queue.load_videos(shuffle=False, target_duration_minutes=60)  # shuffle=False로 영상 순서 고정
         
         if video_queue.get_queue_size() == 0:
             print(f"[HLS 스트림] ❌ 오류: 사용자 업로드 영상이 없습니다")
@@ -212,17 +212,16 @@ class HLSStreamGenerator:
             concat_file = self.output_dir / "concat_list.txt"
             
             with open(concat_file, 'w', encoding='utf-8') as f:
-                # 영상을 여러 번 반복하여 긴 재생 목록 생성
-                for _ in range(20):  # 충분히 긴 재생 시간 확보
-                    for video in video_list:
-                        # 절대 경로로 변환 (FFmpeg가 파일을 찾을 수 있도록)
-                        video_absolute = video.resolve()
-                        # FFmpeg concat 형식: file '경로'
-                        # Windows 경로는 백슬래시를 슬래시로 변환
-                        video_path = str(video_absolute).replace('\\', '/')
-                        f.write(f"file '{video_path}'\n")
+                # 영상을 순서대로 한 번만 나열 (stream_loop가 전체를 반복하므로)
+                for video in video_list:
+                    # 절대 경로로 변환 (FFmpeg가 파일을 찾을 수 있도록)
+                    video_absolute = video.resolve()
+                    # FFmpeg concat 형식: file '경로'
+                    # Windows 경로는 백슬래시를 슬래시로 변환
+                    video_path = str(video_absolute).replace('\\', '/')
+                    f.write(f"file '{video_path}'\n")
             
-            print(f"[HLS 스트림] ✅ concat 파일 생성: {len(video_list)}개 영상, 20회 반복")
+            print(f"[HLS 스트림] ✅ concat 파일 생성: {len(video_list)}개 영상 (stream_loop로 반복)")
             print(f"[HLS 스트림] concat 파일 경로: {concat_file.resolve()}")
             # concat 파일 내용 샘플 출력 (디버깅용)
             with open(concat_file, 'r') as f:
@@ -273,7 +272,7 @@ class HLSStreamGenerator:
                 '-stream_loop', '-1',  # 입력 스트림 무한 반복 (입력 옵션 위치)
                 '-i', str(concat_file_absolute),  # 절대 경로 사용
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
+                '-preset', 'veryfast',  # 'ultrafast' → 'veryfast' (품질 유지하면서 CPU 절약)
                 '-tune', 'zerolatency',
                 '-s', f'{self.target_width}x{self.target_height}',
                 '-r', str(self.target_fps),
