@@ -8,7 +8,7 @@ import { SafetyScoreCard } from '../features/safety/components/SafetyScoreCard';
 import { SafetyChecklist } from '../features/safety/components/SafetyChecklist';
 import { IncidentChart } from '../features/safety/components/IncidentChart';
 import { SafetyTrendChart } from '../features/safety/components/SafetyTrendChart';
-import { PageHeader } from '../components/Layout';
+import { PageHeader } from '../components/layout';
 import { Button, LoadingSpinner } from '../components/ui';
 import { formatDate } from '../utils';
 
