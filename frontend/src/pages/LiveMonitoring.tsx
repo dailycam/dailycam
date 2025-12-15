@@ -22,63 +22,20 @@ export default function LiveMonitoring() {
   }>()
   
   const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
-  const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [isStreamActive, setIsStreamActive] = useState(false)
-  const [hlsError, setHlsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // AppLayout의 상태와 동기화
-  useEffect(() => {
-    if (outletContext) {
-      setHlsUrl(outletContext.hlsUrl)
-      setSelectedCamera(outletContext.selectedCamera)
-    }
-  }, [outletContext])
+  // outletContext에서 hlsUrl 가져오기 (플레이어는 AppLayout에서 관리)
+  const hlsUrl = outletContext?.hlsUrl || null
 
   // 카메라 변경 시 AppLayout에 알림
   useEffect(() => {
     if (outletContext?.setSelectedCamera) {
       outletContext.setSelectedCamera(selectedCamera)
     }
-  }, [selectedCamera, outletContext])
-
-  // 플레이어는 AppLayout에서 관리됨 (DOM 조작 제거)
-
-  // 페이지 로드 시 스트림 상태 확인 (AppLayout에서도 확인하므로 여기서는 초기 로드만)
-  useEffect(() => {
-    const checkStreamStatus = async () => {
-      try {
-        const status = await fetch(
-          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
-          { credentials: 'include' }
-        )
-        const data = await status.json()
-
-        if (data.is_active && data.is_running) {
-          const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
-          setHlsUrl(url)
-          if (outletContext?.setHlsUrl) {
-            outletContext.setHlsUrl(url)
-          }
-          setIsStreamActive(true)
-        } else {
-          setHlsUrl(null)
-          if (outletContext?.setHlsUrl) {
-            outletContext.setHlsUrl(null)
-          }
-          setIsStreamActive(false)
-        }
-      } catch (error) {
-        console.error('[HLS] 스트림 상태 확인 실패:', error)
-      }
-    }
-
-    // 초기 로드 시 한 번만 확인 (AppLayout에서 주기적으로 확인함)
-    checkStreamStatus()
   }, [selectedCamera, outletContext])
 
   // 비디오 파일 선택
@@ -126,11 +83,9 @@ export default function LiveMonitoring() {
 
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
-        setHlsUrl(url)
         if (outletContext?.setHlsUrl) {
           outletContext.setHlsUrl(url)
         }
-        setIsStreamActive(true)
         setShowUploadModal(false)
       } else {
         setUploadError('스트림 시작 실패. 다시 시도해주세요.')
@@ -147,18 +102,13 @@ export default function LiveMonitoring() {
   const handleStopStream = async () => {
     try {
       await stopStream(selectedCamera)
-      setHlsUrl(null)
       if (outletContext?.setHlsUrl) {
         outletContext.setHlsUrl(null)
       }
-      setIsStreamActive(false)
-      setHlsError(null)
     } catch (error: any) {
       console.error('[HLS] 스트림 중지 오류:', error)
     }
   }
-
-  // HLS 플레이어 이벤트 핸들러는 AppLayout의 플레이어에서 처리됨
 
   return (
     <div className="space-y-6">
@@ -193,82 +143,6 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed - 플레이어는 AppLayout 상단에 표시됨 */}
-          <div className="card p-0 overflow-hidden">
-            <div 
-              className="relative bg-gray-900 aspect-video"
-              style={{
-                pointerEvents: 'none',
-                overflow: 'hidden'
-              }}
-            >
-              {/* 플레이어는 AppLayout 상단에 표시되므로 여기서는 안내 메시지만 */}
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-0">
-                {!hlsUrl ? (
-                  <div className="text-center text-gray-400">
-                    <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
-                    <p className="text-base">카메라 피드</p>
-                    <p className="text-sm mt-2">
-                      {selectedCamera === 'camera-1'
-                        ? '거실 카메라'
-                        : selectedCamera === 'camera-2'
-                          ? '아이방 카메라'
-                          : '주방 카메라'}
-                    </p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      비디오 파일을 업로드하여 스트리밍을 시작하세요
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-400">
-                    <p className="text-base">라이브 스트림 재생 중</p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      비디오 플레이어는 상단에 표시됩니다
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Live Indicator */}
-              {hlsUrl && isStreamActive && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-danger/90 text-white px-3 py-1.5 rounded-full z-10">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                  <span className="text-sm font-semibold">LIVE</span>
-                </div>
-              )}
-
-              {/* HLS Error Display */}
-              {hlsError && (
-                <div className="absolute bottom-4 left-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded-lg z-10">
-                  <p className="text-sm">{hlsError}</p>
-                </div>
-              )}
-
-              {/* AI Detection Overlay */}
-              <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg">
-                <div className="flex items-center gap-2 text-sm">
-                  <Activity className="w-4 h-4 text-safe" />
-                  <span>AI 분석 중...</span>
-                </div>
-              </div>
-
-              {/* Detection Box (Example) */}
-              <div className="absolute top-1/3 left-1/3 w-32 h-48 border-4 border-safe rounded-lg">
-                <div className="absolute -top-7 left-0 bg-safe text-white text-xs px-2 py-1 rounded">
-                  아이 감지됨
-                </div>
-              </div>
-
-              {/* Zone Warnings */}
-              <div className="absolute bottom-20 left-4 right-4 space-y-2">
-                <div className="bg-warning/90 text-white px-4 py-2 rounded-lg flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5" />
-                  <span className="text-sm">데드존 근처 접근 감지</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Camera Selector */}
           <div className="grid grid-cols-3 gap-3">
             <CameraThumbnail
