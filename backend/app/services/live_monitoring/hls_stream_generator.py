@@ -531,7 +531,6 @@ class HLSStreamGenerator:
                 db = next(get_db())
             
             from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
-            import pytz
             
             # 이미 등록된 Job이 있는지 확인
             segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
@@ -668,8 +667,6 @@ class HLSStreamGenerator:
         
         if self.ffmpeg_process:
             self.ffmpeg_process.terminate()
-        
-        self._finalize_current_archive()
     
     def get_playlist_url(self) -> str:
         """HLS 플레이리스트 URL 반환"""

@@ -93,18 +93,13 @@ class VideoQueue:
                         
                         # S3에서 다운로드 (로컬 파일이 있어도 S3 최신 버전으로 덮어쓰기)
                         print(f"[영상 큐] 📥 S3에서 다운로드 중: {s3_key} → {video_path}")
-                        s3_service.s3_client.download_file(
-                            s3_service.bucket_name,
-                            s3_key,
-                            str(video_path)
-                        )
-                        print(f"[영상 큐] ✅ S3 다운로드 성공: {video_path.name}")
+                        success = s3_service.download_camera_video(s3_key, video_path)
                         
-                        # 다운로드 성공 시 큐에 추가
-                        if video_path.exists():
+                        if success and video_path.exists():
+                            print(f"[영상 큐] ✅ S3 다운로드 성공: {video_path.name}")
                             valid_videos.append(video_path)
                         else:
-                            print(f"[영상 큐] ⚠️ 다운로드 후에도 파일이 없음: {video_path}")
+                            print(f"[영상 큐] ⚠️ S3 다운로드 실패 또는 파일 없음: {video_path}")
                             
                     except Exception as e:
                         # S3 다운로드 실패 시 로컬 파일 확인 (폴백)
