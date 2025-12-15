@@ -68,41 +68,59 @@ class VideoQueue:
                 print(f"[영상 큐] ⚠️ 활성화된 영상이 없습니다. Settings 페이지에서 영상을 업로드해주세요.")
                 return
             
-            # 파일 경로로 변환하고 존재 여부 확인
+            # S3에서 영상을 다운로드하여 로컬에 저장하고 큐에 추가
             valid_videos = []
+            from app.services.s3_service import S3Service
+            s3_service = S3Service()
+            
             for video in camera_videos:
                 video_path = Path(video.file_path)
-                if not video_path.exists():
-                    # 로컬에 파일이 없으면 S3에서 다운로드 시도
+                
+                # S3에서 영상 다운로드 시도
+                if s3_service.is_enabled():
                     try:
-                        from app.services.s3_service import S3Service
-                        s3_service = S3Service()
-                        
-                        if s3_service.is_enabled():
-                            # S3 키 추정: videos/{camera_id}/{filename}
-                            # (CameraVideo에 s3_key 필드가 없으므로 표준 경로 가정)
-                            s3_key = f"videos/{self.camera_id}/{video_path.name}"
-                            print(f"[영상 큐] 📥 로컬에 파일 없음, S3 다운로드 시도: {s3_key}")
-                            
-                            # 디렉토리 생성
-                            video_path.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            # 다운로드 (boto3 client 직접 사용 - S3Service에 download_file이 없으므로)
-                            s3_service.s3_client.download_file(
-                                s3_service.bucket_name,
-                                s3_key,
-                                str(video_path)
-                            )
-                            print(f"[영상 큐] ✅ S3 다운로드 성공: {video_path.name}")
+                        # s3_key 우선 사용, 없으면 표준 경로 추정
+                        if video.s3_key:
+                            s3_key = video.s3_key
+                            print(f"[영상 큐] 📥 S3 키 사용: {s3_key}")
                         else:
-                             print(f"[영상 큐] ⚠️ 파일이 없고 S3도 비활성화됨: {video_path.name}")
+                            # 표준 경로 추정: videos/{camera_id}/{filename}
+                            s3_key = f"videos/{self.camera_id}/{video_path.name}"
+                            print(f"[영상 큐] 📥 S3 키 추정: {s3_key}")
+                        
+                        # 디렉토리 생성
+                        video_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # S3에서 다운로드 (로컬 파일이 있어도 S3 최신 버전으로 덮어쓰기)
+                        print(f"[영상 큐] 📥 S3에서 다운로드 중: {s3_key} → {video_path}")
+                        s3_service.s3_client.download_file(
+                            s3_service.bucket_name,
+                            s3_key,
+                            str(video_path)
+                        )
+                        print(f"[영상 큐] ✅ S3 다운로드 성공: {video_path.name}")
+                        
+                        # 다운로드 성공 시 큐에 추가
+                        if video_path.exists():
+                            valid_videos.append(video_path)
+                        else:
+                            print(f"[영상 큐] ⚠️ 다운로드 후에도 파일이 없음: {video_path}")
+                            
                     except Exception as e:
+                        # S3 다운로드 실패 시 로컬 파일 확인 (폴백)
                         print(f"[영상 큐] ⚠️ S3 다운로드 실패 ({video_path.name}): {e}")
-
-                if video_path.exists():
-                    valid_videos.append(video_path)
+                        if video_path.exists():
+                            print(f"[영상 큐] 📁 로컬 파일 사용 (폴백): {video_path.name}")
+                            valid_videos.append(video_path)
+                        else:
+                            print(f"[영상 큐] ❌ S3 다운로드 실패하고 로컬 파일도 없음: {video.file_path}")
                 else:
-                    print(f"[영상 큐] ⚠️ 유효한 영상 파일을 확보하지 못함: {video.file_path}")
+                    # S3가 비활성화된 경우 로컬 파일 확인
+                    print(f"[영상 큐] ⚠️ S3가 비활성화됨, 로컬 파일 확인: {video_path.name}")
+                    if video_path.exists():
+                        valid_videos.append(video_path)
+                    else:
+                        print(f"[영상 큐] ⚠️ 로컬 파일이 없고 S3도 비활성화됨: {video.file_path}")
             
             if not valid_videos:
                 print(f"[영상 큐] ⚠️ 재생할 수 있는 영상이 없습니다.")
