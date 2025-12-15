@@ -37,7 +37,7 @@
 | 항목 (Metric) | 계산 방식 (Logic) | 비고 |
 | :--- | :--- | :--- |
 | **안전 점수** | `Avg(SegmentAnalysis.safety_score)` | `AnalysisLog` 점수는 합산에서 **제외**. |
-| **안전도 추이** | 주간/월간 단위 `Avg(AnalysisLog.safety_score)` | 과거 데이터 트렌드는 `AnalysisLog` 사용하여 집계. (일관성 유지) |
+| **안전도 추이** | 주간: 일별 `Avg(SegmentAnalysis.safety_score)` / 월간: 주별 평균 | 상단 안전 점수와 일관성을 위해 모두 `SegmentAnalysis` 기준으로 집계. |
 | **사고 유형 통계** | `Count(SafetyEvent by title keyword)` | 이벤트 제목의 키워드(낙상, 충돌 등)로 분류하여 카운트. |
 | **체크리스트** | `SafetyEvent` 중 미해결(`resolved=False`) 항목 | 최신순 정렬, 중요도에 따라 상단 배치. |
 

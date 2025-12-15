@@ -68,62 +68,67 @@ def get_safety_report_summary(
     )
     
     # 주간/월간 안전도 추이 데이터
+    # 👉 화면 상단 "오늘의 종합 안전 점수"와 일관성을 유지하기 위해
+    #    모두 SegmentAnalysis.safety_score 기준으로 계산한다.
+    #    (일별 평균 → 주간 그래프, 주간 평균 → 월간 그래프)
     trend_data: List[Dict[str, Any]] = []
+
+    # 현재 구현에서는 camera_id를 고정값으로 사용
+    # TODO: 추후 사용자별 카메라 매핑으로 확장
+    trend_camera_id = "camera-1"
     
     if period_type == "week":
-        # 주간: 오늘을 기준으로 지난 7일
+        # 주간: 오늘을 기준으로 지난 7일 (6일 전 ~ 오늘)
         today = datetime.now()
         day_names_ko = ["월", "화", "수", "목", "금", "토", "일"]
         
-        for i in range(6, -1, -1): # 6일 전부터 오늘까지 (오름차순으로 추가)
+        for i in range(6, -1, -1):  # 6일 전부터 오늘까지 (오름차순)
             day_to_query = today - timedelta(days=i)
-            
             day_start = day_to_query.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
-            
-            day_stats = (
-                db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+
+            day_segments = (
+                db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
-                    AnalysisLog.user_id == user_id,
-                    AnalysisLog.created_at >= day_start,
-                    AnalysisLog.created_at < day_end
+                    SegmentAnalysis.camera_id == trend_camera_id,
+                    SegmentAnalysis.segment_start >= day_start,
+                    SegmentAnalysis.segment_start < day_end,
+                    SegmentAnalysis.status == "completed",
                 )
                 .first()
             )
-            
-            # 요일 이름 가져오기
+
             day_label = day_names_ko[day_to_query.weekday()]
-            
+            day_avg = int(day_segments.avg_safety or 0) if day_segments and day_segments.avg_safety else 0
+
             trend_data.append({
                 "date": day_label,
-                "안전도": int(day_stats.avg_safety or 0) if day_stats.avg_safety else 0
+                "안전도": day_avg,
             })
-    else: # month
-        # 월간: 오늘을 기준으로 지난 4주간의 주간 평균
+    else:  # month
+        # 월간: 오늘을 기준으로 지난 4주간의 "주간 평균 안전 점수"
         today = datetime.now()
         
-        for i in range(3, -1, -1): # 3주 전부터 이번 주까지 (오름차순으로 추가)
+        for i in range(3, -1, -1):  # 3주 전부터 이번 주까지 (오름차순)
             # 각 주의 끝나는 날짜 (이번 주, 1주 전, 2주 전, 3주 전)
             end_of_week = today - timedelta(weeks=i)
-            
             # 각 주의 시작 날짜 (끝나는 날짜로부터 6일 전)
             start_of_week = end_of_week - timedelta(days=6)
-            
-            # DB 쿼리를 위한 시간 범위 설정
+
             week_start_query = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
             week_end_query = end_of_week.replace(hour=23, minute=59, second=59, microsecond=999999)
 
             week_stats = (
-                db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
-                    AnalysisLog.user_id == user_id,
-                    AnalysisLog.created_at >= week_start_query,
-                    AnalysisLog.created_at <= week_end_query
+                    SegmentAnalysis.camera_id == trend_camera_id,
+                    SegmentAnalysis.segment_start >= week_start_query,
+                    SegmentAnalysis.segment_start <= week_end_query,
+                    SegmentAnalysis.status == "completed",
                 )
                 .first()
             )
-            
-            # 주차 라벨링 (예: "3주 전", "2주 전", "지난주", "이번 주")
+
             if i == 0:
                 week_label = "이번 주"
             elif i == 1:
@@ -131,9 +136,11 @@ def get_safety_report_summary(
             else:
                 week_label = f"{i}주 전"
 
+            week_avg = int(week_stats.avg_safety or 0) if week_stats and week_stats.avg_safety else 0
+
             trend_data.append({
                 "date": week_label,
-                "안전도": int(week_stats.avg_safety or 0) if week_stats.avg_safety else 0
+                "안전도": week_avg,
             })
     
     # 선택한 날짜의 하루치 데이터 조회 기준
