@@ -251,8 +251,10 @@ def get_safety_report_summary(
         .all()
     )
     
-    today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
-    today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
+    # AnalysisLog와 SegmentAnalysis 중복 합산 방지 (SegmentAnalysis 기준)
+    # today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+    today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
+    
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     
     # 체크리스트 데이터 생성 (SafetyEvent 기반)
@@ -372,6 +374,8 @@ def get_safety_report_summary(
         safety_insights = latest_log.safety_insights
     else:
         safety_insights = []
+    
+    # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
     
     elapsed_time = time.time() - start_time
     print(f"[Safety API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")

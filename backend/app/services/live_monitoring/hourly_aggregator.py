@@ -284,6 +284,56 @@ class HourlyAggregator:
             print(f"[HourlyAggregator] Gemini API 호출 실패: {e}")
             raise
     
+    def _extract_and_parse_json(self, text: str) -> dict:
+        """
+        텍스트에서 JSON 추출 및 파싱
+        """
+        cleaned_text = text
+
+        if "```json" in cleaned_text:
+            start = cleaned_text.find("```json")
+            if start != -1:
+                start = cleaned_text.find("\n", start) + 1
+                end = cleaned_text.find("```", start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        elif "```" in cleaned_text:
+            start = cleaned_text.find("```")
+            if start != -1:
+                start = cleaned_text.find("\n", start) + 1
+                end = cleaned_text.find("```", start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+
+        first_brace = cleaned_text.find("{")
+        if first_brace != -1:
+            brace_count = 0
+            last_brace = first_brace
+            for i in range(first_brace, len(cleaned_text)):
+                ch = cleaned_text[i]
+                if ch == "{":
+                    brace_count += 1
+                elif ch == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        last_brace = i
+                        break
+
+            if brace_count == 0:
+                cleaned_text = cleaned_text[first_brace : last_brace + 1]
+            else:
+                last_brace = cleaned_text.rfind("}")
+                if last_brace != -1 and last_brace > first_brace:
+                    cleaned_text = cleaned_text[first_brace : last_brace + 1]
+
+        try:
+            return json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON 파싱 실패: {str(e)}")
+            print(f"[에러 위치] Line: {e.lineno}, Column: {e.colno}")
+            print(f"[추출된 텍스트 (처음 800자)]\n{cleaned_text[:800]}")
+            raise ValueError(f"JSON 파싱 실패 (Line {e.lineno}, Col {e.colno}): {str(e)}")
+    
     def _build_aggregation_prompt(self, text_data: Dict[str, Any]) -> str:
         """
         1시간 분량 텍스트 데이터 종합 분석 프롬프트 생성

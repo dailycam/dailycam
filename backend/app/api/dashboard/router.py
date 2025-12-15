@@ -1,12 +1,13 @@
 """Dashboard API Router"""
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import pytz
+import time
 
 from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
@@ -33,7 +34,7 @@ def get_dashboard_summary(
     특정 날짜(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
     최근 7일 이내의 날짜만 조회 가능합니다.
     """
-    import time
+    # time은 상단에서 import됨
     start_time = time.time()
     print(f"\n[Dashboard API] 🚀 요청 시작 - User: {user_id}, Date: {request.target_date}")
     
@@ -42,7 +43,7 @@ def get_dashboard_summary(
         try:
             query_date = datetime.strptime(request.target_date, "%Y-%m-%d")
         except ValueError:
-            from fastapi import HTTPException
+            # HTTPException은 상단에서 import됨
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     else:
         query_date = datetime.now()
@@ -50,7 +51,7 @@ def get_dashboard_summary(
     # 최근 7일 이내인지 확인
     days_ago = (datetime.now() - query_date).days
     if days_ago < 0 or days_ago > 6:
-        from fastapi import HTTPException
+        # HTTPException은 상단에서 import됨
         raise HTTPException(status_code=400, detail="Only data from the last 7 days can be queried")
     
     # 1. 날짜 범위 설정
@@ -105,16 +106,33 @@ def get_dashboard_summary(
         .all()
     )
     
+    # HourlyReport 조회 (텍스트 데이터: 요약, 인사이트, 추천 활동)
+    # 현재 시간 이전의 가장 최근 리포트
+    # datetime은 상단에서 import됨
+    now = datetime.now()
+    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+    
+    latest_hourly_report = (
+        db.query(HourlyReport)
+        .filter(
+            HourlyReport.camera_id == camera_id,
+            HourlyReport.hour_start < current_hour_start
+        )
+        .order_by(HourlyReport.hour_start.desc())
+        .first()
+    )
+    
     print(f"[Dashboard] 선택한 날짜 분석된 로그 개수: {len(today_logs)}")
     print(f"[Dashboard] 선택한 날짜 분석된 세그먼트 개수: {len(today_segments)}")
     
     # 2-1. 선택한 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
     # AnalysisLog와 SegmentAnalysis 모두에서 수집
-    today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
-    today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
+    # AnalysisLog와 SegmentAnalysis 중복 합산 방지 (SegmentAnalysis 기준)
+    # today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+    today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
     
-    today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
-    today_dev_scores.extend([s.development_score for s in today_segments if s.development_score is not None])
+    # today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
+    today_dev_scores = [s.development_score for s in today_segments if s.development_score is not None]
     
     print(f"[Dashboard] 안전 점수들: {today_safety_scores}")
     print(f"[Dashboard] 발달 점수들: {today_dev_scores}")
@@ -230,13 +248,7 @@ def get_dashboard_summary(
     # 7. 추천 사항
     recommendations: List[Dict[str, Any]] = []
     
-    # 최신 HourlyReport에서 추천 활동 가져오기
-    latest_hourly_report = (
-        db.query(HourlyReport)
-        .filter(HourlyReport.camera_id == camera_id)
-        .order_by(HourlyReport.hour_start.desc())
-        .first()
-    )
+    # 최신 HourlyReport에서 추천 활동 가져오기 (라인 649에서 이미 조회됨, 여기서는 재사용)
     
     if latest_hourly_report and latest_hourly_report.recommended_activities:
         if isinstance(latest_hourly_report.recommended_activities, list):
@@ -543,7 +555,7 @@ def get_dashboard_summary(
                 hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * count + log.safety_score) / (count + 1))
                 hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * count + (log.development_score or 0)) / (count + 1))
         
-        hourly_data[hour]["analysisCount"] += 1
+        # hourly_data[hour]["analysisCount"] += 1  # 중복 방지를 위해 SegmentAnalysis에서만 카운트
         hourly_data[hour]["eventCount"] += 1
     
     # SegmentAnalysis도 시간대별로 집계 (실시간 VLM 분석 결과)
@@ -640,20 +652,7 @@ def get_dashboard_summary(
     
     
     # 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
-    # 현재 시간 기준 가장 최근 완료된 1시간 리포트 조회
-    now = datetime.now()
-    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-    
-    # 최신 HourlyReport 조회 (현재 시간 이전의 가장 최근 리포트)
-    latest_hourly_report = (
-        db.query(HourlyReport)
-        .filter(
-            HourlyReport.camera_id == camera_id,
-            HourlyReport.hour_start < current_hour_start
-        )
-        .order_by(HourlyReport.hour_start.desc())
-        .first()
-    )
+    # latest_hourly_report는 이미 라인 115에서 조회됨 (중복 제거)
     
     # 텍스트 요약 (HourlyReport에서 가져오거나, 없으면 기본값)
     summary_text = "아직 분석된 데이터가 없습니다."
@@ -677,8 +676,8 @@ def get_dashboard_summary(
         "safetyScore": avg_safety_score,  # 오늘 분석된 모든 영상의 평균 안전 점수 (실시간)
         "developmentScore": avg_dev_score,  # 오늘 분석된 모든 영상의 평균 발달 점수 (실시간)
         "incidentCount": incident_count,  # 오늘 분석된 모든 영상의 이벤트 카운트 (실시간)
-        "monitoringHours": float(len(today_logs) + len(today_segments)) * 0.17,  # 분석된 영상 개수 * 10분 (실시간)
-        "totalAnalysisCount": len(today_logs) + len(today_segments),  # 총 분석 횟수 (실시간)
+        "monitoringHours": round(len(today_segments) * (10 / 60), 1),  # 분석된 영상 개수 * 10분 (정확히 계산)
+        "totalAnalysisCount": len(today_segments),  # 중복 제거 (SegmentAnalysis 기준)
         "activityPattern": "모니터링 중" if (today_logs or today_segments) else "데이터 없음",
         "weeklyTrend": weekly_trend,
         "risks": risks,

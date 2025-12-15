@@ -11,7 +11,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
     ports:
-      - "0.0.0.0:3306:3306"  # 스트리밍 서버 접근 허용 (Lightsail 방화벽에서 스트리밍 서버 IP만 허용)
+      - "0.0.0.0:3306:3306" # 스트리밍 서버 접근 허용 (Lightsail 방화벽에서 스트리밍 서버 IP만 허용)
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
@@ -60,8 +60,8 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
-      - ENABLE_HLS_STREAMING=false  # 메인 서버에서는 HLS 스트림 비활성화
-      - STREAMING_SERVER_URL=https://stream.dailycam.net  # 스트리밍 서버 URL
+      - ENABLE_HLS_STREAMING=false # 메인 서버에서는 HLS 스트림 비활성화
+      - STREAMING_SERVER_URL=https://stream.dailycam.net # 스트리밍 서버 URL
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
@@ -70,37 +70,38 @@ services:
     networks:
       - dailycam-network
 
-  vlm-worker-1:
-    build: ./backend
-    container_name: dailycam-worker-1-prod
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=dailycam_user
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=dailycam
-      - PYTHONUNBUFFERED=1
-      - TZ=Asia/Seoul
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - WORKER_ID=worker-1
-      - DELETE_VIDEO_AFTER_ANALYSIS=false
-      - ENVIRONMENT=production
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
-    volumes:
-      # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
-      - ./backend/temp_videos:/app/temp_videos
-      - ./backend/videos:/app/videos
-    command: python app/workers/analysis_worker.py
-    restart: unless-stopped
-    networks:
-      - dailycam-network
+  # 비디오 분석 워커 (비디오 전용 서버에서 실행하므로 메인 서버에서는 주석 처리)
+  # vlm-worker-1:
+  #   build: ./backend
+  #   container_name: dailycam-worker-1-prod
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #   environment:
+  #     - MYSQL_HOST=mysql
+  #     - MYSQL_PORT=3306
+  #     - MYSQL_USER=dailycam_user
+  #     - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+  #     - MYSQL_DATABASE=dailycam
+  #     - PYTHONUNBUFFERED=1
+  #     - TZ=Asia/Seoul
+  #     - GEMINI_API_KEY=${GEMINI_API_KEY}
+  #     - WORKER_ID=worker-1
+  #     - DELETE_VIDEO_AFTER_ANALYSIS=false
+  #     - ENVIRONMENT=production
+  #     - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+  #     - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+  #     - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+  #     - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+  #     - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+  #   volumes:
+  #     # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
+  #     - ./backend/temp_videos:/app/temp_videos
+  #     - ./backend/videos:/app/videos
+  #   command: python app/workers/analysis_worker.py
+  #   restart: unless-stopped
+  #   networks:
+  #     - dailycam-network
 
   # 자동 클립 하이라이트 생성 워커 (향후 추가 예정)
   # clip-highlight-worker:

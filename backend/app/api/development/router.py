@@ -116,12 +116,13 @@ def get_development_summary(
     
     # 3. 오늘 분석된 영상들의 평균 발달 점수
     # AnalysisLog + SegmentAnalysis 모두 포함
+    # AnalysisLog와 SegmentAnalysis 중복 합산 방지 (SegmentAnalysis 기준)
     today_dev_scores = []
     
-    # AnalysisLog에서 점수 수집
-    for log in today_logs:
-        if log.development_score is not None:
-            today_dev_scores.append(log.development_score)
+    # AnalysisLog에서 점수 수집 (중복 제거를 위해 주석 처리)
+    # for log in today_logs:
+    #     if log.development_score is not None:
+    #         today_dev_scores.append(log.development_score)
     
     # SegmentAnalysis에서 점수 수집
     for segment in today_segments:
@@ -255,6 +256,8 @@ def get_development_summary(
         development_insights = latest_log.development_insights
     else:
         development_insights = []
+    
+    # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
     
     # 월령은 위에서 계산된 값(user.child_birthdate 기반)을 그대로 사용합니다.
     # age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
