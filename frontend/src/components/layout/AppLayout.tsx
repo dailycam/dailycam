@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
