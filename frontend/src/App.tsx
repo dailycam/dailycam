@@ -1,8 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
 import { AnalysisProvider } from './context/AnalysisContext'
 import { AuthProvider } from './context/AuthContext'
-import HomeLayout from './components/layout/HomeLayout'
-import AppLayout from './components/layout/AppLayout'
+import HomeLayout from './components/Layout/HomeLayout'
+import AppLayout from './components/Layout/AppLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import AppHome from './pages/AppHome'
@@ -23,34 +23,34 @@ function App() {
     <AuthProvider>
       <AnalysisProvider>
         <Routes>
-        {/* 로그인 */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+          {/* 로그인 */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* 홈 (랜딩 페이지) */}
-        <Route path="/" element={<HomeLayout />}>
-          <Route index element={<Home />} />
-        </Route>
-
-        {/* 앱 (대시보드 및 기능들) */}
-        <Route element={<AppLayout />}>
-          {/* 미구독 사용자도 접근 가능 */}
-          <Route path="/subscription" element={<SubscriptionPage />} />
-          <Route path="/profile-setup" element={<ProfileSetup />} />
-          <Route path="settings" element={<Settings />} />
-
-          {/* 보호된 라우트 - 구독 사용자만 접근 가능 */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="home" element={<AppHome />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="monitoring" element={<Monitoring />} />
-            <Route path="development-report" element={<DevelopmentReport />} />
-            <Route path="safety-report" element={<SafetyReport />} />
-            <Route path="clip-highlights" element={<ClipHighlights />} />
-            <Route path="video-analysis-test" element={<VideoAnalysisTest />} />
+          {/* 홈 (랜딩 페이지) */}
+          <Route path="/" element={<HomeLayout />}>
+            <Route index element={<Home />} />
           </Route>
-        </Route>
-      </Routes>
+
+          {/* 앱 (대시보드 및 기능들) */}
+          <Route element={<AppLayout />}>
+            {/* 미구독 사용자도 접근 가능 */}
+            <Route path="/subscription" element={<SubscriptionPage />} />
+            <Route path="/profile-setup" element={<ProfileSetup />} />
+            <Route path="settings" element={<Settings />} />
+
+            {/* 보호된 라우트 - 구독 사용자만 접근 가능 */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="home" element={<AppHome />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="monitoring" element={<Monitoring />} />
+              <Route path="development-report" element={<DevelopmentReport />} />
+              <Route path="safety-report" element={<SafetyReport />} />
+              <Route path="clip-highlights" element={<ClipHighlights />} />
+              <Route path="video-analysis-test" element={<VideoAnalysisTest />} />
+            </Route>
+          </Route>
+        </Routes>
       </AnalysisProvider>
     </AuthProvider>
   )

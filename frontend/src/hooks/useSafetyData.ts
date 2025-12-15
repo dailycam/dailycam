@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+<<<<<<< HEAD
 import { getAuthHeader } from '../lib/auth';
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 import { SafetyReportData, ClockData } from '../types/safety';
 import { API_BASE_URL } from '@/constants/api';
 
@@ -30,9 +33,13 @@ export function useSafetyData() {
                     `${API_BASE_URL}/api/safety/summary?period_type=${periodType}`,
                     {
                         method: 'GET',
+<<<<<<< HEAD
                         headers: {
                             ...getAuthHeader(),
                         },
+=======
+                        credentials: 'include',
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     }
                 );
 

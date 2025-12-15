@@ -1,11 +1,17 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+<<<<<<< HEAD
 import { getAuthToken } from '../lib/auth'
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
 export default function ProtectedRoute() {
     const { user, isLoading, isSubscribed } = useAuth()
     const location = useLocation()
+<<<<<<< HEAD
     const token = getAuthToken()
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
     if (isLoading) {
         return (
@@ -18,12 +24,22 @@ export default function ProtectedRoute() {
         )
     }
 
+<<<<<<< HEAD
     // 토큰이 없거나 사용자 정보가 없는 경우 → 로그인 페이지로
     if (!token || !user) {
         return <Navigate to="/login" state={{ from: location.pathname }} replace />
     }
 
     // 토큰은 있지만 구독하지 않은 경우 → 구독 페이지로
+=======
+    // 사용자 정보가 없는 경우 → 로그인 페이지로
+    // (httpOnly Cookie 인증이므로 user 존재 여부로 판단)
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    }
+
+    // 구독하지 않은 경우 → 구독 페이지로
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     if (!isSubscribed) {
         return <Navigate to="/subscription" replace />
     }

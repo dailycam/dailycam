@@ -11,12 +11,20 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
     ports:
+<<<<<<< HEAD
       - "127.0.0.1:3306:3306" # 외부 접근 제한
+=======
+      - "0.0.0.0:3306:3306"  # 스트리밍 서버 접근 허용 (Lightsail 방화벽에서 스트리밍 서버 IP만 허용)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
       - ./backend/app/commands/db/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
+<<<<<<< HEAD
       - ./backend/app/commands/db/add_camera_settings_table.sql:/docker-entrypoint-initdb.d/03_add_camera_settings_table.sql
+=======
+      # camera_settings 테이블은 SQLAlchemy ORM이 자동 생성 (users 테이블 의존성 때문)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
@@ -60,10 +68,19 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
       - ENVIRONMENT=production
+<<<<<<< HEAD
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+=======
+      - ENABLE_HLS_STREAMING=false  # 메인 서버에서는 HLS 스트림 비활성화
+      - STREAMING_SERVER_URL=https://stream.dailycam.net  # 스트리밍 서버 URL
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     restart: unless-stopped
     networks:
       - dailycam-network
@@ -92,6 +109,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
     volumes:
+<<<<<<< HEAD
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
     command: python app/workers/analysis_worker.py
@@ -123,6 +141,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
     volumes:
+=======
+      # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
     command: python app/workers/analysis_worker.py
@@ -162,7 +183,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+<<<<<<< HEAD
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+=======
+      - ./nginx/nginx.main.conf:/etc/nginx/nginx.conf:ro
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro # SSL 인증서
@@ -175,6 +200,13 @@ services:
 volumes:
   mysql_data:
     driver: local
+<<<<<<< HEAD
+=======
+  temp_videos:
+    driver: local
+  videos:
+    driver: local
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
 networks:
   dailycam-network:

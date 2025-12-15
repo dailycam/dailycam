@@ -8,7 +8,7 @@ import { DevelopmentStageCard } from '../features/development/components/Develop
 import { DevelopmentRadarChart } from '../features/development/components/DevelopmentRadarChart'
 import { DevelopmentFrequencyChart } from '../features/development/components/DevelopmentFrequencyChart'
 import { RecommendedActivities } from '../features/development/components/RecommendedActivities'
-import { PageHeader } from '../components/layout'
+import { PageHeader } from '../components/Layout'
 import { Button } from '../components/ui'
 import { formatDate } from '../utils'
 

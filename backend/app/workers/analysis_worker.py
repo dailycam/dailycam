@@ -34,7 +34,11 @@ class AnalysisWorker:
         self.worker_id = worker_id
         self.gemini_service = GeminiService()
         self.is_running = False
+<<<<<<< HEAD
         self.poll_interval = 5  # 5초마다 폴링
+=======
+        self.poll_interval = 20  # 20초마다 폴링
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         
     def start(self):
         """워커 시작"""
@@ -46,8 +50,17 @@ class AnalysisWorker:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
+<<<<<<< HEAD
         # 메인 루프
         asyncio.run(self._main_loop())
+=======
+        # 메인 루프 전, 비정상 종료된 Job 복구
+        self._recover_stuck_jobs()
+
+        # 메인 루프
+        asyncio.run(self._main_loop())
+
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     
     def _signal_handler(self, signum, frame):
         """시그널 핸들러 (Ctrl+C 등)"""
@@ -63,7 +76,22 @@ class AnalysisWorker:
                 job = self._get_next_job()
                 
                 if job:
+<<<<<<< HEAD
                     print(f"\n[워커 {self.worker_id}] 📋 Job 발견: ID={job.id}, 구간={job.segment_start.strftime('%H:%M:%S')}~{job.segment_end.strftime('%H:%M:%S')}")
+=======
+                    # UTC -> KST 변환하여 로그 출력
+                    from datetime import timezone
+                    import pytz
+                    kst = pytz.timezone('Asia/Seoul')
+                    
+                    # job.segment_start/end는 naive datetime (UTC)
+                    start_utc = job.segment_start.replace(tzinfo=timezone.utc)
+                    end_utc = job.segment_end.replace(tzinfo=timezone.utc)
+                    start_kst = start_utc.astimezone(kst)
+                    end_kst = end_utc.astimezone(kst)
+                    
+                    print(f"\n[워커 {self.worker_id}] 📋 Job 발견: ID={job.id}, 구간={start_kst.strftime('%H:%M:%S')}~{end_kst.strftime('%H:%M:%S')} (KST)")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     await self._process_job(job)
                 else:
                     # Job이 없으면 대기
@@ -197,7 +225,11 @@ class AnalysisWorker:
             
             # 3. 파일 크기 검증
             file_size = video_path.stat().st_size
+<<<<<<< HEAD
             min_size_mb = 1
+=======
+            min_size_mb = 0.01  # 1MB -> 0.01MB (10KB)로 완화 (최적화 영상 대응)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             
             if file_size < min_size_mb * 1024 * 1024:
                 raise ValueError(f"비디오 파일이 너무 작음: {file_size / (1024 * 1024):.2f}MB (최소 {min_size_mb}MB 필요)")
@@ -211,8 +243,12 @@ class AnalysisWorker:
             
             for attempt in range(max_retries):
                 try:
+<<<<<<< HEAD
                     with open(video_path, 'rb') as f:
                         video_bytes = f.read()
+=======
+                    # 파일 읽기(bytes loading) 제거 - GeminiService가 직접 파일 경로를 처리함
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     
                     if attempt > 0:
                         print(f"[워커 {self.worker_id}] 🔄 Gemini VLM 분석 재시도 중... ({attempt + 1}/{max_retries})")
@@ -238,8 +274,14 @@ class AnalysisWorker:
                     else:
                         print(f"[워커 {self.worker_id}] ⚠️ 아이 생일 정보 없음 (User ID: {user_id})")
 
+<<<<<<< HEAD
                     analysis_result = await self.gemini_service.analyze_video_vlm(
                         video_bytes=video_bytes,
+=======
+                    # VLM 분석 호출 (파일 경로 전달)
+                    analysis_result = await self.gemini_service.analyze_video_vlm(
+                        video_path=str(video_path),
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                         content_type="video/mp4",
                         stage=None,
                         age_months=age_months
@@ -341,6 +383,7 @@ class AnalysisWorker:
                 # 클립 생성 실패해도 분석은 성공으로 처리
             
             # 8. S3 아카이브 삭제 (분석 완료 후 즉시 삭제 - 비용 절감)
+<<<<<<< HEAD
             # 클립 생성 성공/실패와 관계없이 분석 완료 후 즉시 삭제
             from app.services.s3_service import S3Service
             s3_service = S3Service()
@@ -358,6 +401,22 @@ class AnalysisWorker:
                     print(f"[워커 {self.worker_id}] 🗑️ S3 아카이브 삭제 완료 (비용 절감)")
                 else:
                     print(f"[워커 {self.worker_id}] ⚠️ S3 아카이브 삭제 실패 (수동 확인 필요)")
+=======
+            # 주의: 원본 영상을 보관하려면 이 로직을 비활성화하고 S3 Lifecycle 정책 사용 권장
+            # from app.services.s3_service import S3Service
+            # s3_service = S3Service()
+            # if s3_service.is_enabled():
+            #     # segment_start를 사용하여 S3 키 생성
+            #     segment_start_utc = segment_analysis.segment_start
+            #     if segment_start_utc.tzinfo is None:
+            #         segment_start_utc = segment_start_utc.replace(tzinfo=timezone.utc)
+            #     
+            #     # delete_success = s3_service.delete_archive(
+            #     #     camera_id=job.camera_id,
+            #     #     segment_start=segment_start_utc
+            #     # )
+            #     pass
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             
             # 9. 파일 삭제 (옵션)
             delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
@@ -424,6 +483,38 @@ class AnalysisWorker:
         }
         return category_map.get(category_str)
 
+<<<<<<< HEAD
+=======
+    def _recover_stuck_jobs(self):
+        """비정상 종료로 PROCESSING 상태에 멈춰있는 Job 복구"""
+        db = next(get_db())
+        try:
+            # 내 worker_id로 할당되어 있는데 처리 중인 Job들
+            stuck_jobs = db.query(AnalysisJob).filter(
+                AnalysisJob.status == JobStatus.PROCESSING,
+                AnalysisJob.worker_id == self.worker_id
+            ).all()
+            
+            if stuck_jobs:
+                print(f"[워커 {self.worker_id}] ⚠️ 비정상 종료된 Job {len(stuck_jobs)}개 발견 - 초기화 진행")
+                for job in stuck_jobs:
+                    print(f"  - Job ID={job.id} 재시도 대기열로 복귀")
+                    job.status = JobStatus.PENDING
+                    job.worker_id = None
+                    job.started_at = None
+                
+                db.commit()
+                print(f"[워커 {self.worker_id}] ✅ 복구 완료")
+            else:
+                print(f"[워커 {self.worker_id}] ✅ 복구할 stuck job 없음")
+                
+        except Exception as e:
+            print(f"[워커 {self.worker_id}] ❌ 복구 중 오류: {e}")
+        finally:
+            db.close()
+
+
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
 if __name__ == "__main__":
     import os

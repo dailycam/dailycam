@@ -9,6 +9,10 @@ interface HLSVideoPlayerProps {
   onPause?: () => void
   onError?: (error: string) => void
   className?: string
+<<<<<<< HEAD
+=======
+  keepAliveOnHidden?: boolean  // 탭 비활성화 시에도 재생 유지 (모니터링 페이지용)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 }
 
 export default function HLSVideoPlayer({
@@ -19,17 +23,55 @@ export default function HLSVideoPlayer({
   onPause,
   onError,
   className = '',
+<<<<<<< HEAD
+=======
+  keepAliveOnHidden = false,  // 기본값: 탭 전환 시 멈춤 (트래픽 절약)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 }: HLSVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+<<<<<<< HEAD
+=======
+  const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || !src) return
 
+<<<<<<< HEAD
     console.log('[HLS Player] 초기화:', src)
+=======
+    // src가 변경되지 않았으면 재초기화하지 않음 (페이지 이동 시에도 유지)
+    const prevSrc = video.getAttribute('data-hls-src')
+    if (prevSrc === src && hlsRef.current) {
+      console.log('[HLS Player] src 동일, 재초기화 스킵:', src)
+      return
+    }
+
+    // 저장된 재생 정보 복원 (keepAliveOnHidden일 때만)
+    const storageKey = `hls_player_${src.replace(/[^a-zA-Z0-9]/g, '_')}`
+    const savedData = sessionStorage.getItem(storageKey)
+    let targetTime: number | null = null
+
+    if (savedData && keepAliveOnHidden) {
+      try {
+        const { videoTime, timestamp } = JSON.parse(savedData)
+        const elapsed = (Date.now() - timestamp) / 1000  // 경과 시간 (초)
+        targetTime = videoTime + elapsed  // 예상 재생 시간
+        if (targetTime !== null) {
+          console.log(`[HLS Player] 복원 시도: ${videoTime.toFixed(1)}초 + ${elapsed.toFixed(1)}초 = ${targetTime.toFixed(1)}초`)
+        }
+      } catch (e) {
+        console.error('[HLS Player] 저장된 데이터 파싱 실패:', e)
+      }
+    }
+
+    console.log('[HLS Player] 초기화:', src)
+    video.setAttribute('data-hls-src', src)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     setIsLoading(true)
     setError(null)
 
@@ -38,6 +80,7 @@ export default function HLSVideoPlayer({
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
+<<<<<<< HEAD
         // 라이브 스트리밍 최적화 설정
         backBufferLength: 10,        // 이미 재생한 10초만 유지 (90 → 10)
         maxBufferLength: 10,          // 앞으로 10초만 미리 다운로드 (30 → 10)
@@ -45,6 +88,15 @@ export default function HLSVideoPlayer({
         liveBackBufferLength: 5,      // 라이브 모드에서는 5초만 유지
         liveSyncDurationCount: 3,     // 라이브 엣지와의 동기화 (3개 세그먼트)
         liveMaxLatencyDurationCount: 10, // 최대 지연 허용 (10개 세그먼트)
+=======
+        // 라이브 스트리밍 최적화 설정 (버퍼 증가로 끊김 방지)
+        backBufferLength: 20,        // 이미 재생한 20초 유지 (10 → 20)
+        maxBufferLength: 30,          // 앞으로 30초 미리 다운로드 (10 → 30)
+        maxMaxBufferLength: 60,       // 최대 60초까지 (20 → 60)
+        liveBackBufferLength: 10,     // 라이브 모드에서는 10초 유지 (5 → 10)
+        liveSyncDurationCount: 5,     // 라이브 엣지와의 동기화 완화 (3 → 5)
+        liveMaxLatencyDurationCount: 15, // 최대 지연 허용 증가 (10 → 15)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         // 재시도 설정
         manifestLoadingTimeOut: 10000,
         manifestLoadingMaxRetry: 10,
@@ -64,6 +116,25 @@ export default function HLSVideoPlayer({
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[HLS Player] 매니페스트 로드 완료')
         setIsLoading(false)
+<<<<<<< HEAD
+=======
+        
+        // 저장된 시간으로 seek 시도 (HLS는 라이브 스트림이므로 제한적)
+        if (targetTime !== null && keepAliveOnHidden) {
+          // HLS는 라이브 스트림이므로 seek가 제한적
+          // 가능한 범위 내에서 seek 시도
+          setTimeout(() => {
+            if (video.duration > 0) {
+              const seekTime = Math.min(targetTime!, video.duration - 1)
+              if (seekTime > 0 && seekTime < video.duration) {
+                console.log(`[HLS Player] seek 시도: ${seekTime.toFixed(1)}초`)
+                video.currentTime = seekTime
+              }
+            }
+          }, 1000)
+        }
+        
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         if (autoPlay) {
           video.play().catch(e => {
             console.log('[HLS Player] 자동 재생 실패 (사용자 상호작용 필요):', e)
@@ -71,12 +142,44 @@ export default function HLSVideoPlayer({
         }
       })
 
+<<<<<<< HEAD
       hls.on(Hls.Events.ERROR, (_event, data) => {
         console.error('[HLS Player] 에러:', data.type, data.details)
         
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
+=======
+      // 재생 시간 주기적으로 저장 (keepAliveOnHidden일 때만)
+      if (keepAliveOnHidden) {
+        timeUpdateIntervalRef.current = setInterval(() => {
+          if (video && !video.paused && video.currentTime > 0) {
+            const data = {
+              videoTime: video.currentTime,
+              timestamp: Date.now()
+            }
+            sessionStorage.setItem(storageKey, JSON.stringify(data))
+          }
+        }, 2000)  // 2초마다 저장
+      }
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('[HLS Player] 에러:', data.type, data.details)
+
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              // 404 에러는 스트림이 중지된 것으로 간주
+              if (data.details === 'manifestLoadError' || data.details === 'levelLoadError') {
+                console.log('[HLS Player] 스트림 중지 감지 (404)')
+                const errorMsg = '스트림이 중지되었습니다'
+                setError(errorMsg)
+                if (onError) onError(errorMsg)
+                hls.destroy()
+                return
+              }
+              
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
               console.log('[HLS Player] 네트워크 에러, 재시도 중...')
               setError('네트워크 연결 문제 - 재연결 시도 중...')
               setTimeout(() => {
@@ -104,7 +207,39 @@ export default function HLSVideoPlayer({
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       // 네이티브 HLS 지원 (Safari)
       console.log('[HLS Player] Safari 네이티브 HLS 사용')
+<<<<<<< HEAD
       video.src = src
+=======
+      
+      // 저장된 시간으로 seek 시도
+      if (targetTime !== null && keepAliveOnHidden) {
+        setTimeout(() => {
+          if (video.duration > 0) {
+            const seekTime = Math.min(targetTime!, video.duration - 1)
+            if (seekTime > 0 && seekTime < video.duration) {
+              console.log(`[HLS Player] seek 시도: ${seekTime.toFixed(1)}초`)
+              video.currentTime = seekTime
+            }
+          }
+        }, 1000)
+      }
+      
+      video.src = src
+      
+      // 재생 시간 주기적으로 저장 (keepAliveOnHidden일 때만)
+      if (keepAliveOnHidden) {
+        timeUpdateIntervalRef.current = setInterval(() => {
+          if (video && !video.paused && video.currentTime > 0) {
+            const data = {
+              videoTime: video.currentTime,
+              timestamp: Date.now()
+            }
+            sessionStorage.setItem(storageKey, JSON.stringify(data))
+          }
+        }, 2000)
+      }
+      
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       video.addEventListener('loadedmetadata', () => {
         console.log('[HLS Player] 메타데이터 로드 완료')
         setIsLoading(false)
@@ -121,14 +256,81 @@ export default function HLSVideoPlayer({
       if (onError) onError(errorMsg)
     }
 
+<<<<<<< HEAD
     // 클린업
     return () => {
+=======
+    // Page Visibility API 연동 (keepAliveOnHidden=false일 때만)
+    // 탭 비활성화 시 스트림 로딩 중지 - 트래픽 절약
+    const handleVisibilityChange = () => {
+      const currentVideo = videoRef.current
+      if (!currentVideo) return
+
+      // keepAliveOnHidden=true면 탭 전환해도 계속 재생 (모니터링 페이지용)
+      if (keepAliveOnHidden) {
+        // 재생 시간 저장
+        if (!currentVideo.paused && currentVideo.currentTime > 0) {
+          const data = {
+            videoTime: currentVideo.currentTime,
+            timestamp: Date.now()
+          }
+          sessionStorage.setItem(storageKey, JSON.stringify(data))
+        }
+        return
+      }
+
+      if (!hlsRef.current || !currentVideo) return
+
+      if (document.hidden) {
+        if (!currentVideo.paused) {
+          console.log('[HLS Player] 탭 비활성화: 절전 모드 진입 (스트림 중지)')
+          currentVideo.pause() // 비디오 일시정지
+          hlsRef.current.stopLoad() // 네트워크 요청 중단
+        }
+      } else {
+        console.log('[HLS Player] 탭 활성화: 스트림 재개')
+        hlsRef.current.startLoad() // 네트워크 요청 재개
+        if (autoPlay) {
+          currentVideo.play().catch(e => console.log('자동 재생 재개 실패:', e))
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // 클린업
+    return () => {
+      // keepAliveOnHidden일 때는 HLS 인스턴스를 파괴하지 않음 (페이지 이동 시에도 유지)
+      if (keepAliveOnHidden) {
+        // 재생 시간 저장
+        if (video && video.currentTime > 0) {
+          const data = {
+            videoTime: video.currentTime,
+            timestamp: Date.now()
+          }
+          sessionStorage.setItem(storageKey, JSON.stringify(data))
+          console.log(`[HLS Player] 페이지 떠남, 재생 시간 저장: ${video.currentTime.toFixed(1)}초 (인스턴스 유지)`)
+        }
+        // HLS 인스턴스는 파괴하지 않음
+        return
+      }
+
+      // keepAliveOnHidden이 false일 때만 정리
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
       }
     }
+<<<<<<< HEAD
   }, [src, autoPlay, onError])
+=======
+  }, [src, autoPlay, onError, keepAliveOnHidden])
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
   // 비디오 이벤트 핸들러
   useEffect(() => {
@@ -183,7 +385,11 @@ export default function HLSVideoPlayer({
         playsInline
         controls
       />
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-center">

@@ -1,7 +1,11 @@
 """Development Report API Router"""
 
 from fastapi import APIRouter, Depends, Query
+<<<<<<< HEAD
 from sqlalchemy.orm import Session
+=======
+from sqlalchemy.orm import Session, selectinload
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 from sqlalchemy import func
 from datetime import datetime, timedelta, date
 
@@ -39,6 +43,13 @@ def get_development_summary(
     특정 날짜(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
     최근 7일 이내의 날짜만 조회 가능합니다.
     """
+<<<<<<< HEAD
+=======
+    import time
+    start_time = time.time()
+    print(f"\n[Development API] 🚀 요청 시작 - User: {user_id}, Date: {target_date}")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # 0. 사용자 정보 조회 및 현재 개월 수 계산
     user = db.query(User).filter(User.id == user_id).first()
     
@@ -67,9 +78,16 @@ def get_development_summary(
     today_start = query_date.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = query_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     
+<<<<<<< HEAD
     # AnalysisLog에서 조회
     today_logs = (
         db.query(AnalysisLog)
+=======
+    # AnalysisLog에서 조회 (관련 이벤트를 함께 로드하여 N+1 쿼리 방지)
+    today_logs = (
+        db.query(AnalysisLog)
+        .options(selectinload(AnalysisLog.development_events))  # DevelopmentEvent를 미리 로드
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         .filter(
             AnalysisLog.user_id == user_id,
             AnalysisLog.created_at >= today_start,
@@ -254,6 +272,12 @@ def get_development_summary(
     # 월령은 위에서 계산된 값(user.child_birthdate 기반)을 그대로 사용합니다.
     # age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
     
+<<<<<<< HEAD
+=======
+    elapsed_time = time.time() - start_time
+    print(f"[Development API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     return {
         "age_months": age_months,
         "development_summary": development_summary,  # HourlyReport에서 가져온 종합 요약

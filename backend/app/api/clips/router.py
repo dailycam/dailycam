@@ -31,6 +31,13 @@ def get_clip_highlights(
     
     - target_date: 특정 날짜의 클립만 조회 (예: 2025-12-09)
     """
+<<<<<<< HEAD
+=======
+    import time
+    start_time = time.time()
+    print(f"\n[Clips API] 🚀 요청 시작 - Category: {category}, Date: {target_date}")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # 기본 쿼리
     query = db.query(HighlightClip).order_by(HighlightClip.created_at.desc())
     
@@ -90,6 +97,12 @@ def get_clip_highlights(
             "created_at": created_at_kst,
         })
     
+<<<<<<< HEAD
+=======
+    elapsed_time = time.time() - start_time
+    print(f"[Clips API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초, 클립 수: {len(result)}")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     return {
         "total": len(result),
         "clips": result

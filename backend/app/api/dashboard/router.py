@@ -1,7 +1,11 @@
 """Dashboard API Router"""
 
 from fastapi import APIRouter, Depends, Body
+<<<<<<< HEAD
 from sqlalchemy.orm import Session
+=======
+from sqlalchemy.orm import Session, joinedload, selectinload
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -33,6 +37,13 @@ def get_dashboard_summary(
     특정 날짜(00:00~23:59) 분석된 모든 영상의 데이터를 집계하여 반환합니다.
     최근 7일 이내의 날짜만 조회 가능합니다.
     """
+<<<<<<< HEAD
+=======
+    import time
+    start_time = time.time()
+    print(f"\n[Dashboard API] 🚀 요청 시작 - User: {user_id}, Date: {request.target_date}")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # 조회할 날짜 설정 (기본값: 오늘)
     if request.target_date:
         try:
@@ -54,6 +65,7 @@ def get_dashboard_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=range_days)
     
+<<<<<<< HEAD
     # 2. 조회할 날짜의 모든 분석 로그 조회 (일일 집계)
     # KST 기준 조회 날짜 설정 (target_date 사용)
     kst = pytz.timezone('Asia/Seoul')
@@ -85,6 +97,37 @@ def get_dashboard_summary(
             AnalysisLog.user_id == user_id,
             AnalysisLog.created_at >= target_start_utc,
             AnalysisLog.created_at <= target_end_utc
+=======
+    # 2. 선택한 날짜의 모든 분석 로그 조회 (일일 집계)
+    # KST 기준 선택한 날짜 (query_date 사용!)
+    kst = pytz.timezone('Asia/Seoul')
+    
+    # query_date를 KST로 변환 (query_date는 naive datetime)
+    query_date_kst = kst.localize(query_date.replace(hour=0, minute=0, second=0, microsecond=0))
+    selected_day_start_kst = query_date_kst
+    selected_day_end_kst = query_date_kst.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # UTC로 변환 (데이터베이스는 UTC로 저장됨)
+    selected_day_start_utc = selected_day_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    selected_day_end_utc = selected_day_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
+    
+    print(f"[Dashboard] 선택한 날짜: {request.target_date}")
+    print(f"[Dashboard] 날짜 범위 (KST): {selected_day_start_kst} ~ {selected_day_end_kst}")
+    print(f"[Dashboard] 날짜 범위 (UTC): {selected_day_start_utc} ~ {selected_day_end_utc}")
+    print(f"[Dashboard] User ID: {user_id}")
+    
+    # AnalysisLog 조회 (관련 이벤트들을 함께 로드하여 N+1 쿼리 방지)
+    today_logs = (
+        db.query(AnalysisLog)
+        .options(
+            selectinload(AnalysisLog.safety_events),  # SafetyEvent를 미리 로드
+            selectinload(AnalysisLog.development_events)  # DevelopmentEvent를 미리 로드
+        )
+        .filter(
+            AnalysisLog.user_id == user_id,
+            AnalysisLog.created_at >= selected_day_start_utc,
+            AnalysisLog.created_at <= selected_day_end_utc
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         )
         .all()
     )
@@ -96,17 +139,29 @@ def get_dashboard_summary(
         db.query(SegmentAnalysis)
         .filter(
             SegmentAnalysis.camera_id == camera_id,
+<<<<<<< HEAD
             SegmentAnalysis.segment_start >= target_start_utc,
             SegmentAnalysis.segment_start <= target_end_utc,
+=======
+            SegmentAnalysis.segment_start >= selected_day_start_utc,
+            SegmentAnalysis.segment_start <= selected_day_end_utc,
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             SegmentAnalysis.status == 'completed'
         )
         .all()
     )
     
+<<<<<<< HEAD
     print(f"[Dashboard] 조회 날짜 분석된 로그 개수: {len(today_logs)}")
     print(f"[Dashboard] 조회 날짜 분석된 세그먼트 개수: {len(today_segments)}")
     
     # 2-1. 조회 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
+=======
+    print(f"[Dashboard] 선택한 날짜 분석된 로그 개수: {len(today_logs)}")
+    print(f"[Dashboard] 선택한 날짜 분석된 세그먼트 개수: {len(today_segments)}")
+    
+    # 2-1. 선택한 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # AnalysisLog와 SegmentAnalysis 모두에서 수집
     today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
     today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
@@ -140,15 +195,24 @@ def get_dashboard_summary(
         .first()
     )
     
+<<<<<<< HEAD
     # 4. 조회 날짜의 위험 이벤트 카운트 (일일 집계)
+=======
+    # 4. 선택한 날짜의 위험 이벤트 카운트 (일일 집계)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # AnalysisLog 기반 이벤트
     incident_count = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
+<<<<<<< HEAD
             AnalysisLog.created_at >= target_start_utc,
             AnalysisLog.created_at <= target_end_utc,
+=======
+            AnalysisLog.created_at >= selected_day_start_utc,
+            AnalysisLog.created_at <= selected_day_end_utc,
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             SafetyEvent.severity.in_(["위험", "주의"])
         )
         .count()
@@ -266,6 +330,7 @@ def get_dashboard_summary(
     # 8. 타임라인 이벤트 (AnalysisLog + SegmentAnalysis 모두 포함)
     timeline_events: List[Dict[str, Any]] = []
     
+<<<<<<< HEAD
     # AnalysisLog의 이벤트들을 타임라인에 추가
     for log in today_logs:
         # SafetyEvent 추가
@@ -276,6 +341,12 @@ def get_dashboard_summary(
         )
         
         for event in safety_events:
+=======
+    # AnalysisLog의 이벤트들을 타임라인에 추가 (이미 로드된 관계 사용)
+    for log in today_logs:
+        # SafetyEvent 추가 (selectinload로 이미 로드됨, 추가 쿼리 없음)
+        for event in log.safety_events:
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             # UTC를 KST로 변환
             log_time_kst = log.created_at.replace(tzinfo=pytz.UTC).astimezone(kst)
             time_str = log_time_kst.strftime("%H:%M")
@@ -303,6 +374,7 @@ def get_dashboard_summary(
                 "safety_score": log.safety_score  # 해당 시간대의 실제 안전 점수
             })
         
+<<<<<<< HEAD
         # DevelopmentEvent 추가
         development_events = (
             db.query(DevelopmentEvent)
@@ -311,6 +383,10 @@ def get_dashboard_summary(
         )
         
         for event in development_events:
+=======
+        # DevelopmentEvent 추가 (selectinload로 이미 로드됨, 추가 쿼리 없음)
+        for event in log.development_events:
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             # UTC를 KST로 변환
             log_time_kst = log.created_at.replace(tzinfo=pytz.UTC).astimezone(kst)
             time_str = log_time_kst.strftime("%H:%M")
@@ -595,6 +671,7 @@ def get_dashboard_summary(
     # 10-2. AnalysisLog 구간 추가
     # AnalysisLog는 duration이 없으므로, 이벤트가 있으면 이벤트 범위, 없으면 created_at + 10분으로 추정
     for log in today_logs:
+<<<<<<< HEAD
         # 연결된 이벤트들 조회
         log_events_timestamps = []
         
@@ -607,6 +684,18 @@ def get_dashboard_summary(
         # DevelopmentEvent
         d_events = db.query(DevelopmentEvent.event_timestamp).filter(DevelopmentEvent.analysis_log_id == log.id).all()
         for e in d_events:
+=======
+        # 이미 로드된 이벤트들에서 타임스탬프 수집 (추가 쿼리 없음)
+        log_events_timestamps = []
+        
+        # SafetyEvent (이미 로드됨)
+        for e in log.safety_events:
+            if e.event_timestamp:
+                log_events_timestamps.append(e.event_timestamp)
+                
+        # DevelopmentEvent (이미 로드됨)
+        for e in log.development_events:
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             if e.event_timestamp:
                 log_events_timestamps.append(e.event_timestamp)
         
@@ -680,6 +769,12 @@ def get_dashboard_summary(
         summary_text = latest_log.safety_summary
     
     # 기본 응답 구조 (프론트엔드 DashboardData 인터페이스와 일치)
+<<<<<<< HEAD
+=======
+    elapsed_time = time.time() - start_time
+    print(f"[Dashboard API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     return {
         "summary": summary_text,  # HourlyReport에서 가져온 종합 요약
         "rangeDays": range_days,

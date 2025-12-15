@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+<<<<<<< HEAD
 import { getAuthToken } from '../lib/auth'
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 import { Baby, Phone, Calendar } from 'lucide-react'
 import { API_BASE_URL } from '@/constants/api'
 
@@ -57,6 +60,7 @@ export default function ProfileSetup() {
         setIsSubmitting(true)
 
         try {
+<<<<<<< HEAD
             const token = getAuthToken()
             if (!token) {
                 alert('로그인이 필요합니다')
@@ -64,16 +68,31 @@ export default function ProfileSetup() {
                 return
             }
 
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+<<<<<<< HEAD
                     Authorization: `Bearer ${token}`,
                 },
+=======
+                },
+                credentials: 'include',
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 body: JSON.stringify(formData),
             })
 
             if (!response.ok) {
+<<<<<<< HEAD
+=======
+                if (response.status === 401) {
+                    alert('로그인이 필요합니다')
+                    navigate('/login')
+                    return
+                }
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 const error = await response.json()
                 throw new Error(error.detail || '프로필 등록에 실패했습니다')
             }

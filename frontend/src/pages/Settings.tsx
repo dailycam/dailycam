@@ -17,7 +17,11 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react'
+<<<<<<< HEAD
 import { getAuthToken, removeAuthToken } from '../lib/auth'
+=======
+import { removeAuthToken } from '../lib/auth'
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 import { API_BASE_URL } from '@/constants/api'
 import { getUserCameras, uploadCameraVideo, deleteCameraVideo, getStorageUsage, type CameraSetting } from '@/lib/api'
 import {
@@ -223,15 +227,23 @@ export default function Settings() {
       const base64String = reader.result as string
 
       try {
+<<<<<<< HEAD
         const token = getAuthToken()
 
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         // 즉시 서버에 저장
         const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+<<<<<<< HEAD
             Authorization: `Bearer ${token}`,
           },
+=======
+          },
+          credentials: 'include',
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
           body: JSON.stringify({
             ...profileForm,
             picture: base64String
@@ -263,13 +275,16 @@ export default function Settings() {
 
     try {
       setIsCancelling(true)
+<<<<<<< HEAD
       const token = getAuthToken()
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       const res = await fetch(`${API_BASE_URL}/api/payments/subscribe/basic/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
 
       if (!res.ok) {
@@ -326,15 +341,23 @@ export default function Settings() {
 
     try {
       setIsSavingProfile(true)
+<<<<<<< HEAD
       const token = getAuthToken()
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
       // 프로필 업데이트 API 호출
       const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+<<<<<<< HEAD
           Authorization: `Bearer ${token}`,
         },
+=======
+        },
+        credentials: 'include',
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         body: JSON.stringify(profileForm),
       })
 
@@ -543,6 +566,7 @@ export default function Settings() {
 
     try {
       setIsDeletingAccount(true)
+<<<<<<< HEAD
       const token = getAuthToken()
 
       const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
@@ -550,6 +574,12 @@ export default function Settings() {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
+=======
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
+        method: 'DELETE',
+        credentials: 'include',  // httpOnly Cookie 전송
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       })
 
       if (!response.ok) {

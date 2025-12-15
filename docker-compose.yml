@@ -15,7 +15,11 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
       - ./backend/app/commands/db/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
+<<<<<<< HEAD
       - ./backend/app/commands/db/add_camera_settings_table.sql:/docker-entrypoint-initdb.d/03_add_camera_settings_table.sql
+=======
+      # camera_settings 테이블은 SQLAlchemy ORM이 자동 생성 (users 테이블 의존성 때문)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}" ]
@@ -92,6 +96,7 @@ services:
     networks:
       - dailycam-network
 
+<<<<<<< HEAD
   vlm-worker-2:
     build: ./backend
     container_name: dailycam-worker-2
@@ -123,6 +128,8 @@ services:
     networks:
       - dailycam-network
 
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 volumes:
   mysql_data:
     driver: local

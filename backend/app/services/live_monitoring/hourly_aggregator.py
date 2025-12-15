@@ -39,17 +39,45 @@ class HourlyAggregator:
         Returns:
             HourlyReport: 생성된 리포트 (실패 시 None)
         """
+<<<<<<< HEAD
         hour_end = hour_start + timedelta(hours=1)
         
         print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} ~ {hour_end.strftime('%H:%M')} 종합 분석 시작")
+=======
+        
+        # KST -> UTC 변환 (DB 조회용)
+        # hour_start는 timezone-aware datetime이어야 함 (KST)
+        if hour_start.tzinfo is None:
+            kst = pytz.timezone('Asia/Seoul')
+            hour_start = kst.localize(hour_start)
+        else:
+            # 이미 timezone이 있다면 KST인지 확인 (다르면 변환)
+            kst = pytz.timezone('Asia/Seoul')
+            if hour_start.tzinfo != kst:
+                hour_start = hour_start.astimezone(kst)
+            
+        hour_end = hour_start + timedelta(hours=1)
+        
+        # DB 쿼리용 UTC 시간 (naive)
+        hour_start_utc = hour_start.astimezone(pytz.UTC).replace(tzinfo=None)
+        hour_end_utc = hour_end.astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} (KST) 종합 분석 시작")
+        print(f"  - DB 조회 범위(UTC): {hour_start_utc} ~ {hour_end_utc}")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         
         # 1. 해당 시간대의 완료된 세그먼트 조회 (최대 6개)
         segments = (
             db.query(SegmentAnalysis)
             .filter(
                 SegmentAnalysis.camera_id == camera_id,
+<<<<<<< HEAD
                 SegmentAnalysis.segment_start >= hour_start,
                 SegmentAnalysis.segment_start < hour_end,
+=======
+                SegmentAnalysis.segment_start >= hour_start_utc,
+                SegmentAnalysis.segment_start < hour_end_utc,
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 SegmentAnalysis.status == 'completed'
             )
             .order_by(SegmentAnalysis.segment_start.asc())

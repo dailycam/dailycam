@@ -72,6 +72,7 @@ class VideoQueue:
             valid_videos = []
             for video in camera_videos:
                 video_path = Path(video.file_path)
+<<<<<<< HEAD
                 if video_path.exists():
                     valid_videos.append(video_path)
                 else:
@@ -79,6 +80,42 @@ class VideoQueue:
             
             if not valid_videos:
                 print(f"[영상 큐] ⚠️ 유효한 영상 파일이 없습니다.")
+=======
+                if not video_path.exists():
+                    # 로컬에 파일이 없으면 S3에서 다운로드 시도
+                    try:
+                        from app.services.s3_service import S3Service
+                        s3_service = S3Service()
+                        
+                        if s3_service.is_enabled():
+                            # S3 키 추정: videos/{camera_id}/{filename}
+                            # (CameraVideo에 s3_key 필드가 없으므로 표준 경로 가정)
+                            s3_key = f"videos/{self.camera_id}/{video_path.name}"
+                            print(f"[영상 큐] 📥 로컬에 파일 없음, S3 다운로드 시도: {s3_key}")
+                            
+                            # 디렉토리 생성
+                            video_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            # 다운로드 (boto3 client 직접 사용 - S3Service에 download_file이 없으므로)
+                            s3_service.s3_client.download_file(
+                                s3_service.bucket_name,
+                                s3_key,
+                                str(video_path)
+                            )
+                            print(f"[영상 큐] ✅ S3 다운로드 성공: {video_path.name}")
+                        else:
+                             print(f"[영상 큐] ⚠️ 파일이 없고 S3도 비활성화됨: {video_path.name}")
+                    except Exception as e:
+                        print(f"[영상 큐] ⚠️ S3 다운로드 실패 ({video_path.name}): {e}")
+
+                if video_path.exists():
+                    valid_videos.append(video_path)
+                else:
+                    print(f"[영상 큐] ⚠️ 유효한 영상 파일을 확보하지 못함: {video.file_path}")
+            
+            if not valid_videos:
+                print(f"[영상 큐] ⚠️ 재생할 수 있는 영상이 없습니다.")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 return
             
             print(f"[영상 큐] ✅ DB에서 활성화된 영상 {len(valid_videos)}개 발견")

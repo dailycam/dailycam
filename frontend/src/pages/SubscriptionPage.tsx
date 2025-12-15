@@ -4,7 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { Shield } from 'lucide-react'
 import { useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+<<<<<<< HEAD
 import { getAuthToken } from '../lib/auth'
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 import { API_BASE_URL } from '@/constants/api'
 
 declare global {
@@ -124,8 +127,12 @@ export default function SubscriptionPage() {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
+<<<<<<< HEAD
                                     Authorization: `Bearer ${getAuthToken()}`,
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                                 },
+                                credentials: 'include', // httpOnly Cookie
                                 body: JSON.stringify({
                                     imp_uid: rsp.imp_uid,
                                     merchant_uid: rsp.merchant_uid,
@@ -153,11 +160,16 @@ export default function SubscriptionPage() {
                         await new Promise(resolve => setTimeout(resolve, 300))
                         
                         // 프로필 완성 여부 확인 후 리다이렉트
+<<<<<<< HEAD
                         // 임시로 직접 호출 (Context 업데이트가 완료되지 않을 수 있음)
                         const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
                             headers: {
                                 Authorization: `Bearer ${getAuthToken()}`,
                             },
+=======
+                        const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                            credentials: 'include',
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                         })
                         
                         if (meRes.ok) {

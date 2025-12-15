@@ -8,15 +8,22 @@ import {
   Maximize,
   AlertTriangle,
   Activity,
+<<<<<<< HEAD
   Upload,
   X,
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
   MonitorPlay,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import Hls from 'hls.js'
+<<<<<<< HEAD
 import { uploadVideoForStreaming, startHlsStream, stopHlsStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 import { addNotification } from '../lib/notifications'
+=======
+import { API_BASE_URL } from '@/constants/api'
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
 
 
@@ -24,10 +31,14 @@ export default function Monitoring() {
   const [isPlaying, setIsPlaying] = useState(true)
   const [isMuted, setIsMuted] = useState(true) // 자동 재생을 위해 기본값을 mute로 설정
   const [selectedCamera, setSelectedCamera] = useState('camera-1')
+<<<<<<< HEAD
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
+=======
+  const [uploadError, setUploadError] = useState<string | null>(null)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [monitoringStats, setMonitoringStats] = useState({
     today_total_events: 0,
@@ -35,7 +46,10 @@ export default function Monitoring() {
     today_monitoring_minutes: 0
   })
 
+<<<<<<< HEAD
   const fileInputRef = useRef<HTMLInputElement>(null)
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -51,16 +65,27 @@ export default function Monitoring() {
   useEffect(() => {
     const handleVideoDeleted = async () => {
       console.log('영상 삭제 감지, 스트림 상태 확인 중...')
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       // 스트림 상태 확인
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
         )
+<<<<<<< HEAD
         
         if (response.ok) {
           const data = await response.json()
           
+=======
+
+        if (response.ok) {
+          const data = await response.json()
+
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
           // 스트림이 중지되었으면 UI 업데이트
           if (!data.is_active || !data.is_running) {
             console.log('스트림이 중지되었습니다. UI 업데이트 중...')
@@ -75,11 +100,16 @@ export default function Monitoring() {
             }
             setIsStreamActive(false)
             setIsPlaying(false)
+<<<<<<< HEAD
             setUploadError('영상이 삭제되어 스트림이 중지되었습니다. 다시 시작하려면 "모니터링 시작" 버튼을 클릭하세요.')
+=======
+            setUploadError('영상이 삭제되어 스트림이 중지되었습니다. 자동으로 재시작을 시도합니다.')
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
           }
         }
       } catch (error) {
         console.error('스트림 상태 확인 오류:', error)
+<<<<<<< HEAD
       }
     }
 
@@ -170,12 +200,137 @@ export default function Monitoring() {
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy()
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
       }
+    }
+
+    window.addEventListener('video-deleted', handleVideoDeleted as EventListener)
+    return () => {
+      window.removeEventListener('video-deleted', handleVideoDeleted as EventListener)
     }
   }, [selectedCamera])
 
+<<<<<<< HEAD
   // 비디오 재생/일시정지 제어
   useEffect(() => {
+=======
+  // 컴포넌트 마운트 시 스트림 상태 확인 및 자동 연결
+  useEffect(() => {
+    const checkAndConnectStream = async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+
+          if (data.is_active && data.is_running) {
+            console.log('서버에서 스트림 실행 중 감지, 자동 연결 시작...')
+
+            // HLS 플레이어 연결
+            const fullPlaylistUrl = `${API_BASE_URL}${data.playlist_url}`
+
+            if (Hls.isSupported() && videoRef.current) {
+              // 기존 플레이어가 있으면 파괴하고 새로 생성
+              if (hlsRef.current) {
+                hlsRef.current.destroy()
+              }
+
+              const hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                startPosition: -1,  // 라이브 엣지에서 시작
+                liveSyncDuration: 3,
+                liveMaxLatencyDuration: 15,
+                maxBufferLength: 30,        // 20 → 30 (더 많은 버퍼)
+                maxMaxBufferLength: 60,     // 40 → 60
+                backBufferLength: 10,       // 0 → 10 (이전 세그먼트 유지)
+                manifestLoadingTimeOut: 10000,   // 60초 → 10초 (더 빠른 응답)
+                manifestLoadingMaxRetry: 10,
+                levelLoadingTimeOut: 10000,      // 60초 → 10초
+                levelLoadingMaxRetry: 10,
+                fragLoadingTimeOut: 10000,       // 60초 → 10초
+                fragLoadingMaxRetry: 10,
+              })
+
+              hls.loadSource(fullPlaylistUrl)
+              hls.attachMedia(videoRef.current)
+
+              // 즉시 표시 (매니페스트 파싱 전에도)
+              setIsStreamActive(true)
+
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log('HLS 매니페스트 파싱 완료, 라이브 엣지로 이동')
+                if (videoRef.current) {
+                  const duration = videoRef.current.duration
+                  if (duration && isFinite(duration) && duration > 3) {
+                    videoRef.current.currentTime = Math.max(0, duration - 3)
+                  }
+                  // play()는 isPlaying useEffect에서 처리하도록 상태만 변경
+                  setIsPlaying(true)
+                }
+              })
+
+              hls.on(Hls.Events.LEVEL_LOADED, () => {
+                // 로그 제거 (너무 자주 발생)
+                setIsStreamActive(true)
+              })
+
+              hls.on(Hls.Events.ERROR, (_event, data) => {
+                if (data.fatal) {
+                  console.error('HLS 치명적 오류:', data)
+                  // 자동 복구 시도
+                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    console.log('네트워크 오류, 재연결 시도...')
+                    hls.startLoad()
+                  } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    console.log('미디어 오류, 복구 시도...')
+                    hls.recoverMediaError()
+                  }
+                }
+              })
+
+              hlsRef.current = hls
+              setIsPlaying(true)
+            } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
+              videoRef.current.src = fullPlaylistUrl
+              videoRef.current.addEventListener('loadedmetadata', () => {
+                if (videoRef.current) {
+                  const duration = videoRef.current.duration
+                  if (duration && isFinite(duration) && duration > 3) {
+                    videoRef.current.currentTime = Math.max(0, duration - 3)
+                  }
+                }
+                setIsStreamActive(true)
+              }, { once: true })
+              videoRef.current.play().catch(e => console.warn('자동 재생 실패:', e))
+              setIsPlaying(true)
+            }
+          } else {
+            // 스트림이 없으면 백엔드가 자동으로 시작할 때까지 대기
+            // 프론트엔드에서 스트림을 시작하지 않음 (백엔드가 계속 돌고 있어야 함)
+            console.log('스트림이 없음. 백엔드가 자동으로 시작할 때까지 대기 중...')
+          }
+        }
+      } catch (error) {
+        console.error('스트림 상태 확인 실패:', error)
+      }
+    }
+
+    checkAndConnectStream()
+
+    return () => {
+      // cleanup 시 플레이어와 비디오는 유지 (백그라운드에서 계속 재생)
+      // 다른 페이지로 가도 영상은 계속 돌아가고, 돌아오면 즉시 보임
+    }
+  }, [selectedCamera]) // isStreamActive 의존성 제거 (무한 루프 방지)
+
+  // 비디오 재생/일시정지 제어
+  useEffect(() => {
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.play().catch(e => console.warn('재생 실패:', e))
@@ -221,6 +376,7 @@ export default function Monitoring() {
     return () => clearInterval(interval)
   }, [selectedCamera])
 
+<<<<<<< HEAD
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -498,6 +654,8 @@ export default function Monitoring() {
       console.error('스트림 중지 오류:', error)
     }
   }
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
   return (
     <div className="p-8">
@@ -538,8 +696,13 @@ export default function Monitoring() {
                 muted={isMuted}
               />
 
+<<<<<<< HEAD
               {/* Placeholder when no stream */}
               {!isStreamActive && (
+=======
+              {/* Placeholder when no stream - 비디오가 실제로 재생 중이 아니고 소스도 없을 때만 표시 */}
+              {!isStreamActive && (!videoRef.current?.src || videoRef.current?.readyState < 2) && (
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
@@ -552,7 +715,11 @@ export default function Monitoring() {
                           : '주방 카메라'}
                     </p>
                     <p className="text-xs mt-2 text-gray-500">
+<<<<<<< HEAD
                       '모니터링 시작' 버튼을 클릭하여 라이브 스트리밍을 시작하세요
+=======
+                      스트림 연결 중...
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     </p>
                     {uploadError && (
                       <div className="mt-4 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm max-w-md mx-auto">
@@ -601,6 +768,7 @@ export default function Monitoring() {
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
+<<<<<<< HEAD
                     {!isStreamActive ? (
                       <>
                         <button
@@ -628,6 +796,8 @@ export default function Monitoring() {
                         스트림 중지
                       </button>
                     )}
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     <button className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors backdrop-blur-sm">
                       <Maximize className="w-5 h-5" />
                     </button>
@@ -700,6 +870,7 @@ export default function Monitoring() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -774,6 +945,8 @@ export default function Monitoring() {
           </motion.div>
         </div>
       )}
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     </div>
   )
 }

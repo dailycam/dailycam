@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import { getAuthHeader } from '../../../lib/auth';
+=======
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 import { SafetyReportData, ChecklistItem } from '../types';
 import { API_BASE_URL } from '@/constants/api';
 
@@ -16,18 +19,30 @@ export const useSafetyReport = () => {
             try {
                 setLoading(true)
                 const dateStr = selectedDate.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+<<<<<<< HEAD
+=======
+                console.log(`📅 [SafetyReport] 날짜 변경: ${dateStr}, 기간: ${periodType}`)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 const response = await fetch(
                     `${API_BASE_URL}/api/safety/summary?target_date=${dateStr}&period_type=${periodType}`,
                     {
                         method: 'GET',
+<<<<<<< HEAD
                         headers: {
                             ...getAuthHeader(),
                         },
+=======
+                        credentials: 'include', // httpOnly Cookie 전송
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     }
                 )
 
                 if (response.ok) {
                     const data = await response.json()
+<<<<<<< HEAD
+=======
+                    console.log('📦 [SafetyReport] 받은 데이터:', data)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                     setSafetyData(data)
                 } else {
                     // API 실패 시 기본값 사용
@@ -95,9 +110,13 @@ export const useSafetyReport = () => {
         try {
             await fetch(`${API_BASE_URL}/api/safety/events/${item.id}/resolve?resolved=true`, {
                 method: 'POST',
+<<<<<<< HEAD
                 headers: {
                     ...getAuthHeader(),
                 },
+=======
+                credentials: 'include', // httpOnly Cookie 전송
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             });
         } catch (error) {
             console.error('체크리스트 상태 업데이트 실패:', error);
@@ -119,9 +138,13 @@ export const useSafetyReport = () => {
             try {
                 await fetch(`${API_BASE_URL}/api/safety/events/${item.id}/resolve?resolved=false`, {
                     method: 'POST',
+<<<<<<< HEAD
                     headers: {
                         ...getAuthHeader(),
                     },
+=======
+                    credentials: 'include', // httpOnly Cookie 전송
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                 });
             } catch (error) {
                 console.error('체크리스트 롤백 실패:', error);

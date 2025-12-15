@@ -357,7 +357,21 @@ class HighlightClipService:
                     try:
                         start_time_str = timestamp_range.split('-')[0]
                         h, m, s = start_time_str.split(':')
+<<<<<<< HEAD
                         timestamp_offset = int(h) * 3600 + int(m) * 60 + int(s)
+=======
+                        absolute_timestamp = int(h) * 3600 + int(m) * 60 + int(s)
+                        
+                        # VLM이 전체 영상 기준으로 생성한 timestamp를 10분 세그먼트 기준으로 변환
+                        # 예: 18분(1080초) → 10분 세그먼트 내에서는 0초 (1080 % 600 = 480초)
+                        segment_duration = 600  # 10분
+                        timestamp_offset = absolute_timestamp % segment_duration
+                        
+                        print(f"[하이라이트] 🔍 안전 이벤트 파싱: {event.get('title', 'N/A')}")
+                        print(f"  - 원본 timestamp_range: {timestamp_range}")
+                        print(f"  - 절대 시간: {absolute_timestamp}초")
+                        print(f"  - 세그먼트 내 offset: {timestamp_offset}초")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                         
                         safety_events.append({
                             'type': 'safety',
@@ -366,7 +380,12 @@ class HighlightClipService:
                             'timestamp_offset': timestamp_offset,
                             'severity': severity
                         })
+<<<<<<< HEAD
                     except:
+=======
+                    except Exception as e:
+                        print(f"[하이라이트] ⚠️ 타임스탬프 파싱 실패: {timestamp_range}, 에러: {e}")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
                         continue
         
         # 발달 이벤트 필터링 (최초발생, 다음단계징후만)
@@ -471,6 +490,15 @@ class HighlightClipService:
                 description = " / ".join(descriptions[:3]) if descriptions else " / ".join(titles[:3])
             
             print(f"[하이라이트] 📹 클립 생성: {title} ({duration}초)")
+<<<<<<< HEAD
+=======
+            print(f"[하이라이트] 🕐 타임스탬프 정보:")
+            print(f"  - 이벤트 시작 오프셋: {group['start_offset']}초")
+            print(f"  - 이벤트 종료 오프셋: {group['end_offset']}초")
+            print(f"  - 클립 시작 시간: {start_time}초")
+            print(f"  - 클립 길이: {duration}초")
+            print(f"  - 원본 파일: {source_video.name}")
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
             
             result = self.create_highlight_clip(
                 source_video_path=str(source_video),

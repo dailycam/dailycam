@@ -3,6 +3,47 @@
  */
 
 /**
+<<<<<<< HEAD
+=======
+ * ISO 문자열을 KST Date 객체로 변환
+ * 백엔드에서 UTC로 전송된 시간을 한국 시간으로 변환
+ * @example parseKSTDate("2025-12-10T04:00:00Z") // 한국 시간 2025-12-10 13:00:00
+ */
+export const parseKSTDate = (isoString: string): Date => {
+    return new Date(isoString)
+}
+
+/**
+ * ISO 문자열을 한국 시간 형식으로 변환
+ * @example formatKSTDateTime("2025-12-10T04:00:00Z") // "2025년 12월 10일 13:00"
+ */
+export const formatKSTDateTime = (isoString: string): string => {
+    const date = parseKSTDate(isoString)
+    return date.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Seoul'
+    })
+}
+
+/**
+ * ISO 문자열을 한국 시간만 표시
+ * @example formatKSTTime("2025-12-10T04:00:00Z") // "13:00"
+ */
+export const formatKSTTime = (isoString: string): string => {
+    const date = parseKSTDate(isoString)
+    return date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Seoul'
+    })
+}
+
+/**
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
  * Date 객체를 한국어 형식으로 변환
  * @example formatDate(new Date()) // "2024년 12월 3일"
  */

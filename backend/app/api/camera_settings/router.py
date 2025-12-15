@@ -1,12 +1,22 @@
 """Camera settings API routes"""
 
+<<<<<<< HEAD
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
+=======
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query, Request
+from starlette.requests import Request
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 from sqlalchemy.orm import Session
 from pathlib import Path
 from datetime import datetime
 from typing import List
 import cv2
 import shutil
+<<<<<<< HEAD
+=======
+import os
+import httpx
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
 
 from app.database import get_db
 from app.utils.auth_utils import get_current_user_id
@@ -101,6 +111,10 @@ async def create_camera(
 
 @router.post("/cameras/{camera_id}/upload-video")
 async def upload_camera_video(
+<<<<<<< HEAD
+=======
+    request: Request,
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     camera_id: str,
     video: UploadFile = File(..., description="업로드할 비디오 파일"),
     db: Session = Depends(get_db),
@@ -170,7 +184,11 @@ async def upload_camera_video(
     safe_filename = f"user_uploaded_{timestamp}_{video.filename}"
     file_path = video_dir / safe_filename
     
+<<<<<<< HEAD
     # 파일 저장
+=======
+    # 파일 저장 (로컬에 임시 저장)
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -187,6 +205,20 @@ async def upload_camera_video(
     except Exception as e:
         print(f"[영상 정보 추출 오류] {e}")
     
+<<<<<<< HEAD
+=======
+    # S3에 업로드 (두 서버 간 공유를 위해)
+    s3_key = None
+    from app.services.s3_service import S3Service
+    s3_service = S3Service()
+    if s3_service.is_enabled():
+        s3_key = s3_service.upload_camera_video(file_path, camera_id, safe_filename)
+        if s3_key:
+            print(f"[비디오 업로드] ✅ S3 업로드 완료: {s3_key}")
+            # 로컬 파일 삭제 (선택사항 - S3에 저장되었으므로)
+            # file_path.unlink()  # 필요시 주석 해제
+    
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     # 기존 영상들의 order_index 가져오기
     max_order = db.query(CameraVideo).filter(
         CameraVideo.camera_setting_id == camera_setting.id
@@ -196,15 +228,23 @@ async def upload_camera_video(
     camera_video = CameraVideo(
         camera_setting_id=camera_setting.id,
         filename=safe_filename,
+<<<<<<< HEAD
         file_path=str(file_path),
         file_size=len(content),
         duration=duration,
+=======
+        file_path=str(file_path),  # 로컬 경로 또는 S3 URL
+        file_size=len(content),
+        duration=duration,
+        s3_key=s3_key,  # S3 키 저장
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         order_index=max_order
     )
     db.add(camera_video)
     db.commit()
     db.refresh(camera_video)
     
+<<<<<<< HEAD
     print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초)")
     
     # 영상 업로드 후 자동으로 HLS 스트림 시작 (백그라운드에서 계속 실행)
@@ -262,6 +302,146 @@ async def upload_camera_video(
         print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
         import traceback
         traceback.print_exc()
+=======
+    print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초, S3: {s3_key or '없음'})")
+    
+    # 영상 업로드 후 자동으로 HLS 스트림 시작
+    enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
+    streaming_server_url = os.getenv("STREAMING_SERVER_URL", "https://stream.dailycam.net")
+    
+    if enable_hls_streaming:
+        # 스트리밍 서버에서 직접 시작 (로컬 실행)
+        try:
+            from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
+            import asyncio
+            
+            # 이미 스트림이 실행 중이면 재시작 (새 영상 반영)
+            if camera_id in active_hls_streams:
+                print(f"[비디오 업로드] 기존 스트림 재시작 중: {camera_id}")
+                generator = active_hls_streams[camera_id]
+                generator.stop_streaming()
+                
+                if camera_id in hls_stream_tasks:
+                    task = hls_stream_tasks[camera_id]
+                    if not task.done():
+                        task.cancel()
+                    del hls_stream_tasks[camera_id]
+                del active_hls_streams[camera_id]
+            
+            # 새 스트림 시작 (백그라운드 태스크)
+            from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
+            
+            video_dir = Path(f"videos/{camera_id}")
+            output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+            
+            # 이벤트 루프 가져오기 (비동기 컨텍스트에서)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            generator = HLSStreamGenerator(
+                camera_id=camera_id,
+                video_source=video_dir,
+                output_dir=output_dir,
+                is_real_camera=False,
+                segment_duration=10,
+                enable_realtime_detection=True,
+                event_loop=loop,
+                db_session=db,
+                user_id=user_id
+            )
+            
+            active_hls_streams[camera_id] = generator
+            task = asyncio.create_task(generator.start_streaming())
+            hls_stream_tasks[camera_id] = task
+            
+            print(f"[비디오 업로드] ✅ HLS 스트림 자동 시작됨 (백그라운드 실행): {camera_id}")
+            
+        except Exception as e:
+            print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        # 메인 서버에서는 스트리밍 서버의 API를 호출
+        try:
+            import asyncio
+            
+            async def call_streaming_server():
+                """스트리밍 서버의 HLS 시작 API 호출"""
+                try:
+                    url = f"{streaming_server_url}/api/live-monitoring/start-hls-stream/{camera_id}"
+                    
+                    # 활성화된 모든 영상의 S3 키 가져오기
+                    active_videos = db.query(CameraVideo).filter(
+                        CameraVideo.camera_setting_id == camera_setting.id,
+                        CameraVideo.is_active == True
+                    ).order_by(CameraVideo.order_index).all()
+                    
+                    s3_key_list = []
+                    for video in active_videos:
+                        if video.s3_key:
+                            s3_key_list.append(video.s3_key)
+                    
+                    params = {
+                        "enable_analysis": True,
+                        "enable_realtime_detection": True
+                    }
+                    
+                    # S3 키가 있으면 파라미터로 전달 (DB 조회 생략)
+                    if s3_key_list:
+                        params["s3_keys"] = ",".join(s3_key_list)
+                        print(f"[비디오 업로드] 📤 S3 키 전달: {len(s3_key_list)}개")
+                    
+                    # 쿠키 가져오기 (인증용, S3 키가 없을 경우를 대비)
+                    cookies = dict(request.cookies)
+                    
+                    headers = {}
+                    if "authorization" in request.headers:
+                        headers["authorization"] = request.headers["authorization"]
+                    
+                    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                        response = await client.post(
+                            url, 
+                            params=params,
+                            cookies=cookies,
+                            headers=headers
+                        )
+                        if response.status_code == 200:
+                            result = response.json()
+                            print(f"[비디오 업로드] ✅ 스트리밍 서버에서 HLS 스트림 시작 요청 성공: {camera_id}")
+                            print(f"[비디오 업로드]   - 플레이리스트 URL: {result.get('playlist_url', 'N/A')}")
+                        else:
+                            error_detail = response.text[:200] if response.text else "응답 없음"
+                            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 HLS 시작 요청 실패: {response.status_code}")
+                            print(f"[비디오 업로드]   - 오류 내용: {error_detail}")
+                except httpx.TimeoutException:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 타임아웃: {camera_id}")
+                except httpx.ConnectError as e:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 연결 실패: {e}")
+                except Exception as e:
+                    print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 실패: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # 비동기로 실행 (백그라운드)
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # 백그라운드 태스크로 실행
+            asyncio.create_task(call_streaming_server())
+            print(f"[비디오 업로드] 📡 스트리밍 서버로 HLS 시작 요청 전송: {camera_id}")
+            
+        except Exception as e:
+            print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 설정 실패: {e}")
+            import traceback
+            traceback.print_exc()
+>>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
     
     return {
         "id": camera_video.id,
