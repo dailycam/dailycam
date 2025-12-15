@@ -277,56 +277,53 @@ class HLSStreamGenerator:
                 f"split=2[hls_v][archive_v]"
             )
             
-            # 아카이브용 추가 필터 (5fps 다운샘플링)
-            archive_filter = f"[archive_v]fps={self.archive_fps}[archive_out]"
-            
             # 무음 오디오 생성
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-hide_banner',
-                '-loglevel', 'info',
+                '-loglevel', 'warning', # 로그 다이어트: warning 이상만 출력
+                '-threads', '2',  # CPU 사용량 제한 (Docker 환경 최적화)
                 # 입력
                 '-stream_loop', '-1',
+                '-re', # 실시간 속도로 읽기 (CPU 폭주 방지 핵심 옵션)
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file_absolute),
-                # 무음 오디오 생성
+                
+                # 무음 오디오 생성 (한 번만 입력)
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
-                # 비디오 필터 (인코딩 + 분기)
-                '-filter_complex', f"{video_filter};{archive_filter}",
-                # HLS 출력 (hls_v 스트림 사용)
-                '-map', '[hls_v]',
-                '-map', '1:a',
+                
+                # 비디오 인코딩 (한 번만 수행!)
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
+                # 해상도 및 FPS 설정
+                '-vf', f'scale={self.target_width}:{self.target_height},fps={self.target_fps}',
                 '-g', str(int(self.target_fps * self.segment_duration)),
                 '-keyint_min', str(int(self.target_fps * self.segment_duration)),
                 '-sc_threshold', '0',
+                
+                # 오디오 인코딩
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-ar', '48000',
-                '-f', 'hls',
-                '-hls_time', str(self.segment_duration),
-                '-hls_list_size', '300',  # DVR 윈도우 확대 (10초 세그먼트 * 300 = 50분)
-                '-hls_flags', 'delete_segments+append_list+program_date_time',
-                '-hls_segment_filename', segment_pattern_absolute,
-                str(playlist_path_absolute),
-                # 아카이브 출력 (archive_out 스트림 사용, 10분마다 자동 생성)
-                '-map', '[archive_out]',
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '32',
-                '-movflags', '+faststart',
-                '-f', 'segment',
-                '-segment_time', str(self.archive_duration_minutes * 60),  # 10분(600초)
-                '-reset_timestamps', '1',
-                '-strftime', '1',
-                '-segment_format', 'mp4',
-                '-segment_atclocktime', '1',  # 정시(10분 단위)에 파일 생성
-                '-segment_clocktime_offset', '0',
-                f'{archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4'
+                
+                # Tee Muxer: 인코딩된 스트림을 두 곳(HLS, Segment)으로 복제
+                '-map', '0:v',  # 비디오
+                '-map', '1:a',  # 오디오
+                '-f', 'tee',
+                (
+                    f"[f=hls:hls_time={self.segment_duration}:hls_list_size=300:"
+                    f"hls_flags=delete_segments+append_list+program_date_time:"
+                    f"hls_segment_filename={segment_pattern_absolute}]"
+                    f"{playlist_path_absolute}|"
+                    
+                    f"[f=segment:segment_time={self.archive_duration_minutes * 60}:"
+                    f"reset_timestamps=1:strftime=1:segment_format=mp4:"
+                    f"segment_atclocktime=1:segment_clocktime_offset=0:movflags=+faststart]"
+                    f"{archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4"
+                )
             ]
             
             print(f"[통합 스트림] FFmpeg 명령어:")
@@ -406,15 +403,29 @@ class HLSStreamGenerator:
                                 
                                 # S3 업로드 및 Job 등록 (동기적으로 실행)
                                 # 비동기 함수를 동기 스레드에서 실행
-                                loop = self.event_loop or asyncio.new_event_loop()
-                                if not self.event_loop:
-                                    asyncio.set_event_loop(loop)
-                                
                                 try:
-                                    loop.run_until_complete(self._upload_archive_to_s3_async(file_path))
-                                    loop.run_until_complete(self._register_analysis_job_async(file_path))
+                                    if self.event_loop and self.event_loop.is_running():
+                                        # 메인 루프가 실행 중이면 threadsafe하게 스케줄링
+                                        future1 = asyncio.run_coroutine_threadsafe(
+                                            self._upload_archive_to_s3_async(file_path), 
+                                            self.event_loop
+                                        )
+                                        future2 = asyncio.run_coroutine_threadsafe(
+                                            self._register_analysis_job_async(file_path), 
+                                            self.event_loop
+                                        )
+                                        # 결과 대기 (선택적, 에러 로깅용)
+                                        # future1.result(timeout=60)
+                                    else:
+                                        # 루프가 없거나 실행 중이 아니면 새 루프 사용 (주로 테스트용)
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        loop.run_until_complete(self._upload_archive_to_s3_async(file_path))
+                                        loop.run_until_complete(self._register_analysis_job_async(file_path))
+                                        loop.close()
+                                        
                                 except Exception as e:
-                                    print(f"[아카이브 모니터] ⚠️ 비동기 작업 실행 오류: {e}")
+                                    print(f"[아카이브 모니터] ⚠️ 작업 스케줄링 오류: {e}")
                                 
                                 processed_files.add(file_path)
                     
@@ -502,8 +513,9 @@ class HLSStreamGenerator:
                 from app.database.session import get_db
                 db = next(get_db())
             
+            
             from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
-            import pytz
+            # import pytz 제거 (상단에서 이미 import 됨)
             
             # 이미 등록된 Job이 있는지 확인
             segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)

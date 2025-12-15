@@ -79,16 +79,12 @@ def create_app() -> FastAPI:
         cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
         origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
         
-        # 개발 환경에서만 로컬호스트 자동 추가
+        # 개발 환경에서만 로컬호스트 자동 추가 및 모든 Origin 허용
         is_development = os.getenv("ENVIRONMENT", "development") != "production"
         if is_development:
-            default_origins = [
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-            ]
-            # 중복 제거하여 합치기
-            allow_origins = list(set(origins + default_origins))
-            print(f"🌐 CORS 허용 도메인 (개발 모드): {allow_origins}")
+            # 개발 모드에서는 모든 Origin 허용 (CORS 문제 원천 차단)
+            print("🔧 개발 모드: 모든 Origin 허용 (allow_origins=['*'])")
+            allow_origins = ["*"]
         else:
             # 프로덕션에서는 환경 변수만 사용
             if not origins:

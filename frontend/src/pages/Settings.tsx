@@ -112,14 +112,22 @@ export default function Settings() {
         setCameras(result.cameras)
 
         // 카메라가 있으면 첫 번째 카메라 선택
-        if (result.cameras.length > 0 && !selectedCameraId) {
-          setSelectedCameraId(result.cameras[0].camera_id)
-        } else if (result.cameras.length === 0) {
-          // 카메라가 없으면 기본값 설정
-          setSelectedCameraId('camera-1')
+        if (result.cameras.length > 0) {
+          if (!selectedCameraId) {
+            setSelectedCameraId(result.cameras[0].camera_id)
+          }
+        } else {
+          // 카메라가 없으면(로컬 테스트 등) 기본값 'camera-1' 설정
+          if (!selectedCameraId) {
+             setSelectedCameraId('camera-1')
+          }
         }
       } catch (error) {
         console.error('카메라 설정 조회 오류:', error)
+         // 에러 발생 시에도 기본값 설정 (로컬 테스트 편의성)
+         if (!selectedCameraId) {
+            setSelectedCameraId('camera-1')
+         }
       }
     }
 
@@ -403,6 +411,13 @@ export default function Settings() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    // 현재 선택된 카메라 ID 확인 및 기본값 처리
+    let activeCameraId = selectedCameraId
+    if (!activeCameraId) {
+      activeCameraId = 'camera-1'
+      setSelectedCameraId(activeCameraId)
+    }
+
     // 파일 검증
     if (!file.type.startsWith('video/')) {
       alert('비디오 파일만 업로드 가능합니다')
@@ -424,7 +439,7 @@ export default function Settings() {
         setUploadProgress((prev) => Math.min(prev + 10, 90))
       }, 500)
 
-      await uploadCameraVideo(selectedCameraId, file)
+      await uploadCameraVideo(activeCameraId, file)
 
       clearInterval(progressInterval)
       setUploadProgress(100)

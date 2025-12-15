@@ -52,6 +52,14 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
+      # 로컬 개발 환경: S3 비활성화 (명시적 빈 값 설정)
+      - S3_BUCKET_NAME=
+      - AWS_REGION=
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - CLOUDFRONT_DOMAIN=
+      # 로컬 개발 환경: HLS 스트리밍 활성화 (직접 실행)
+      - ENABLE_HLS_STREAMING=true
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
@@ -78,11 +86,12 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-1
       - DELETE_VIDEO_AFTER_ANALYSIS=false
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+      # 로컬 개발 환경: S3 비활성화 (명시적 빈 값 설정)
+      - S3_BUCKET_NAME=
+      - AWS_REGION=
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - CLOUDFRONT_DOMAIN=
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos

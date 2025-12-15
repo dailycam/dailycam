@@ -473,10 +473,10 @@ async def serve_hls_file(camera_id: str, filename: str):
     """HLS 파일 제공 (.m3u8 플레이리스트 또는 .ts 세그먼트)"""
     file_path = Path(f"temp_videos/hls_buffer/{camera_id}/hls/{filename}")
     
-    # 파일이 생성될 때까지 잠시 대기 (최대 2초)
+    # 파일이 생성될 때까지 잠시 대기 (최대 5초)
     # FFmpeg가 파일을 생성하는 데 시간이 걸릴 수 있음
     if not file_path.exists():
-        for _ in range(10):  # 0.2초 * 10 = 2초
+        for _ in range(25):  # 0.2초 * 25 = 5초
             await asyncio.sleep(0.2)
             if file_path.exists():
                 break

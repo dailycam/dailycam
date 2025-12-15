@@ -49,7 +49,7 @@ export default function AppLayout() {
         }
 
         checkStreamStatus()
-        
+
         // 주기적으로 상태 확인 (5초마다 - 영상 삭제 등 즉시 반영)
         const interval = setInterval(checkStreamStatus, 5000)
         return () => clearInterval(interval)
@@ -68,50 +68,9 @@ export default function AppLayout() {
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
                     {/* 전역 비디오 플레이어 (모니터링 페이지일 때만 표시, LiveMonitoring 위에 배치) */}
-                    {isMonitoringPage && hlsUrl && (
-                        <div 
-                            className="w-full bg-black border-b-2 border-gray-300" 
-                            style={{ 
-                                height: '300px',
-                                position: 'relative',
-                                zIndex: 10,
-                                overflow: 'hidden'
-                            }}
-                        >
-                            <HLSVideoPlayer
-                                src={hlsUrl}
-                                autoPlay={true}
-                                muted={false}
-                                keepAliveOnHidden={true}
-                                onError={(error) => {
-                                    // 스트림 중지 에러 시 즉시 플레이어 정지
-                                    if (error.includes('404') || error.includes('스트림 중지') || error.includes('스트림이 중지되었습니다')) {
-                                        console.log('[AppLayout] 스트림 중지 감지, 플레이어 정지')
-                                        setHlsUrl(null)
-                                    }
-                                }}
-                                className="w-full h-full object-contain"
-                            />
-                        </div>
-                    )}
-                    {/* 모니터링 페이지가 아닐 때 플레이어 숨김 (언마운트하지 않음) */}
-                    {!isMonitoringPage && hlsUrl && (
-                        <div style={{ display: 'none' }}>
-                            <HLSVideoPlayer
-                                src={hlsUrl}
-                                autoPlay={true}
-                                muted={false}
-                                keepAliveOnHidden={true}
-                                onError={(error) => {
-                                    if (error.includes('404') || error.includes('스트림 중지') || error.includes('스트림이 중지되었습니다')) {
-                                        setHlsUrl(null)
-                                    }
-                                }}
-                                className="w-full h-full"
-                            />
-                        </div>
-                    )}
-                    
+
+
+
                     <Outlet context={{ hlsUrl, setHlsUrl, selectedCamera, setSelectedCamera, isMonitoringPage }} />
                 </main>
             </div>
