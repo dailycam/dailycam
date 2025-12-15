@@ -1,0 +1,26 @@
+# 4. 개발 환경 & 기술 스택
+
+Frontend: React 18.2, TypeScript 5.2, Vite 5.0, TailwindCSS 3.3, Recharts 2.10, React Router 6.20, HLS.js 1.6, Axios, Lucide React, Motion (Framer Motion)
+
+Backend: FastAPI 0.110+, Python 3.11+, Uvicorn, Pydantic 2.6+, SQLAlchemy 2.0+, PyMySQL 1.1+, OpenCV 4.8+, Python-Jose, Authlib, Passlib
+
+Database: MySQL 8.0
+
+AI & ML: Google Generative AI (Gemini 1.5 Flash)
+
+API:
+- Google OAuth 2.0 API (소셜 로그인 인증)
+- Google Gemini API (영상 분석, 발달 평가, 안전 점수 계산)
+- YouTube Data API v3 (육아 영상 콘텐츠 검색 및 추천)
+- DuckDuckGo Search API (블로그/뉴스 검색, YouTube API 대체)
+- PortOne Payment API (구독 결제 처리)
+- BigDataCloud Reverse Geocoding API (위치 정보 변환, API 키 불필요)
+
+Infrastructure & Deployment: Docker, Docker Compose, Nginx, AWS S3, AWS CloudFront, AWS Lightsail
+
+Video Streaming: HLS (HTTP Live Streaming), RTSP, FFmpeg
+
+Development Tools: Git, GitHub, ESLint, Prettier, Black
+
+협업 도구: (추가 예정)
+
