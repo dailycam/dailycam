@@ -11,25 +11,23 @@ import {
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 import { useOutletContext } from 'react-router-dom'
+import HLSVideoPlayer from '@/components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
-  // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
+  // AppLayout에서 전달된 컨텍스트 사용
   const outletContext = useOutletContext<{
-    hlsUrl: string | null
-    setHlsUrl: (url: string | null) => void
     selectedCamera: string
     setSelectedCamera: (camera: string) => void
   }>()
   
   const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [isStreamActive, setIsStreamActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // outletContext에서 hlsUrl 가져오기 (플레이어는 AppLayout에서 관리)
-  const hlsUrl = outletContext?.hlsUrl || null
 
   // 카메라 변경 시 AppLayout에 알림
   useEffect(() => {
@@ -37,6 +35,38 @@ export default function LiveMonitoring() {
       outletContext.setSelectedCamera(selectedCamera)
     }
   }, [selectedCamera, outletContext])
+
+  // 페이지 로드 시 스트림 상태 확인
+  useEffect(() => {
+    const checkStreamStatus = async () => {
+      try {
+        const status = await fetch(
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+          { credentials: 'include' }
+        )
+        const data = await status.json()
+
+        if (data.is_active && data.is_running) {
+          const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
+          setHlsUrl(url)
+          setIsStreamActive(true)
+        } else {
+          setHlsUrl(null)
+          setIsStreamActive(false)
+        }
+      } catch (error) {
+        console.error('[HLS] 스트림 상태 확인 실패:', error)
+        setHlsUrl(null)
+        setIsStreamActive(false)
+      }
+    }
+
+    checkStreamStatus()
+    
+    // 주기적으로 상태 확인 (5초마다)
+    const interval = setInterval(checkStreamStatus, 5000)
+    return () => clearInterval(interval)
+  }, [selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,9 +113,8 @@ export default function LiveMonitoring() {
 
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
-        if (outletContext?.setHlsUrl) {
-          outletContext.setHlsUrl(url)
-        }
+        setHlsUrl(url)
+        setIsStreamActive(true)
         setShowUploadModal(false)
       } else {
         setUploadError('스트림 시작 실패. 다시 시도해주세요.')
@@ -102,9 +131,8 @@ export default function LiveMonitoring() {
   const handleStopStream = async () => {
     try {
       await stopStream(selectedCamera)
-      if (outletContext?.setHlsUrl) {
-        outletContext.setHlsUrl(null)
-      }
+      setHlsUrl(null)
+      setIsStreamActive(false)
     } catch (error: any) {
       console.error('[HLS] 스트림 중지 오류:', error)
     }
@@ -143,6 +171,60 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Live Video Feed Card */}
+          <div className="card p-0 overflow-hidden">
+            <div className="relative bg-gray-900 aspect-video">
+              {hlsUrl ? (
+                <>
+                  <HLSVideoPlayer
+                    src={hlsUrl}
+                    autoPlay={true}
+                    muted={false}
+                    className="w-full h-full object-contain"
+                    onError={(error: string) => {
+                      console.error('[HLS] 플레이어 오류:', error)
+                      if (error.includes('404') || error.includes('스트림 중지')) {
+                        setHlsUrl(null)
+                        setIsStreamActive(false)
+                      }
+                    }}
+                  />
+                  {/* Live Indicator */}
+                  {isStreamActive && (
+                    <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600/90 text-white px-3 py-1.5 rounded-full z-10">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span className="text-sm font-semibold">LIVE</span>
+                    </div>
+                  )}
+                  {/* AI Detection Overlay */}
+                  <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg z-10">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-green-400" />
+                      <span>AI 분석 중...</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                  <div className="text-center text-gray-400">
+                    <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
+                    <p className="text-base">카메라 피드</p>
+                    <p className="text-sm mt-2">
+                      {selectedCamera === 'camera-1'
+                        ? '거실 카메라'
+                        : selectedCamera === 'camera-2'
+                          ? '아이방 카메라'
+                          : '주방 카메라'}
+                    </p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      비디오 파일을 업로드하여 스트리밍을 시작하세요
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Camera Selector */}
           <div className="grid grid-cols-3 gap-3">
             <CameraThumbnail
