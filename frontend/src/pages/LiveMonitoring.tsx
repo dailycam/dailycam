@@ -19,27 +19,30 @@ export default function LiveMonitoring() {
   const [hlsUrl, setHlsUrl] = useState<string | null>(null)
 =======
 import { useOutletContext } from 'react-router-dom'
+import HLSVideoPlayer from '@/components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
-  // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
+  // AppLayout에서 전달된 컨텍스트 사용
   const outletContext = useOutletContext<{
-    hlsUrl: string | null
-    setHlsUrl: (url: string | null) => void
     selectedCamera: string
     setSelectedCamera: (camera: string) => void
   }>()
   
   const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
+<<<<<<< HEAD
   const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
+=======
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isStreamActive, setIsStreamActive] = useState(false)
-  const [hlsError, setHlsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
   // 페이지 로드 시 스트림 상태 확인 및 자동 재생
   useEffect(() => {
@@ -63,6 +66,8 @@ export default function LiveMonitoring() {
     }
   }, [outletContext])
 
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
   // 카메라 변경 시 AppLayout에 알림
   useEffect(() => {
     if (outletContext?.setSelectedCamera) {
@@ -70,9 +75,7 @@ export default function LiveMonitoring() {
     }
   }, [selectedCamera, outletContext])
 
-  // 플레이어는 AppLayout에서 관리됨 (DOM 조작 제거)
-
-  // 페이지 로드 시 스트림 상태 확인 (AppLayout에서도 확인하므로 여기서는 초기 로드만)
+  // 페이지 로드 시 스트림 상태 확인
   useEffect(() => {
     const checkStreamStatus = async () => {
       try {
@@ -85,20 +88,16 @@ export default function LiveMonitoring() {
         if (data.is_active && data.is_running) {
           const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
           setHlsUrl(url)
-          if (outletContext?.setHlsUrl) {
-            outletContext.setHlsUrl(url)
-          }
           setIsStreamActive(true)
         } else {
           setHlsUrl(null)
-          if (outletContext?.setHlsUrl) {
-            outletContext.setHlsUrl(null)
-          }
           setIsStreamActive(false)
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
         }
       } catch (error) {
         console.error('[HLS] 스트림 상태 확인 실패:', error)
+        setHlsUrl(null)
+        setIsStreamActive(false)
       }
     }
 <<<<<<< HEAD
@@ -108,9 +107,12 @@ export default function LiveMonitoring() {
 
 =======
 
-    // 초기 로드 시 한 번만 확인 (AppLayout에서 주기적으로 확인함)
     checkStreamStatus()
-  }, [selectedCamera, outletContext])
+    
+    // 주기적으로 상태 확인 (5초마다)
+    const interval = setInterval(checkStreamStatus, 5000)
+    return () => clearInterval(interval)
+  }, [selectedCamera])
 
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
   // 비디오 파일 선택
@@ -176,10 +178,13 @@ export default function LiveMonitoring() {
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
         setHlsUrl(url)
+<<<<<<< HEAD
         if (outletContext?.setHlsUrl) {
           outletContext.setHlsUrl(url)
         }
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
         setIsStreamActive(true)
         setShowUploadModal(false)
       } else {
@@ -198,6 +203,7 @@ export default function LiveMonitoring() {
     try {
       await stopStream(selectedCamera)
       setHlsUrl(null)
+<<<<<<< HEAD
 <<<<<<< HEAD
       setIsStreamActive(false)
       setHlsError(null)
@@ -225,16 +231,20 @@ export default function LiveMonitoring() {
       if (outletContext?.setHlsUrl) {
         outletContext.setHlsUrl(null)
       }
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
       setIsStreamActive(false)
-      setHlsError(null)
     } catch (error: any) {
       console.error('[HLS] 스트림 중지 오류:', error)
     }
   }
 
+<<<<<<< HEAD
   // HLS 플레이어 이벤트 핸들러는 AppLayout의 플레이어에서 처리됨
 
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -268,8 +278,9 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed - 플레이어는 AppLayout 상단에 표시됨 */}
+          {/* Live Video Feed Card */}
           <div className="card p-0 overflow-hidden">
+<<<<<<< HEAD
 <<<<<<< HEAD
             <div className="relative bg-gray-900 aspect-video">
               {/* HLS Video Player */}
@@ -297,6 +308,41 @@ export default function LiveMonitoring() {
               <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-0">
                 {!hlsUrl ? (
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
+=======
+            <div className="relative bg-gray-900 aspect-video">
+              {hlsUrl ? (
+                <>
+                  <HLSVideoPlayer
+                    src={hlsUrl}
+                    autoPlay={true}
+                    muted={false}
+                    className="w-full h-full object-contain"
+                    onError={(error: string) => {
+                      console.error('[HLS] 플레이어 오류:', error)
+                      if (error.includes('404') || error.includes('스트림 중지')) {
+                        setHlsUrl(null)
+                        setIsStreamActive(false)
+                      }
+                    }}
+                  />
+                  {/* Live Indicator */}
+                  {isStreamActive && (
+                    <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600/90 text-white px-3 py-1.5 rounded-full z-10">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span className="text-sm font-semibold">LIVE</span>
+                    </div>
+                  )}
+                  {/* AI Detection Overlay */}
+                  <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg z-10">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-green-400" />
+                      <span>AI 분석 중...</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
                     <p className="text-base">카메라 피드</p>
@@ -311,23 +357,9 @@ export default function LiveMonitoring() {
                       비디오 파일을 업로드하여 스트리밍을 시작하세요
                     </p>
                   </div>
-                ) : (
-                  <div className="text-center text-gray-400">
-                    <p className="text-base">라이브 스트림 재생 중</p>
-                    <p className="text-xs mt-2 text-gray-500">
-                      비디오 플레이어는 상단에 표시됩니다
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Live Indicator */}
-              {hlsUrl && isStreamActive && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-danger/90 text-white px-3 py-1.5 rounded-full z-10">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                  <span className="text-sm font-semibold">LIVE</span>
                 </div>
               )}
+<<<<<<< HEAD
 
 <<<<<<< HEAD
               {/* Live Indicator */}
@@ -378,6 +410,8 @@ export default function LiveMonitoring() {
               {/* 비디오 컨트롤은 HLS 플레이어 자체 컨트롤 사용 */}
 =======
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef
             </div>
           </div>
 

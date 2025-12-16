@@ -485,15 +485,37 @@ async def delete_camera_video(
     camera_id = camera_setting.camera_id
     file_path = Path(video.file_path)
     
+    # S3 파일 삭제 (s3_key가 있는 경우)
+    if video.s3_key:
+        try:
+            from app.services.s3_service import S3Service
+            s3_service = S3Service()
+            
+            if s3_service.is_enabled():
+                try:
+                    s3_service.s3_client.delete_object(
+                        Bucket=s3_service.bucket_name,
+                        Key=video.s3_key
+                    )
+                    print(f"[비디오 삭제] ✅ S3 파일 삭제 완료: {video.s3_key}")
+                except Exception as e:
+                    print(f"[비디오 삭제] ⚠️ S3 파일 삭제 실패 ({video.s3_key}): {e}")
+            else:
+                print(f"[비디오 삭제] ⚠️ S3가 비활성화되어 있어 S3 파일 삭제 스킵: {video.s3_key}")
+        except Exception as e:
+            print(f"[비디오 삭제] ⚠️ S3 삭제 처리 중 오류: {e}")
+    else:
+        print(f"[비디오 삭제] ℹ️ s3_key가 없어 S3 삭제 스킵")
+    
     # 로컬 파일 삭제
     if file_path.exists():
         try:
             file_path.unlink()
-            print(f"[비디오 삭제] 로컬 파일 삭제 완료: {file_path}")
+            print(f"[비디오 삭제] ✅ 로컬 파일 삭제 완료: {file_path}")
         except Exception as e:
             print(f"[비디오 삭제] ⚠️ 로컬 파일 삭제 실패: {e}")
     else:
-        print(f"[비디오 삭제] ⚠️ 로컬 파일이 존재하지 않음: {file_path}")
+        print(f"[비디오 삭제] ℹ️ 로컬 파일이 존재하지 않음: {file_path}")
     
     from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
     
@@ -518,16 +540,7 @@ async def delete_camera_video(
         del active_hls_streams[camera_id]
         print(f"[비디오 삭제] {camera_id} 카메라의 스트림이 중지되었습니다.")
     
-    # 파일 삭제
-    file_path = Path(video.file_path)
-    if file_path.exists():
-        try:
-            file_path.unlink()
-            print(f"[비디오 삭제] 파일 삭제 성공: {video.filename}")
-        except Exception as e:
-            print(f"[비디오 삭제] 파일 삭제 실패: {e}")
-    
-    # DB에서 삭제
+    # DB에서 삭제 (위에서 이미 S3와 로컬 파일 삭제 완료)
     db.delete(video)
     db.commit()
     

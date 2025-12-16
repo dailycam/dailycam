@@ -1,26 +1,30 @@
+<<<<<<< HEAD:frontend/src/components/Layout/AppLayout.tsx
 import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import HLSVideoPlayer from '../HLSVideoPlayer'
 import { API_BASE_URL } from '@/constants/api'
+=======
+import { Outlet } from 'react-router-dom'
+import { useState } from 'react'
+import Sidebar from '../layout/Sidebar'
+import Header from '../layout/Header'
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef:frontend/src/components/layout/AppLayout.tsx
 
 /**
  * 앱 내부 페이지용 레이아웃
  * 사이드바와 헤더 포함
- * 전역 비디오 플레이어 포함 (라우트 밖에 배치하여 페이지 이동 시에도 유지)
  */
 export default function AppLayout() {
     const [isCollapsed, setIsCollapsed] = useState(false)
-    const location = useLocation()
-    const [hlsUrl, setHlsUrl] = useState<string | null>(null)
     const [selectedCamera, setSelectedCamera] = useState('camera-1')
-    const isMonitoringPage = location.pathname === '/monitoring'
 
     const toggleSidebar = () => {
         setIsCollapsed(!isCollapsed)
     }
 
+<<<<<<< HEAD:frontend/src/components/Layout/AppLayout.tsx
     // 스트림 상태 확인 (항상 확인하여 플레이어 유지)
     useEffect(() => {
         const checkStreamStatus = async () => {
@@ -55,6 +59,8 @@ export default function AppLayout() {
         return () => clearInterval(interval)
     }, [selectedCamera])
 
+=======
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef:frontend/src/components/layout/AppLayout.tsx
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Sidebar */}
@@ -67,6 +73,7 @@ export default function AppLayout() {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
+<<<<<<< HEAD:frontend/src/components/Layout/AppLayout.tsx
                     {/* 전역 비디오 플레이어 (모니터링 페이지일 때만 표시, LiveMonitoring 위에 배치) */}
                     {isMonitoringPage && hlsUrl && (
                         <div
@@ -113,6 +120,9 @@ export default function AppLayout() {
                     )}
 
                     <Outlet context={{ hlsUrl, setHlsUrl, selectedCamera, setSelectedCamera, isMonitoringPage }} />
+=======
+                    <Outlet context={{ selectedCamera, setSelectedCamera }} />
+>>>>>>> aeeee4d7df38868b2068c57a6b64016cbbe1e4ef:frontend/src/components/layout/AppLayout.tsx
                 </main>
             </div>
         </div>

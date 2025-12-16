@@ -431,6 +431,11 @@ class HLSStreamGenerator:
         tee muxer를 사용하여 한 번의 인코딩으로 두 출력 생성:
         - 출력 A: DVR형 HLS (시청용)
         - 출력 B: 10분 단위 mp4 아카이브 (분석용)
+        
+        최적화 사항:
+        - -re 옵션: VOD 파일을 실제 재생 속도로 읽어 CPU 폭주 방지 (핵심!)
+        - tee muxer: 단일 인코딩으로 두 출력 생성 (이중 인코딩 제거)
+        - -threads 2: CPU 스레드 제한으로 리소스 사용 최적화
         """
         try:
             # 이전 프로세스 종료
@@ -460,12 +465,8 @@ class HLSStreamGenerator:
                 print(f"[HLS 스트림] ❌ concat 파일이 존재하지 않음: {concat_file_absolute}")
                 return
             
-            # filter_complex를 사용하여 한 번의 인코딩으로 두 출력 생성
-            # 비디오를 한 번 인코딩하고 split으로 두 스트림 생성
-            # - hls_stream: HLS용 (원본 FPS)
-            # - archive_stream: 아카이브용 (5fps 다운샘플링)
-            
-            # 비디오 인코딩 및 분기
+            # 비디오 인코딩 (한 번만 수행)
+            # tee muxer를 사용하여 단일 인코딩 결과를 두 출력으로 분배
             video_filter = (
                 f"scale={self.target_width}:{self.target_height},"
                 f"fps={self.target_fps},"
@@ -475,12 +476,14 @@ class HLSStreamGenerator:
             # 아카이브용 추가 필터 (5fps 다운샘플링)
             archive_filter = f"[archive_v]fps={self.archive_fps}[archive_out]"
             
-            # 무음 오디오 생성
+            # FFmpeg 명령어 구성
+            # 핵심 최적화: -re 옵션으로 실제 재생 속도로 읽기 (CPU 폭주 방지)
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-hide_banner',
                 '-loglevel', 'info',
-                # 입력
+                # 입력 (VOD 파일을 실제 재생 속도로 읽기 - CPU 폭주 방지의 핵심!)
+                '-re',  # Read at native frame rate - 실제 재생 속도로 읽어 CPU 사용량 급격히 감소
                 '-stream_loop', '-1',
                 '-f', 'concat',
                 '-safe', '0',
@@ -490,6 +493,8 @@ class HLSStreamGenerator:
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
                 # 비디오 필터 (인코딩 + 분기)
                 '-filter_complex', f"{video_filter};{archive_filter}",
+                # CPU 스레드 제한 (리소스 사용 최적화)
+                '-threads', '2',
                 # HLS 출력 (hls_v 스트림 사용)
                 '-map', '[hls_v]',
                 '-map', '1:a',
@@ -528,6 +533,7 @@ class HLSStreamGenerator:
             print(f"  입력 파일: {concat_file_absolute}")
             print(f"  HLS 출력: {playlist_path_absolute} (DVR 윈도우: 300 세그먼트)")
             print(f"  아카이브 출력: {archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4 (10분마다 자동 생성)")
+            print(f"[통합 스트림] ✅ 최적화 적용: -re 옵션으로 CPU 폭주 방지 (600% → 10~20% 예상)")
             
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
@@ -538,7 +544,7 @@ class HLSStreamGenerator:
             )
             
             print(f"[통합 스트림] ✅ FFmpeg 프로세스 시작 (PID: {self.ffmpeg_process.pid})")
-            print(f"[통합 스트림] CPU 사용량: 단일 프로세스로 약 50% 감소 예상")
+            print(f"[통합 스트림] CPU 사용량 최적화: -re 옵션 + -threads 2로 리소스 사용 극대화")
             
             # stderr 모니터링 스레드 (아카이브 파일 생성 감지)
 >>>>>>> 339dc48c4d9f2d2a4a72d593e47305b717dc4c6e
@@ -788,17 +794,39 @@ class HLSStreamGenerator:
                             if self._is_file_stable(file_path):
                                 print(f"[아카이브 모니터] ✅ 새 파일 발견: {file_path.name}")
                                 
-                                # S3 업로드 및 Job 등록 (동기적으로 실행)
-                                # 비동기 함수를 동기 스레드에서 실행
-                                loop = self.event_loop or asyncio.new_event_loop()
-                                if not self.event_loop:
+                                # S3 업로드 및 Job 등록 (비동기 이벤트 루프 안전하게 접근)
+                                # asyncio.run_coroutine_threadsafe를 사용하여 메인 이벤트 루프와 충돌 방지
+                                if self.event_loop and self.event_loop.is_running():
+                                    # 메인 이벤트 루프가 실행 중이면 run_coroutine_threadsafe 사용
+                                    try:
+                                        future1 = asyncio.run_coroutine_threadsafe(
+                                            self._upload_archive_to_s3_async(file_path),
+                                            self.event_loop
+                                        )
+                                        future2 = asyncio.run_coroutine_threadsafe(
+                                            self._register_analysis_job_async(file_path),
+                                            self.event_loop
+                                        )
+                                        # 작업 완료 대기 (타임아웃 30초)
+                                        future1.result(timeout=30)
+                                        future2.result(timeout=30)
+                                    except Exception as e:
+                                        print(f"[아카이브 모니터] ⚠️ 비동기 작업 실행 오류: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                else:
+                                    # 이벤트 루프가 없으면 새로 생성 (폴백)
+                                    loop = asyncio.new_event_loop()
                                     asyncio.set_event_loop(loop)
-                                
-                                try:
-                                    loop.run_until_complete(self._upload_archive_to_s3_async(file_path))
-                                    loop.run_until_complete(self._register_analysis_job_async(file_path))
-                                except Exception as e:
-                                    print(f"[아카이브 모니터] ⚠️ 비동기 작업 실행 오류: {e}")
+                                    try:
+                                        loop.run_until_complete(self._upload_archive_to_s3_async(file_path))
+                                        loop.run_until_complete(self._register_analysis_job_async(file_path))
+                                    except Exception as e:
+                                        print(f"[아카이브 모니터] ⚠️ 비동기 작업 실행 오류: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                    finally:
+                                        loop.close()
                                 
                                 processed_files.add(file_path)
                     
@@ -887,7 +915,6 @@ class HLSStreamGenerator:
                 db = next(get_db())
             
             from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
-            import pytz
             
             # 이미 등록된 Job이 있는지 확인
             segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
@@ -1194,8 +1221,6 @@ class HLSStreamGenerator:
         
         if self.ffmpeg_process:
             self.ffmpeg_process.terminate()
-        
-        self._finalize_current_archive()
     
     def get_playlist_url(self) -> str:
         """HLS 플레이리스트 URL 반환"""
