@@ -4,12 +4,13 @@ import { RadarDataItem } from '../types'
 import { withParticle } from '../../../utils/formatters'
 
 interface DevelopmentStageCardProps {
-    ageMonths: number
+    ageMonths?: number
+    detectedStage?: string
     strongestArea?: RadarDataItem
     childName?: string
 }
 
-export const DevelopmentStageCard = ({ ageMonths, strongestArea, childName = '우리 아이' }: DevelopmentStageCardProps) => {
+export const DevelopmentStageCard = ({ ageMonths, detectedStage, strongestArea, childName = '우리 아이' }: DevelopmentStageCardProps) => {
     return (
         <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -29,7 +30,7 @@ export const DevelopmentStageCard = ({ ageMonths, strongestArea, childName = '�
                     </motion.div>
                     <p className="text-sm text-gray-600 mb-2">현재 발달 단계</p>
                     <p className="text-primary-600 mb-4 text-2xl font-bold">
-                        {ageMonths || 0}개월
+                        {detectedStage || (ageMonths ? `${ageMonths}개월` : '분석 대기 중')}
                     </p>
 
                     <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-4 shadow-sm">

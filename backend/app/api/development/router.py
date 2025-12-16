@@ -112,6 +112,7 @@ def get_development_summary(
             "strongest_area": "운동",
             "daily_development_frequency": [],
             "recommended_activities": [],
+            "development_insights": [],
         }
     
     # 3. 오늘 분석된 영상들의 평균 발달 점수
@@ -175,6 +176,7 @@ def get_development_summary(
         
         print(f"[Development] 평균 Radar Scores: {radar_scores}")
     
+    
     # 5. 가장 높은 점수의 영역 찾기
     strongest_area = max(radar_scores, key=radar_scores.get) if radar_scores else "운동"
     
@@ -195,9 +197,11 @@ def get_development_summary(
     )
     
     # 카테고리별 색상 매핑 (파스텔톤)
+    # 카테고리별 색상 매핑 (파스텔톤)
     category_colors = {
         "언어": "#a2d2ff", # Light Blue
         "운동": "#b0f2c2", # Light Green (레거시)
+        "대근육": "#b0f2c2", # Light Green (대근육 - 운동과 동일 색상)
         "대근육운동": "#90e0a0", # Light Green (대근육)
         "소근육운동": "#b0f2c2", # Light Green (소근육)
         "인지": "#ffc77d", # Light Orange
@@ -206,14 +210,18 @@ def get_development_summary(
         "정서": "#ffb0bb", # Light Pink
     }
     
-    daily_frequency = [
-        {
-            "category": cat.value if hasattr(cat, 'value') else str(cat),
+    daily_frequency = []
+    for cat, count in category_counts:
+        cat_name = cat.value if hasattr(cat, 'value') else str(cat)
+        
+        # '운동'을 '대근육'으로 변경
+        display_name = "대근육" if cat_name == "운동" else cat_name
+        
+        daily_frequency.append({
+            "category": display_name,
             "count": count,
-            "color": category_colors.get(cat.value if hasattr(cat, 'value') else str(cat), "#6b7280")
-        }
-        for cat, count in category_counts
-    ]
+            "color": category_colors.get(display_name, category_colors.get(cat_name, "#6b7280"))
+        })
     
     # 7. 텍스트 데이터는 HourlyReport에서 가져오기 (선택한 날짜의 최신 리포트)
     camera_id = "camera-1"  # 추후 사용자별 카메라 매핑으로 변경
@@ -247,6 +255,59 @@ def get_development_summary(
     else:
         recommendations = []
     
+    # 8. 감지된 발달 단계 (Detected Stage) - 최신 분석 결과 기준
+    detected_stage = None
+    
+    # AnalysisLog 확인
+    # created_at이 None일 경우 대비
+    sorted_logs = sorted(today_logs, key=lambda x: x.created_at or datetime.min, reverse=True)
+    latest_log_with_stage = next((log for log in sorted_logs if log.assumed_stage), None)
+    if latest_log_with_stage:
+        detected_stage = latest_log_with_stage.assumed_stage
+        
+    # SegmentAnalysis 확인
+    if not detected_stage and today_segments:
+        sorted_segments = sorted(today_segments, key=lambda x: x.segment_start, reverse=True)
+        for seg in sorted_segments:
+            # analysis_result가 딕셔너리인지 확인
+            if seg.analysis_result and isinstance(seg.analysis_result, dict):
+                meta = seg.analysis_result.get('meta', {})
+                if meta and isinstance(meta, dict) and meta.get('assumed_stage'):
+                    detected_stage = meta.get('assumed_stage')
+                    break
+    
+    # 8-1. 단계별 월령 범위 매핑 (config.yaml 기준)
+    STAGE_AGE_MAP = {
+        "1": "0~2개월",
+        "2": "3~5개월",
+        "3": "6~8개월",
+        "4": "9~11개월",
+        "5": "12~17개월",
+        "6": "18~23개월",
+        "7": "24~29개월",
+        "8": "30~35개월",
+        "9": "36~47개월",
+        "10": "48~59개월",
+        "11": "60~71개월"
+    }
+
+    if detected_stage:
+        # 숫자만 추출 (예: "5단계" -> "5")
+        import re
+        match = re.search(r'\d+', str(detected_stage))
+        if match:
+            stage_num = match.group()
+            if stage_num in STAGE_AGE_MAP:
+                age_range = STAGE_AGE_MAP[stage_num]
+                # 이미 괄호가 있는지 확인 (중복 방지)
+                if "(" not in str(detected_stage):
+                    # "5" -> "5단계 (12~17개월)"
+                    # "5단계" -> "5단계 (12~17개월)"
+                    if "단계" not in str(detected_stage):
+                        detected_stage = f"{detected_stage}단계 ({age_range})"
+                    else:
+                        detected_stage = f"{detected_stage} ({age_range})"
+
     # 9. 최종 응답 (사용자 생년월일 기반 age_months 사용)
 
     # 발달 인사이트 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
@@ -259,14 +320,12 @@ def get_development_summary(
     
     # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
     
-    # 월령은 위에서 계산된 값(user.child_birthdate 기반)을 그대로 사용합니다.
-    # age_months = latest_log.age_months if latest_log and latest_log.age_months else 7
-    
     elapsed_time = time.time() - start_time
     print(f"[Development API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "age_months": age_months,
+        "detected_stage": detected_stage,  # 감지된 발달 단계 추가
         "development_summary": development_summary,  # HourlyReport에서 가져온 종합 요약
         "development_score": avg_dev_score,  # 평균 발달 점수 (실시간)
         "development_radar_scores": radar_scores,  # 평균 오각형 점수 (실시간)

@@ -380,22 +380,65 @@ class HighlightClipService:
                         print(f"[하이라이트] ⚠️ 타임스탬프 파싱 실패: {timestamp_range}, 에러: {e}")
                         continue
         
-        # 발달 이벤트 필터링 (최초발생, 다음단계징후만)
+        # 발달 이벤트 필터링
         development_events = []
         if segment_analysis.development_milestones:
+            print(f"[하이라이트] 🔍 발달 마일스톤 {len(segment_analysis.development_milestones)}개 발견, 처리 시작")
+            priority_candidates = []
+            normal_candidates = []
+            
             for milestone in segment_analysis.development_milestones:
                 is_first = milestone.get('최초발생', False) or milestone.get('first_occurrence', False)
                 has_next_sign = milestone.get('다음단계징후', False) or milestone.get('next_stage_sign', False)
                 
+                # 타임스탬프 파싱 (examples 필드 활용)
+                timestamp_offset = milestone.get('timestamp_offset', 300)
+                if 'timestamp_offset' not in milestone and 'examples' in milestone:
+                    examples = milestone['examples']
+                    if isinstance(examples, list) and examples:
+                        first_example = str(examples[0])
+                        import re
+                        # HH:MM:SS or MM:SS 찾기
+                        match = re.search(r'(?:(\d{1,2}):)?(\d{1,2}):(\d{2})', first_example)
+                        if match:
+                            h, m, s = match.groups()
+                            h = int(h) if h else 0
+                            m = int(m)
+                            s = int(s)
+                            timestamp_offset = h * 3600 + m * 60 + s
+                            print(f"[하이라이트] ⏰ 발달 클립 시간 추출: {first_example} -> {timestamp_offset}초")
+
+                event_data = {
+                    'type': 'development',
+                    'title': milestone.get('name', '발달 행동'),
+                    'description': milestone.get('description', ''),
+                    'timestamp_offset': timestamp_offset,
+                    'category': milestone.get('category', '발달'),
+                    'is_priority': is_first or has_next_sign,
+                    'event_type_label': "최초 발견" if is_first else ("다음 단계 징후" if has_next_sign else "발달 행동")
+                }
+                
+                # 제목 포맷팅
+                event_data['title'] = f"[{event_data['event_type_label']}] {event_data['title']}"
+                
                 if is_first or has_next_sign:
-                    event_type = "최초 발견" if is_first else "다음 단계 징후"
-                    development_events.append({
-                        'type': 'development',
-                        'title': f"[{event_type}] {milestone.get('name', '발달 행동')}",
-                        'description': milestone.get('description', ''),
-                        'timestamp_offset': milestone.get('timestamp_offset', 300),
-                        'category': milestone.get('category', '발달')
-                    })
+                    priority_candidates.append(event_data)
+                else:
+                    normal_candidates.append(event_data)
+            
+            # 1. 중요 이벤트는 모두 포함
+            development_events.extend(priority_candidates)
+            
+            # 2. 일반 발달 행동은 세그먼트(10분) 당 최대 1개만 선정 (설명이 가장 긴 것 우선)
+            if normal_candidates:
+                # 설명 길이 순 정렬 (구체적인 분석 내용이 있는 것을 우선)
+                normal_candidates.sort(key=lambda x: len(x['description']), reverse=True)
+                
+                # 이미 중요 이벤트가 있으면 일반 이벤트는 스킵하거나 1개만 추가 (여기서는 1개 추가 정책)
+                # 너무 많은 클립 생성을 방지하기 위해 중요 이벤트가 많으면 일반 이벤트 생략 가능
+                if len(priority_candidates) < 2:  # 중요 이벤트가 2개 미만일 때만 일반 이벤트 1개 추가
+                     development_events.append(normal_candidates[0])
+
         
         # 병합 및 정렬
         all_events = safety_events + development_events

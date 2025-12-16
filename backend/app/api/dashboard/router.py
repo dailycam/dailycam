@@ -127,12 +127,18 @@ def get_dashboard_summary(
     
     # 2-1. 선택한 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
     # AnalysisLog와 SegmentAnalysis 모두에서 수집
-    # AnalysisLog와 SegmentAnalysis 중복 합산 방지 (SegmentAnalysis 기준)
-    # today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
-    today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
+    # 기본적으로 SegmentAnalysis(카메라 기준)를 사용하되, 없으면 AnalysisLog(사용자 기준)를 사용 (Fallback)
     
-    # today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
-    today_dev_scores = [s.development_score for s in today_segments if s.development_score is not None]
+    if today_segments:
+        print("[Dashboard] SegmentAnalysis(카메라 기준) 데이터 사용")
+        today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
+        today_dev_scores = [s.development_score for s in today_segments if s.development_score is not None]
+        total_analysis_count = len(today_segments)
+    else:
+        print("[Dashboard] AnalysisLog(사용자 기준) 데이터 사용 (Segment 데이터 없음/카메라 ID 불일치)")
+        today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+        today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
+        total_analysis_count = len(today_logs)
     
     print(f"[Dashboard] 안전 점수들: {today_safety_scores}")
     print(f"[Dashboard] 발달 점수들: {today_dev_scores}")
@@ -161,7 +167,7 @@ def get_dashboard_summary(
     )
     
     # 4. 선택한 날짜의 위험 이벤트 카운트 (일일 집계)
-    # AnalysisLog 기반 이벤트
+    # AnalysisLog 기반 이벤트 (이미 user_id 기준이므로 정확함)
     incident_count = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
@@ -174,9 +180,8 @@ def get_dashboard_summary(
         .count()
     )
     
-    # SegmentAnalysis 기반 이벤트도 추가
-    segment_incident_count = sum(s.incident_count or 0 for s in today_segments)
-    incident_count += segment_incident_count
+    # SegmentAnalysis 기반 이벤트 합산 제거 (중복 방지)
+    # AnalysisLog가 있으면 SafetyEvent 테이블에 기록되므로 이것만으로 충분함.
     
     # 5. 주간 트렌드 (최근 7일) - 날짜별 그룹화
     weekly_trend: List[Dict[str, Any]] = []
@@ -184,6 +189,7 @@ def get_dashboard_summary(
         day_start = start_date + timedelta(days=i)
         day_end = day_start + timedelta(days=1)
         
+        # SegmentAnalysis 기준 조회
         day_stats = (
             db.query(
                 func.avg(SegmentAnalysis.safety_score).label("avg_safety"),
@@ -198,6 +204,22 @@ def get_dashboard_summary(
             .first()
         )
         
+        avg_safety = int(day_stats.avg_safety or 0) if day_stats.avg_safety else 0
+        total_logs = day_stats.total_logs or 0
+        
+        # Fallback: SegmentAnalysis 데이터가 없으면 AnalysisLog 확인
+        if avg_safety == 0 and total_logs == 0:
+             day_log_stats = (
+                db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                .filter(
+                    AnalysisLog.user_id == user_id,
+                    AnalysisLog.created_at >= day_start,
+                    AnalysisLog.created_at < day_end
+                )
+                .first()
+            )
+             avg_safety = int(day_log_stats.avg_safety or 0) if day_log_stats.avg_safety else 0
+
         day_incidents = (
             db.query(SafetyEvent)
             .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
@@ -212,10 +234,10 @@ def get_dashboard_summary(
         
         weekly_trend.append({
             "day": day_start.strftime("%a"),  # 월, 화, 수...
-            "score": int(day_stats.avg_safety or 0) if day_stats.avg_safety else 0,
+            "score": avg_safety,
             "incidents": day_incidents,
             "activity": 0,  # 추후 추가 가능
-            "safety": int(day_stats.avg_safety or 0) if day_stats.avg_safety else 0,
+            "safety": avg_safety,
         })
     
     # 6. 최근 위험 감지 목록
@@ -461,7 +483,7 @@ def get_dashboard_summary(
                             "safety_score": segment.safety_score
                         })
                         has_safety_event = True
-
+                        
             # 3. environment_risks (환경 위험 요소)
             env_risks = safety_analysis.get('environment_risks', [])
             if isinstance(env_risks, list):
@@ -676,8 +698,8 @@ def get_dashboard_summary(
         "safetyScore": avg_safety_score,  # 오늘 분석된 모든 영상의 평균 안전 점수 (실시간)
         "developmentScore": avg_dev_score,  # 오늘 분석된 모든 영상의 평균 발달 점수 (실시간)
         "incidentCount": incident_count,  # 오늘 분석된 모든 영상의 이벤트 카운트 (실시간)
-        "monitoringHours": round(len(today_segments) * (10 / 60), 1),  # 분석된 영상 개수 * 10분 (정확히 계산)
-        "totalAnalysisCount": len(today_segments),  # 중복 제거 (SegmentAnalysis 기준)
+        "monitoringHours": round(total_analysis_count * (10 / 60), 1),  # 분석된 영상 개수 * 10분 (정확히 계산)
+        "totalAnalysisCount": total_analysis_count,  # 분석 횟수
         "activityPattern": "모니터링 중" if (today_logs or today_segments) else "데이터 없음",
         "weeklyTrend": weekly_trend,
         "risks": risks,
@@ -686,7 +708,6 @@ def get_dashboard_summary(
         "hourlyStats": hourly_stats,  # 시간대별 통계 추가 (실시간)
         "monitoringRanges": merged_ranges # 실제 분석된 시간 구간 (start, end)
     }
-
 
 @router.post("/fix-development-scores")
 def fix_development_scores(db: Session = Depends(get_db)):

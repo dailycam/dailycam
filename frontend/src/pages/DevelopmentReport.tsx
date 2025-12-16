@@ -121,6 +121,7 @@ export default function DevelopmentReport() {
         />
         <DevelopmentStageCard
           ageMonths={developmentData?.ageMonths || 0}
+          detectedStage={developmentData?.detectedStage}
           strongestArea={strongestArea}
           childName={childName}
         />

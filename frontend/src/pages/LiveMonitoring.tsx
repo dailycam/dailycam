@@ -7,10 +7,23 @@ import {
   MapPin,
   Upload,
   X,
+  MonitorPlay,
 } from 'lucide-react'
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
 import { useOutletContext } from 'react-router-dom'
+
+// Clip Type Definition
+interface Clip {
+  id: number
+  title: string
+  description: string
+  video_url: string
+  thumbnail_url: string
+  category: string
+  created_at: string
+  importance: 'high' | 'medium' | 'low'
+}
 
 export default function LiveMonitoring() {
   // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
@@ -20,7 +33,7 @@ export default function LiveMonitoring() {
     selectedCamera: string
     setSelectedCamera: (camera: string) => void
   }>()
-  
+
   const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
   const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
   const [isUploading, setIsUploading] = useState(false)
@@ -29,6 +42,7 @@ export default function LiveMonitoring() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [clips, setClips] = useState<Clip[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // AppLayout의 상태와 동기화
@@ -45,6 +59,33 @@ export default function LiveMonitoring() {
       outletContext.setSelectedCamera(selectedCamera)
     }
   }, [selectedCamera, outletContext])
+
+  // 최근 클립 폴링
+  useEffect(() => {
+    const fetchClips = async () => {
+      try {
+        // 로컬 시간 기준 오늘 날짜 구하기 (YYYY-MM-DD)
+        const d = new Date()
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        const today = `${year}-${month}-${day}`
+
+        const response = await fetch(`${API_BASE_URL}/api/clips/list?limit=10&target_date=${today}`)
+        if (response.ok) {
+          const data = await response.json()
+          setClips(data.clips)
+        }
+      } catch (error) {
+        console.error('클립 목록 조회 실패:', error)
+      }
+    }
+
+    fetchClips()
+    const interval = setInterval(fetchClips, 5000) // 5초마다 갱신
+
+    return () => clearInterval(interval)
+  }, [])
 
   // 플레이어는 AppLayout에서 관리됨 (DOM 조작 제거)
 
@@ -158,7 +199,24 @@ export default function LiveMonitoring() {
     }
   }
 
-  // HLS 플레이어 이벤트 핸들러는 AppLayout의 플레이어에서 처리됨
+  // 시간 포맷팅 함수
+  const formatTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString)
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+      return ''
+    }
+  }
+
+  // 중요도에 따른 타입 반환
+  const getClipType = (importance: string): 'warning' | 'info' | 'safe' => {
+    switch (importance) {
+      case 'high': return 'warning'
+      case 'medium': return 'info'
+      default: return 'safe'
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -195,7 +253,7 @@ export default function LiveMonitoring() {
         <div className="lg:col-span-2 space-y-4">
           {/* Main Camera Feed - 플레이어는 AppLayout 상단에 표시됨 */}
           <div className="card p-0 overflow-hidden">
-            <div 
+            <div
               className="relative bg-gray-900 aspect-video"
               style={{
                 pointerEvents: 'none',
@@ -320,57 +378,27 @@ export default function LiveMonitoring() {
 
         {/* Right Sidebar - Activity Log & Alerts */}
         <div className="space-y-4">
-          {/* Real-time Alerts */}
+          {/* Real-time Clips Log */}
           <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">알림</h3>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              <AlertItem
-                type="warning"
-                message="데드존 근처 접근"
-                time="방금 전"
-              />
-              <AlertItem
-                type="info"
-                message="세이프존으로 이동"
-                time="2분 전"
-              />
-              <AlertItem
-                type="warning"
-                message="가구 모서리 근접"
-                time="5분 전"
-              />
-              <AlertItem
-                type="safe"
-                message="안전한 활동 중"
-                time="10분 전"
-              />
-            </div>
-          </div>
-
-          {/* Activity Timeline */}
-          <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">활동 타임라인</h3>
-            <div className="space-y-4">
-              <TimelineItem
-                time="15:45"
-                activity="거실에서 놀이 중"
-                status="safe"
-              />
-              <TimelineItem
-                time="15:30"
-                activity="주방 근처 접근"
-                status="warning"
-              />
-              <TimelineItem
-                time="15:15"
-                activity="낮잠에서 깨어남"
-                status="info"
-              />
-              <TimelineItem
-                time="14:00"
-                activity="낮잠 시작"
-                status="safe"
-              />
+            <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <MonitorPlay className="w-5 h-5 text-primary-600" />
+              AI 감지 로그
+            </h3>
+            <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              {clips.length > 0 ? (
+                clips.map((clip) => (
+                  <AlertItem
+                    key={clip.id}
+                    type={getClipType(clip.importance)}
+                    message={clip.title}
+                    time={formatTime(clip.created_at)}
+                  />
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <p>감지된 클립이 없습니다.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -556,39 +584,6 @@ function AlertItem({
           <p className="text-sm text-gray-900">{message}</p>
           <p className="text-xs text-gray-500 mt-1">{time}</p>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// Timeline Item Component
-function TimelineItem({
-  time,
-  activity,
-  status,
-}: {
-  time: string
-  activity: string
-  status: 'safe' | 'warning' | 'info'
-}) {
-  const statusColors = {
-    safe: 'bg-safe',
-    warning: 'bg-warning',
-    info: 'bg-blue-500',
-  }
-
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
-        <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
-      </div>
-      <div className="flex-1 pb-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Clock className="w-3 h-3 text-gray-400" />
-          <span className="text-xs text-gray-500">{time}</span>
-        </div>
-        <p className="text-sm text-gray-900">{activity}</p>
       </div>
     </div>
   )

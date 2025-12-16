@@ -1035,47 +1035,59 @@ async def get_latest_events(
 @router.get("/stats/{camera_id}")
 async def get_monitoring_stats(
     camera_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     모니터링 통계 조회
+    - KST 기준으로 '오늘'을 정의하고, DB(UTC)에서 데이터를 조회합니다.
+    - Fallback: SegmentAnalysis/RealtimeEvent가 없으면 AnalysisLog/SafetyEvent(사용자 기준)를 사용하여 추정치를 반환합니다.
     """
     from datetime import datetime, timedelta
+    import pytz
+    from app.models.analysis import AnalysisLog, SafetyEvent
     
-    now = datetime.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # KST 기준 오늘 0시 구하기
+    korea_tz = pytz.timezone('Asia/Seoul')
+    utc_tz = pytz.UTC
     
-    # 오늘의 이벤트 수
+    now_kst = datetime.now(korea_tz)
+    today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end_kst = today_start_kst + timedelta(days=1)
+    
+    # DB 조회를 위해 UTC로 변환
+    today_start_utc = today_start_kst.astimezone(utc_tz).replace(tzinfo=None)
+    today_end_utc = today_end_kst.astimezone(utc_tz).replace(tzinfo=None)
+    
+    # 1. 오늘의 이벤트 수 (RealtimeEvent 기준 - 카메라 중심)
     total_events = db.query(RealtimeEvent).filter(
         RealtimeEvent.camera_id == camera_id,
-        RealtimeEvent.timestamp >= today_start
+        RealtimeEvent.timestamp >= today_start_utc
     ).count()
     
-    # 위험 이벤트 수
     danger_events = db.query(RealtimeEvent).filter(
         RealtimeEvent.camera_id == camera_id,
-        RealtimeEvent.timestamp >= today_start,
+        RealtimeEvent.timestamp >= today_start_utc,
         RealtimeEvent.severity == 'danger'
     ).count()
     
-    # 경고 이벤트 수
     warning_events = db.query(RealtimeEvent).filter(
         RealtimeEvent.camera_id == camera_id,
-        RealtimeEvent.timestamp >= today_start,
+        RealtimeEvent.timestamp >= today_start_utc,
         RealtimeEvent.severity == 'warning'
     ).count()
     
-    # 최근 1시간 이벤트 수
-    hour_ago = now - timedelta(hours=1)
+    # 최근 1시간 이벤트 수 (RealtimeEvent 기준)
+    hour_ago = datetime.utcnow() - timedelta(hours=1)
     recent_events = db.query(RealtimeEvent).filter(
         RealtimeEvent.camera_id == camera_id,
         RealtimeEvent.timestamp >= hour_ago
     ).count()
     
-    # 오늘의 총 모니터링 시간 계산 (분 단위)
+    # 2. 오늘의 총 모니터링 시간 계산 (SegmentAnalysis 기준)
     today_segments = db.query(SegmentAnalysis).filter(
         SegmentAnalysis.camera_id == camera_id,
-        SegmentAnalysis.segment_start >= today_start,
+        SegmentAnalysis.segment_start >= today_start_utc,
         SegmentAnalysis.status == 'completed'
     ).all()
     
@@ -1085,6 +1097,59 @@ async def get_monitoring_stats(
     )
     total_monitoring_minutes = int(total_monitoring_seconds / 60)
     
+    # === Fallback Logic (사용자 중심) ===
+    # RealtimeEvent(카메라) 데이터가 없으면 AnalysisLog(사용자) 데이터 사용
+    if total_events == 0 and total_monitoring_minutes == 0:
+        # User ID로 AnalysisLog 조회
+        fallback_logs = db.query(AnalysisLog).filter(
+            AnalysisLog.user_id == user_id,
+            AnalysisLog.created_at >= today_start_utc,
+            AnalysisLog.created_at < today_end_utc
+        ).all()
+        
+        if fallback_logs:
+            print(f"[Stats] Fallback to AnalysisLog for user {user_id}: {len(fallback_logs)} logs")
+            # 모니터링 시간 추정 (로그 개수 * 10분)
+            total_monitoring_minutes = len(fallback_logs) * 10
+            
+            # 이벤트 수 집계 (SafetyEvent 조인)
+            fallback_events = (
+                db.query(SafetyEvent)
+                .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
+                .filter(
+                    AnalysisLog.user_id == user_id,
+                    AnalysisLog.created_at >= today_start_utc,
+                    AnalysisLog.created_at < today_end_utc
+                ).all()
+            )
+            
+            total_events = len(fallback_events)
+            
+            # 위험/경고 분류
+            danger_count = 0
+            warning_count = 0
+            
+            for event in fallback_events:
+                # Severity check
+                sev = str(event.severity)
+                if '위험' in sev or 'danger' in sev or event.severity == 'danger':
+                    danger_count += 1
+                elif '주의' in sev or 'warning' in sev or event.severity == 'warning':
+                    warning_count += 1
+                
+            danger_events = danger_count
+            warning_events = warning_count
+            
+            # Recent events (AnalysisLog based estimate)
+            recent_events = (
+                db.query(SafetyEvent)
+                .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
+                .filter(
+                    AnalysisLog.user_id == user_id,
+                    AnalysisLog.created_at >= hour_ago
+                ).count()
+            )
+
     return {
         "camera_id": camera_id,
         "today_total_events": total_events,
@@ -1094,6 +1159,7 @@ async def get_monitoring_stats(
         "today_monitoring_minutes": total_monitoring_minutes,
         "is_active": camera_id in active_streams
     }
+
 
 
 @router.get("/daily-report/{camera_id}")

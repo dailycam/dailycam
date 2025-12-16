@@ -70,7 +70,7 @@ def get_safety_report_summary(
     # 주간/월간 안전도 추이 데이터
     # 👉 화면 상단 "오늘의 종합 안전 점수"와 일관성을 유지하기 위해
     #    모두 SegmentAnalysis.safety_score 기준으로 계산한다.
-    #    (일별 평균 → 주간 그래프, 주간 평균 → 월간 그래프)
+    #    Fallback: 데이터가 없으면 AnalysisLog(사용자 기준)를 사용한다.
     trend_data: List[Dict[str, Any]] = []
 
     # 현재 구현에서는 camera_id를 고정값으로 사용
@@ -87,6 +87,7 @@ def get_safety_report_summary(
             day_start = day_to_query.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
 
+            # 1. SegmentAnalysis 조회 (카메라 기준)
             day_segments = (
                 db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
@@ -98,9 +99,24 @@ def get_safety_report_summary(
                 .first()
             )
 
-            day_label = day_names_ko[day_to_query.weekday()]
             day_avg = int(day_segments.avg_safety or 0) if day_segments and day_segments.avg_safety else 0
+            
+            # 2. Fallback: AnalysisLog 조회 (사용자 기준)
+            if day_avg == 0:
+                user_logs_avg = (
+                    db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                    .filter(
+                        AnalysisLog.user_id == user_id,
+                        AnalysisLog.created_at >= day_start,
+                        AnalysisLog.created_at < day_end
+                    )
+                    .first()
+                )
+                if user_logs_avg and user_logs_avg.avg_safety:
+                    day_avg = int(user_logs_avg.avg_safety)
 
+            day_label = day_names_ko[day_to_query.weekday()]
+            
             trend_data.append({
                 "date": day_label,
                 "안전도": day_avg,
@@ -118,6 +134,7 @@ def get_safety_report_summary(
             week_start_query = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
             week_end_query = end_of_week.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+            # 1. SegmentAnalysis 조회
             week_stats = (
                 db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
@@ -128,6 +145,22 @@ def get_safety_report_summary(
                 )
                 .first()
             )
+            
+            week_avg = int(week_stats.avg_safety or 0) if week_stats and week_stats.avg_safety else 0
+
+            # 2. Fallback: AnalysisLog 조회
+            if week_avg == 0:
+                 user_logs_avg = (
+                    db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                    .filter(
+                        AnalysisLog.user_id == user_id,
+                        AnalysisLog.created_at >= week_start_query,
+                        AnalysisLog.created_at <= week_end_query
+                    )
+                    .first()
+                )
+                 if user_logs_avg and user_logs_avg.avg_safety:
+                    week_avg = int(user_logs_avg.avg_safety)
 
             if i == 0:
                 week_label = "이번 주"
@@ -135,8 +168,6 @@ def get_safety_report_summary(
                 week_label = "지난주"
             else:
                 week_label = f"{i}주 전"
-
-            week_avg = int(week_stats.avg_safety or 0) if week_stats and week_stats.avg_safety else 0
 
             trend_data.append({
                 "date": week_label,
@@ -262,6 +293,11 @@ def get_safety_report_summary(
     # today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
     today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
     
+    # Fallback: SegmentAnalysis 데이터가 없으면 AnalysisLog 데이터 사용
+    if not today_safety_scores and today_logs:
+        print("[Safety API] SegmentAnalysis 데이터 없음, AnalysisLog로 대체합니다.")
+        today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     
     # 체크리스트 데이터 생성 (SafetyEvent 기반)

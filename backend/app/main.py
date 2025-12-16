@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
         is_development = os.getenv("ENVIRONMENT", "development") != "production"
         if is_development:
             # 개발 모드에서는 모든 Origin 허용 (CORS 문제 원천 차단)
-            print("🔧 개발 모드: 모든 Origin 허용 (allow_origins=['*'])")
+            print("[DEV] 개발 모드: 모든 Origin 허용 (allow_origins=['*'])")
             allow_origins = ["*"]
         else:
             # 프로덕션에서는 환경 변수만 사용

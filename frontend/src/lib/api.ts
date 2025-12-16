@@ -161,7 +161,7 @@ export async function stopStream(cameraId: string): Promise<void> {
   } catch (error) {
     // HLS 스트림이 없으면 구버전 API 호출
   }
-  
+
   // 구버전 스트림 중지 (fallback)
   const response = await fetch(`${API_BASE_URL}/api/live-monitoring/stop-stream/${cameraId}`, {
     method: 'POST',
@@ -632,6 +632,7 @@ export interface RecommendedActivity {
 
 export interface DevelopmentData {
   ageMonths: number
+  detectedStage?: string // 감지된 발달 단계 추가
   developmentSummary: string
   developmentScore: number
   developmentRadarScores: DevelopmentRadarScores
@@ -665,6 +666,7 @@ export async function getDevelopmentData(targetDate?: string): Promise<Developme
     // 백엔드 응답을 프론트엔드 형식으로 변환
     return {
       ageMonths: data.age_months || 7,
+      detectedStage: data.detected_stage, // 감지된 발달 단계 매핑
       developmentSummary: data.development_summary || '아직 분석된 데이터가 없습니다.',
       developmentScore: data.development_score || 0,
       developmentRadarScores: data.development_radar_scores || {

@@ -326,6 +326,53 @@ class AnalysisWorker:
                 analysis_id=segment_analysis.id
             )
             
+            # 6. RealtimeEvent 생성 (모니터링 통계용)
+            # 10분 단위 분석 결과를 RealtimeEvent로 변환하여 모니터링 페이지 통계에 반영
+            # (실시간성은 떨어지지만 통계 데이터 정합성을 위해 필요 - OpenCV 실시간 감지 제거됨)
+            from app.models.live_monitoring.models import RealtimeEvent
+            
+            safety_events = safety_analysis.get('safety_events', [])
+            for event_data in safety_events:
+                # Severity 매핑
+                severity_str = event_data.get("severity", "info")
+                severity_map = {
+                    "사고": "danger", 
+                    "위험": "danger",
+                    "주의": "warning",
+                    "권장": "info",
+                    "안전": "safe"
+                }
+                severity = severity_map.get(severity_str, "info")
+                
+                # Timestamp 계산 (세그먼트 시작 시간 + 오프셋)
+                event_ts = job.segment_start
+                ts_range = event_data.get("timestamp_range")
+                if ts_range and isinstance(ts_range, list) and len(ts_range) > 0:
+                    try:
+                        # "00:10" or 10 (seconds)
+                        start_offset = ts_range[0]
+                        if isinstance(start_offset, str) and ":" in start_offset:
+                            parts = start_offset.split(":")
+                            seconds = int(parts[0]) * 60 + float(parts[1])
+                            event_ts += timedelta(seconds=seconds)
+                        elif isinstance(start_offset, (int, float)):
+                            event_ts += timedelta(seconds=start_offset)
+                    except:
+                        pass
+                
+                realtime_event = RealtimeEvent(
+                    camera_id=job.camera_id,
+                    timestamp=event_ts,
+                    event_type="safety",
+                    severity=severity,
+                    title=event_data.get("title", "알 수 없는 이벤트"),
+                    description=event_data.get("description", ""),
+                    location=event_data.get("location", ""),
+                    event_metadata=event_data
+                )
+                db.add(realtime_event)
+                print(f"[워커 {self.worker_id}] 🔔 RealtimeEvent 생성: {realtime_event.title} ({severity})")
+            
             db.commit()
             
             print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}")
