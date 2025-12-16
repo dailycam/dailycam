@@ -52,13 +52,7 @@ async def analyze_video(
         )
     
     try:
-        print("[VLM 비디오 분석 시작]")
         start_time = time.time()  # 분석 시작 시간 기록
-        
-        if stage:
-            print(f"[발달 단계] 제공됨: {stage}단계")
-        else:
-            print("[발달 단계] 자동 판단 모드")
 
         # 임시 파일로 저장
         import tempfile
@@ -87,18 +81,15 @@ async def analyze_video(
             if os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
-                    print(f"[API] 임시 업로드 파일 삭제: {temp_path}")
                 except Exception as e:
-                    print(f"[API] 임시 파일 삭제 실패: {e}")
+                    pass
         
         end_time = time.time()  # 분석 종료 시간 기록
         analysis_time = end_time - start_time
-        print(f"[VLM 비디오 분석 완료] 총 소요 시간: {analysis_time:.2f}초")
         
         # 데이터베이스에 저장 (save_to_db가 True인 경우)
         if save_to_db:
             try:
-                print("[DB 저장 시작] 분석 결과를 데이터베이스에 저장합니다...")
                 video_path = f"uploads/{user_id}/{video.filename}"  # 실제로는 파일을 저장한 경로를 사용
                 analysis_log = AnalysisService.save_analysis_result(
                     db=db,
@@ -106,7 +97,6 @@ async def analyze_video(
                     video_path=video_path,
                     analysis_result=result
                 )
-                print(f"[DB 저장 완료] AnalysisLog ID: {analysis_log.id}, Analysis ID: {analysis_log.analysis_id}")
                 
                 # 응답에 분석 ID 추가 (analysis_id는 실제 DB의 PK가 아닌 사용자 식별용 ID)
                 result["analysis_id"] = analysis_log.analysis_id
@@ -114,8 +104,6 @@ async def analyze_video(
                 result["saved_to_db"] = True
             except Exception as db_error:
                 import traceback
-                print(f"⚠️ DB 저장 실패: {db_error}")
-                print(f"상세 에러:\n{traceback.format_exc()}")
                 # DB 저장 실패해도 분석 결과는 반환
                 result["saved_to_db"] = False
                 result["db_error"] = str(db_error)
@@ -129,8 +117,6 @@ async def analyze_video(
         import traceback
         error_trace = traceback.format_exc()
         error_msg = str(e)
-        print(f"❌ VLM 비디오 분석 오류: {error_msg}")
-        print(f"상세 에러:\n{error_trace}")
         raise HTTPException(
             status_code=500,
             detail=f"비디오 분석 중 오류가 발생했습니다: {error_msg}"

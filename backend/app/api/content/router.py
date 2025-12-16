@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from app.database import get_db
 from app.models.user import User
@@ -48,6 +48,70 @@ def calculate_age_months(birthdate: date) -> int:
     return max(0, total_months)
 
 
+def get_effective_age_months(user_id: int, db: Session, fallback_age_months: int) -> int:
+    """
+    발달 단계를 우선 사용하여 효과적인 개월 수 반환
+    발달 단계가 없으면 나이 사용
+    
+    Returns:
+        효과적인 개월 수 (발달 단계 기반 또는 나이 기반)
+    """
+    # 1. AI 분석된 발달 단계 조회
+    detected_stage = None
+    
+    # 최근 7일 내 로그 조회 (최신 데이터 우선)
+    today = datetime.now()
+    week_before = today - timedelta(days=7)
+    
+    latest_log = db.query(AnalysisLog).filter(
+        AnalysisLog.user_id == user_id,
+        AnalysisLog.created_at >= week_before
+    ).order_by(AnalysisLog.created_at.desc()).first()
+    
+    if latest_log and latest_log.assumed_stage:
+        detected_stage = latest_log.assumed_stage
+        
+    if not detected_stage:
+        # SegmentAnalysis 조회
+        latest_segment = db.query(SegmentAnalysis).filter(
+            SegmentAnalysis.camera_id == "camera-1", # TODO: 사용자별 카메라 매핑
+            SegmentAnalysis.created_at >= week_before,
+            SegmentAnalysis.status == 'completed'
+        ).order_by(SegmentAnalysis.created_at.desc()).first()
+        
+        if latest_segment and latest_segment.analysis_result:
+            if isinstance(latest_segment.analysis_result, dict):
+                meta = latest_segment.analysis_result.get('meta', {})
+                if meta and meta.get('assumed_stage'):
+                    detected_stage = meta.get('assumed_stage')
+    
+    # 2. 발달 단계가 있으면 해당 월령 범위의 중간값 사용
+    if detected_stage:
+        STAGE_AGE_MAP = {
+            "1": 1,   # 0~2개월 -> 1개월
+            "2": 4,   # 3~5개월 -> 4개월
+            "3": 7,   # 6~8개월 -> 7개월
+            "4": 10,  # 9~11개월 -> 10개월
+            "5": 14, # 12~17개월 -> 14개월
+            "6": 20, # 18~23개월 -> 20개월
+            "7": 26, # 24~29개월 -> 26개월
+            "8": 32, # 30~35개월 -> 32개월
+            "9": 41, # 36~47개월 -> 41개월
+            "10": 53, # 48~59개월 -> 53개월
+            "11": 65  # 60~71개월 -> 65개월
+        }
+        
+        import re
+        match = re.search(r'\d+', str(detected_stage))
+        if match:
+            stage_num = match.group()
+            if stage_num in STAGE_AGE_MAP:
+                return STAGE_AGE_MAP[stage_num]
+    
+    # 3. 발달 단계가 없으면 나이 사용
+    return fallback_age_months
+
+
 @router.get("/recommended-videos")
 async def get_recommended_videos(
     user_id: int = Depends(get_current_user_id),
@@ -63,8 +127,9 @@ async def get_recommended_videos(
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
     
-    # 개월 수 계산
-    age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    # 개월 수 계산 (발달 단계 우선, 없으면 나이)
+    base_age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    age_months = get_effective_age_months(user_id, db, base_age_months)
     
     # 캐시 확인
     cache_key = f"videos:{age_months}"
@@ -110,7 +175,9 @@ async def get_recommended_blogs(
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
     
-    age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    # 개월 수 계산 (발달 단계 우선, 없으면 나이)
+    base_age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    age_months = get_effective_age_months(user_id, db, base_age_months)
     
     # 캐시 확인
     cache_key = f"blogs:{age_months}"
@@ -163,7 +230,9 @@ async def get_recommended_news(
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
     
-    age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    # 개월 수 계산 (발달 단계 우선, 없으면 나이)
+    base_age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    age_months = get_effective_age_months(user_id, db, base_age_months)
     
     # 위치 정보 처리
     location = None
@@ -221,7 +290,9 @@ async def get_trending_content(
     if not user:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
     
-    age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    # 개월 수 계산 (발달 단계 우선, 없으면 나이)
+    base_age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
+    age_months = get_effective_age_months(user_id, db, base_age_months)
     
     # 캐시 확인
     cache_key = f"trending:{age_months}"
@@ -286,60 +357,17 @@ async def search_content(
     
     # 검색 수행
     try:
-        curator = get_curator()
+        try:
+            curator = get_curator()
+        except Exception as e:
+            print(f"⚠️ [Search] ContentCurator 초기화 실패: {e}")
+            raise HTTPException(status_code=500, detail=f"검색 서비스 초기화 실패: {str(e)}")
         
-        # 1. AI 분석된 발달 단계 조회
-        detected_stage = None
-        
-        # 최근 7일 내 로그 조회 (최신 데이터 우선)
-        today = datetime.now()
-        week_before = today - timedelta(days=7)
-        
-        latest_log = db.query(AnalysisLog).filter(
-            AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= week_before
-        ).order_by(AnalysisLog.created_at.desc()).first()
-        
-        if latest_log and latest_log.assumed_stage:
-            detected_stage = latest_log.assumed_stage
-            
-        if not detected_stage:
-            # SegmentAnalysis 조회
-            latest_segment = db.query(SegmentAnalysis).filter(
-                SegmentAnalysis.camera_id == "camera-1", # TODO: 사용자별 카메라 매핑
-                SegmentAnalysis.created_at >= week_before,
-                SegmentAnalysis.status == 'completed'
-            ).order_by(SegmentAnalysis.created_at.desc()).first()
-            
-            if latest_segment and latest_segment.analysis_result:
-                if isinstance(latest_segment.analysis_result, dict):
-                    meta = latest_segment.analysis_result.get('meta', {})
-                    if meta and meta.get('assumed_stage'):
-                        detected_stage = meta.get('assumed_stage')
-
-        # 2. 검색 컨텍스트 설정 (분석된 단계 우선, 없으면 생일 기반 월령)
-        search_context = f'"{age_months}개월"'
-        
-        STAGE_AGE_MAP = {
-            "1": "0~2개월", "2": "3~5개월", "3": "6~8개월", "4": "9~11개월",
-            "5": "12~17개월", "6": "18~23개월", "7": "24~29개월", "8": "30~35개월",
-            "9": "36~47개월", "10": "48~59개월", "11": "60~71개월"
-        }
-
-        if detected_stage:
-            import re
-            match = re.search(r'\d+', str(detected_stage))
-            if match:
-                stage_num = match.group()
-                if stage_num in STAGE_AGE_MAP:
-                    # 분석된 단계가 있으면 해당 월령 범위를 검색어로 사용
-                    # 예: 5단계 -> "12~17개월"
-                    search_context = f'"{STAGE_AGE_MAP[stage_num]}"'
-                    print(f"[Search] 🤖 AI 분석 발달 단계 적용: {detected_stage} -> {search_context}")
+        # 검색 컨텍스트 설정 (영유아 기준으로만 검색)
+        search_context = "영유아"
         
         # YouTube, 블로그, 뉴스 검색 (개별 예외 처리로 전체 실패 방지)
         search_query = f'{query} {search_context}'
-        print(f"[Search] 최종 검색 쿼리: {search_query}")
         
         videos = []
         try:
@@ -364,15 +392,21 @@ async def search_content(
         
         # YouTube 결과 추가
         for idx, video in enumerate(videos):
+            try:
+                view_count = video.get('view_count') or 0
+                views = curator._format_views(view_count) if hasattr(curator, '_format_views') else str(view_count)
+            except Exception as e:
+                views = "0"
+            
             results.append({
                 'id': f"search_yt_{idx}",
                 'type': 'youtube',
                 'title': video.get('title', ''),
-                'description': video.get('description', '')[:200],
+                'description': video.get('description', '')[:200] if video.get('description') else '',
                 'url': video.get('url', ''),
                 'thumbnail': video.get('thumbnail'),
                 'channel': video.get('channel', ''),
-                'views': curator._format_views(video.get('view_count') or 0),
+                'views': views,
                 'tags': [],
                 'category': '검색'
             })
@@ -413,8 +447,11 @@ async def search_content(
             "cached": False
         }
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"검색 오류: {e}")
-        raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+        print(f"상세 에러:\n{error_trace}")
+        raise HTTPException(status_code=500, detail=f"검색 중 오류가 발생했습니다: {str(e)}")
 
 
 @router.post("/clear-cache")

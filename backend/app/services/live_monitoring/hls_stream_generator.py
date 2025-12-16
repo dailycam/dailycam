@@ -139,6 +139,9 @@ class HLSStreamGenerator:
             # 아카이브 파일 모니터링 시작 (파일 생성 이벤트 기반)
             self._monitor_archive_files()
             
+            # HLS 세그먼트 파일 정리 시작 (주기적으로 오래된 파일 삭제)
+            self._start_hls_cleanup_task()
+            
             # 프로세스 모니터링 (10초 간격으로 CPU 절약)
             while self.is_running:
                 await asyncio.sleep(10)  # 1초 → 10초로 변경 (CPU 절약)
@@ -531,9 +534,22 @@ class HLSStreamGenerator:
             
             # Job 등록
             segment_end_utc = segment_end.astimezone(pytz.UTC).replace(tzinfo=None)
+            
+            # 프로젝트 루트(backend) 기준 상대 경로로 변환
+            # 워커가 Path(__file__).parent.parent.parent 기준으로 처리하므로
+            # backend 디렉토리 기준 상대 경로를 저장해야 함
+            backend_dir = Path(__file__).resolve().parents[3]  # backend 디렉토리
+            try:
+                # 절대 경로를 backend 기준 상대 경로로 변환
+                relative_path = file_path.resolve().relative_to(backend_dir)
+                video_path_str = str(relative_path)
+            except ValueError:
+                # backend 디렉토리 밖에 있으면 절대 경로 사용 (예외 케이스)
+                video_path_str = str(file_path)
+            
             analysis_job = AnalysisJob(
                 camera_id=self.camera_id,
-                video_path=str(file_path),
+                video_path=video_path_str,
                 segment_start=segment_start_utc,
                 segment_end=segment_end_utc,
                 status=JobStatus.PENDING
@@ -582,6 +598,66 @@ class HLSStreamGenerator:
         minute = (now.minute // self.archive_duration_minutes) * self.archive_duration_minutes
         return now.replace(minute=minute, second=0, microsecond=0)
     
+    def _start_hls_cleanup_task(self):
+        """
+        HLS 세그먼트 파일 정리 백그라운드 태스크 시작
+        1시간 이상 된 .ts 파일을 주기적으로 삭제
+        """
+        def cleanup_loop():
+            while self.is_running:
+                try:
+                    self._cleanup_old_hls_segments()
+                    # 10분마다 정리 작업 실행
+                    time.sleep(600)
+                except Exception as e:
+                    print(f"[HLS 정리] ❌ 오류: {e}")
+                    time.sleep(600)
+        
+        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+        cleanup_thread.start()
+        return cleanup_thread
+    
+    def _cleanup_old_hls_segments(self):
+        """
+        오래된 HLS 세그먼트 파일 삭제 (1시간 이상 된 파일)
+        .m3u8 파일은 유지하고 .ts 파일만 삭제
+        """
+        try:
+            if not self.hls_dir.exists():
+                return
+            
+            # 현재 시간
+            now = time.time()
+            # 1시간 = 3600초
+            max_age_seconds = 3600
+            
+            deleted_count = 0
+            total_size = 0
+            
+            # .ts 파일만 검색
+            for ts_file in self.hls_dir.glob("*.ts"):
+                try:
+                    # 파일 수정 시간 확인
+                    file_mtime = ts_file.stat().st_mtime
+                    file_age = now - file_mtime
+                    
+                    # 1시간 이상 된 파일 삭제
+                    if file_age > max_age_seconds:
+                        file_size = ts_file.stat().st_size
+                        ts_file.unlink()
+                        deleted_count += 1
+                        total_size += file_size
+                except Exception as e:
+                    # 파일 삭제 실패 시 로그만 출력하고 계속 진행
+                    print(f"[HLS 정리] ⚠️ 파일 삭제 실패 ({ts_file.name}): {e}")
+            
+            if deleted_count > 0:
+                size_mb = total_size / (1024 * 1024)
+                print(f"[HLS 정리] ✅ 오래된 세그먼트 {deleted_count}개 삭제 (총 {size_mb:.2f}MB)")
+            
+        except Exception as e:
+            print(f"[HLS 정리] ❌ 정리 작업 오류: {e}")
+    
     def _cleanup(self):
         """리소스 정리"""
         if self.ffmpeg_process:
@@ -628,6 +704,9 @@ class HLSStreamGenerator:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
+            
+            # HLS 세그먼트 파일 정리 시작
+            self._start_hls_cleanup_task()
             
             # FFmpeg 프로세스가 종료될 때까지 대기
             while self.is_running:

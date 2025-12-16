@@ -8,6 +8,8 @@ import {
   Upload,
   X,
   MonitorPlay,
+  TrendingUp,
+  Shield,
 } from 'lucide-react'
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
@@ -392,6 +394,7 @@ export default function LiveMonitoring() {
                     type={getClipType(clip.importance)}
                     message={clip.title}
                     time={formatTime(clip.created_at)}
+                    category={clip.category}
                   />
                 ))
               ) : (
@@ -563,10 +566,12 @@ function AlertItem({
   type,
   message,
   time,
+  category,
 }: {
   type: 'warning' | 'info' | 'safe'
   message: string
   time: string
+  category?: string
 }) {
   const typeConfig = {
     warning: { bg: 'bg-warning-50', icon: 'text-warning', border: 'border-warning-200' },
@@ -575,11 +580,16 @@ function AlertItem({
   }
 
   const config = typeConfig[type]
+  
+  // 클립 하이라이트 페이지와 동일한 Lucide 아이콘 사용
+  // 발달: TrendingUp (text-safe), 안전: Shield (text-warning)
+  const IconComponent = category === '발달' ? TrendingUp : Shield
+  const iconColor = category === '발달' ? 'text-safe' : 'text-warning'
 
   return (
     <div className={`p-3 rounded-lg border ${config.bg} ${config.border}`}>
       <div className="flex items-start gap-2">
-        <AlertTriangle className={`w-4 h-4 mt-0.5 ${config.icon}`} />
+        <IconComponent className={`w-4 h-4 mt-0.5 ${iconColor}`} />
         <div className="flex-1">
           <p className="text-sm text-gray-900">{message}</p>
           <p className="text-xs text-gray-500 mt-1">{time}</p>

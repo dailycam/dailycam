@@ -41,7 +41,6 @@ def get_development_summary(
     """
     import time
     start_time = time.time()
-    print(f"\n[Development API] 🚀 요청 시작 - User: {user_id}, Date: {target_date}")
     
     # 0. 사용자 정보 조회 및 현재 개월 수 계산
     user = db.query(User).filter(User.id == user_id).first()
@@ -132,17 +131,11 @@ def get_development_summary(
     
     avg_dev_score = int(sum(today_dev_scores) / len(today_dev_scores)) if today_dev_scores else 0
     
-    print(f"[Development] AnalysisLog 개수: {len(today_logs)}, SegmentAnalysis 개수: {len(today_segments)}")
-    print(f"[Development] 발달 점수 데이터: {today_dev_scores}")
-    print(f"[Development] 평균 발달 점수: {avg_dev_score}")
-    
     # 4. 발달 오각형 점수 - 누적 추적 시스템 사용
     try:
         from app.services.development_tracking_service import DevelopmentTrackingService
         radar_scores = DevelopmentTrackingService.get_category_scores(db, user_id)
-        print(f"[Development] 누적 추적 점수 사용: {radar_scores}")
     except Exception as e:
-        print(f"⚠️ 누적 점수 조회 실패, VLM 평균 점수 사용: {e}")
         # Fallback: VLM 평균 점수 계산
         all_radar_scores = {
             "언어": [],
@@ -155,7 +148,6 @@ def get_development_summary(
         # AnalysisLog에서 수집
         for log in today_logs:
             if log.development_radar_scores:
-                print(f"[Development] Log ID: {log.id}, Radar Scores: {log.development_radar_scores}")
                 for category in all_radar_scores.keys():
                     score = log.development_radar_scores.get(category, 0)
                     if score:
@@ -164,7 +156,6 @@ def get_development_summary(
         # SegmentAnalysis에서도 수집
         for segment in today_segments:
             if segment.development_radar_scores:
-                print(f"[Development] Segment ID: {segment.id}, Radar Scores: {segment.development_radar_scores}")
                 for category in all_radar_scores.keys():
                     score = segment.development_radar_scores.get(category, 0)
                     if score:
@@ -173,8 +164,6 @@ def get_development_summary(
         radar_scores = {}
         for category, scores in all_radar_scores.items():
             radar_scores[category] = int(sum(scores) / len(scores)) if scores else 0
-        
-        print(f"[Development] 평균 Radar Scores: {radar_scores}")
     
     
     # 5. 가장 높은 점수의 영역 찾기
@@ -321,7 +310,6 @@ def get_development_summary(
     # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
     
     elapsed_time = time.time() - start_time
-    print(f"[Development API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "age_months": age_months,

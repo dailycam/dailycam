@@ -36,7 +36,6 @@ def get_dashboard_summary(
     """
     # time은 상단에서 import됨
     start_time = time.time()
-    print(f"\n[Dashboard API] 🚀 요청 시작 - User: {user_id}, Date: {request.target_date}")
     
     # 조회할 날짜 설정 (기본값: 오늘)
     if request.target_date:
@@ -72,10 +71,6 @@ def get_dashboard_summary(
     selected_day_start_utc = selected_day_start_kst.astimezone(pytz.UTC).replace(tzinfo=None)
     selected_day_end_utc = selected_day_end_kst.astimezone(pytz.UTC).replace(tzinfo=None)
     
-    print(f"[Dashboard] 선택한 날짜: {request.target_date}")
-    print(f"[Dashboard] 날짜 범위 (KST): {selected_day_start_kst} ~ {selected_day_end_kst}")
-    print(f"[Dashboard] 날짜 범위 (UTC): {selected_day_start_utc} ~ {selected_day_end_utc}")
-    print(f"[Dashboard] User ID: {user_id}")
     
     # AnalysisLog 조회 (관련 이벤트들을 함께 로드하여 N+1 쿼리 방지)
     today_logs = (
@@ -122,31 +117,21 @@ def get_dashboard_summary(
         .first()
     )
     
-    print(f"[Dashboard] 선택한 날짜 분석된 로그 개수: {len(today_logs)}")
-    print(f"[Dashboard] 선택한 날짜 분석된 세그먼트 개수: {len(today_segments)}")
-    
     # 2-1. 선택한 날짜 분석된 데이터의 평균 안전 점수 및 발달 점수
     # AnalysisLog와 SegmentAnalysis 모두에서 수집
     # 기본적으로 SegmentAnalysis(카메라 기준)를 사용하되, 없으면 AnalysisLog(사용자 기준)를 사용 (Fallback)
     
     if today_segments:
-        print("[Dashboard] SegmentAnalysis(카메라 기준) 데이터 사용")
         today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
         today_dev_scores = [s.development_score for s in today_segments if s.development_score is not None]
         total_analysis_count = len(today_segments)
     else:
-        print("[Dashboard] AnalysisLog(사용자 기준) 데이터 사용 (Segment 데이터 없음/카메라 ID 불일치)")
         today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
         today_dev_scores = [log.development_score for log in today_logs if log.development_score is not None]
         total_analysis_count = len(today_logs)
     
-    print(f"[Dashboard] 안전 점수들: {today_safety_scores}")
-    print(f"[Dashboard] 발달 점수들: {today_dev_scores}")
-    
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
-    print(f"[Dashboard] 평균 안전 점수: {avg_safety_score}")
     avg_dev_score = int(sum(today_dev_scores) / len(today_dev_scores)) if today_dev_scores else 0
-    print(f"[Dashboard] 평균 발달 점수: {avg_dev_score}")
     
     # 2-2. 최신 로그 및 세그먼트 (요약 텍스트용)
     latest_log = today_logs[0] if today_logs else None
@@ -542,10 +527,6 @@ def get_dashboard_summary(
     warning_events = [e for e in safety_events if e["severity"] == "warning"]
     info_events = [e for e in safety_events if e["severity"] == "info"]
     
-    print(f"[Dashboard] 타임라인 이벤트 총 {len(timeline_events)}개")
-    print(f"[Dashboard] 안전 이벤트: {len(safety_events)}개 (위험: {len(danger_events)}, 주의: {len(warning_events)}, 정보: {len(info_events)})")
-    if safety_events:
-        print(f"[Dashboard] 샘플 안전 이벤트: severity={safety_events[0]['severity']}, title={safety_events[0]['title'][:50]}, category={safety_events[0]['category']}")
     
     # 9. 시간대별 통계 (hourly_stats) 생성
     hourly_stats: List[Dict[str, Any]] = []
@@ -690,7 +671,6 @@ def get_dashboard_summary(
     
     # 기본 응답 구조 (프론트엔드 DashboardData 인터페이스와 일치)
     elapsed_time = time.time() - start_time
-    print(f"[Dashboard API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "summary": summary_text,  # HourlyReport에서 가져온 종합 요약

@@ -29,7 +29,6 @@ def get_safety_report_summary(
     """
     import time
     start_time = time.time()
-    print(f"\n[Safety API] 🚀 요청 시작 - User: {user_id}, Date: {target_date}, Period: {period_type}")
     
     # 조회할 날짜 설정 (기본값: 오늘)
     if target_date:
@@ -295,7 +294,6 @@ def get_safety_report_summary(
     
     # Fallback: SegmentAnalysis 데이터가 없으면 AnalysisLog 데이터 사용
     if not today_safety_scores and today_logs:
-        print("[Safety API] SegmentAnalysis 데이터 없음, AnalysisLog로 대체합니다.")
         today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
 
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
@@ -421,7 +419,6 @@ def get_safety_report_summary(
     # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
     
     elapsed_time = time.time() - start_time
-    print(f"[Safety API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "trendData": trend_data,  # 실시간
