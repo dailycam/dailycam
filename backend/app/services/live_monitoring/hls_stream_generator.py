@@ -323,8 +323,7 @@ class HLSStreamGenerator:
                     f"{playlist_path_absolute}|"
                     
                     f"[f=segment:segment_time={self.archive_duration_minutes * 60}:"
-                    f"reset_timestamps=1:strftime=1:segment_format=mp4:"
-                    f"segment_atclocktime=1:segment_clocktime_offset=0:movflags=+faststart]"
+                    f"reset_timestamps=1:strftime=1:segment_format=mp4]"
                     f"{archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4"
                 )
             ]

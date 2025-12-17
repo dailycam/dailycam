@@ -101,6 +101,12 @@ def get_dashboard_summary(
         .all()
     )
     
+    # [DEBUG] SegmentAnalysis 조회 결과 로깅
+    print(f"[Dashboard] SegmentAnalysis 조회: camera_id={camera_id}, 날짜={selected_day_start_utc.date()}")
+    print(f"[Dashboard] SegmentAnalysis 개수: {len(today_segments)}")
+    for seg in today_segments[:5]:  # 최대 5개만 출력
+        print(f"  - id={seg.id}, start={seg.segment_start}, safety={seg.safety_score}, dev={seg.development_score}")
+    
     # HourlyReport 조회 (텍스트 데이터: 요약, 인사이트, 추천 활동)
     # 현재 시간 이전의 가장 최근 리포트
     # datetime은 상단에서 import됨
@@ -537,7 +543,8 @@ def get_dashboard_summary(
         "safetyScore": 0, 
         "developmentScore": 0, 
         "eventCount": 0,
-        "analysisCount": 0  # 분석 횟수 추가
+        "analysisCount": 0,  # 실시간 10분 분석 횟수 (SegmentAnalysis만, 최대 6회/시간)
+        "_scoreCount": 0  # 점수 평균 계산용 내부 카운터
     } for i in range(24)}
     
     # AnalysisLog를 시간대별로 집계
@@ -549,17 +556,18 @@ def get_dashboard_summary(
         # 해당 시간대에 이벤트가 있으면 점수 업데이트
         if log.safety_score is not None:
             # 여러 영상이 같은 시간대에 있을 경우 평균 사용
-            if hourly_data[hour]["analysisCount"] == 0:
+            score_count = hourly_data[hour]["_scoreCount"]
+            if score_count == 0:
                 hourly_data[hour]["safetyScore"] = log.safety_score
                 hourly_data[hour]["developmentScore"] = log.development_score or 0
             else:
                 # 평균 계산
-                count = hourly_data[hour]["analysisCount"]
-                hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * count + log.safety_score) / (count + 1))
-                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * count + (log.development_score or 0)) / (count + 1))
+                hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * score_count + log.safety_score) / (score_count + 1))
+                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * score_count + (log.development_score or 0)) / (score_count + 1))
+            hourly_data[hour]["_scoreCount"] += 1
         
-        # hourly_data[hour]["analysisCount"] += 1  # 중복 방지를 위해 SegmentAnalysis에서만 카운트
         hourly_data[hour]["eventCount"] += 1
+        # analysisCount는 SegmentAnalysis에서만 카운트 (최대 6회/시간)
     
     # SegmentAnalysis도 시간대별로 집계 (실시간 VLM 분석 결과)
     for segment in today_segments:
@@ -569,22 +577,28 @@ def get_dashboard_summary(
         
         # 해당 시간대에 세그먼트가 있으면 점수 업데이트
         if segment.safety_score is not None:
-            if hourly_data[hour]["analysisCount"] == 0:
+            score_count = hourly_data[hour]["_scoreCount"]
+            if score_count == 0:
                 hourly_data[hour]["safetyScore"] = segment.safety_score
                 hourly_data[hour]["developmentScore"] = segment.development_score or 0
             else:
                 # 평균 계산
-                count = hourly_data[hour]["analysisCount"]
-                hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * count + segment.safety_score) / (count + 1))
-                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * count + (segment.development_score or 0)) / (count + 1))
+                hourly_data[hour]["safetyScore"] = int((hourly_data[hour]["safetyScore"] * score_count + segment.safety_score) / (score_count + 1))
+                hourly_data[hour]["developmentScore"] = int((hourly_data[hour]["developmentScore"] * score_count + (segment.development_score or 0)) / (score_count + 1))
+            hourly_data[hour]["_scoreCount"] += 1
         
-        hourly_data[hour]["analysisCount"] += 1
+        hourly_data[hour]["analysisCount"] += 1  # SegmentAnalysis에서만 카운트 (최대 6회/시간)
         # SegmentAnalysis의 incident_count도 이벤트로 카운트
         if segment.incident_count:
             hourly_data[hour]["eventCount"] += segment.incident_count
     
-    # 리스트로 변환
-    hourly_stats = list(hourly_data.values())
+    # 점수가 있는데 분석 횟수가 0인 경우, 최소 1회로 표시 (AnalysisLog만 있는 경우)
+    for hour, stat in hourly_data.items():
+        if stat["_scoreCount"] > 0 and stat["analysisCount"] == 0:
+            stat["analysisCount"] = 1  # 최소 1회 (AnalysisLog 기반 분석이 있었음을 표시)
+    
+    # 리스트로 변환 (내부 카운터 제거)
+    hourly_stats = [{k: v for k, v in stat.items() if not k.startswith('_')} for stat in hourly_data.values()]
     
     # 10. 실제 모니터링 분석된 시간 구간 (Monitoring Ranges) 계산
     # SegmentAnalysis와 AnalysisLog의 시간 구간을 합쳐서 계산

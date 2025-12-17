@@ -259,10 +259,11 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                                 />
                             )}
 
-                            {/* 투명 히트박스 */}
+                            {/* 투명 히트박스 (시계 안쪽~바깥쪽 전체 영역) */}
                             <path
-                                d={describeDonutSlice(center, center, radius + 25, radius + 47, start, end)}
+                                d={describeDonutSlice(center, center, radius - 25, radius + 50, start, end)}
                                 fill="transparent"
+                                style={{ cursor: 'pointer' }}
                             />
                         </g>
                     )
@@ -302,7 +303,7 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                 })}
 
                 {/* --- [1단계: 시계 바늘 레이어] --- */}
-                <g filter="url(#hand-shadow)">
+                <g filter="url(#hand-shadow)" style={{ pointerEvents: 'none' }}>
                     {/* 시침 */}
                     {(() => {
                         const hourHandEnd = polarToCartesian(center, center, radius * 0.55, hourAngle)
