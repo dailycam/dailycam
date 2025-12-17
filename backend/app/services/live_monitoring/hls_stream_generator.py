@@ -322,8 +322,11 @@ class HLSStreamGenerator:
                     f"hls_segment_filename={segment_pattern_absolute}]"
                     f"{playlist_path_absolute}|"
                     
+                    # fragmented mp4: segment muxer와 호환되는 형식
+                    # movflags=frag_keyframe+empty_moov 로 moov atom 문제 해결
                     f"[f=segment:segment_time={self.archive_duration_minutes * 60}:"
-                    f"reset_timestamps=1:strftime=1:segment_format=mp4]"
+                    f"reset_timestamps=1:strftime=1:"
+                    f"segment_format_options=movflags=+frag_keyframe+empty_moov]"
                     f"{archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4"
                 )
             ]
@@ -729,9 +732,11 @@ class HLSStreamGenerator:
         self.is_running = False
         
         if self.ffmpeg_process:
-            self.ffmpeg_process.terminate()
-        
-        self._finalize_current_archive()
+            try:
+                self.ffmpeg_process.terminate()
+                self.ffmpeg_process.wait(timeout=5)
+            except Exception as e:
+                print(f"[HLS 스트림] ⚠️ FFmpeg 프로세스 종료 중 오류: {e}")
     
     def get_playlist_url(self) -> str:
         """HLS 플레이리스트 URL 반환"""
