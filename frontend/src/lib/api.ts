@@ -599,6 +599,7 @@ export async function getDashboardData(targetDate?: string, rangeDays: number = 
       recommendations: data.recommendations || [],
       timelineEvents: data.timelineEvents || [],
       hourlyStats: data.hourlyStats || [],
+      monitoringRanges: data.monitoringRanges || [],  // 추가!
     }
   } catch (error: any) {
     console.error('대시보드 데이터 조회 실패:', error)

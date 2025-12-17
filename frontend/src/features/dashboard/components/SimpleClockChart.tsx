@@ -50,6 +50,9 @@ const COLORS = {
 }
 
 export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockData, events, monitoringRanges = [], onHoverChange, onHourClick }) => {
+    // [DEBUG]
+    console.log('🕐 [SimpleClockChart] monitoringRanges:', monitoringRanges)
+    
     const size = 320
     const center = size / 2
     const radius = 100

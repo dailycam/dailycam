@@ -604,69 +604,103 @@ def get_dashboard_summary(
     # SegmentAnalysis와 AnalysisLog의 시간 구간을 합쳐서 계산
     raw_ranges = []
     
-    # 10-1. SegmentAnalysis 구간 추가
+    # 10-1. SegmentAnalysis 구간 추가 (이벤트가 있는 세그먼트만)
     for segment in today_segments:
+        # 이벤트 유무 확인: incident_count > 0 또는 safety_incidents/development_milestones가 있는 경우
+        has_events = (
+            (segment.incident_count and segment.incident_count > 0) or
+            (segment.safety_incidents and len(segment.safety_incidents) > 0) or
+            (segment.development_milestones and len(segment.development_milestones) > 0)
+        )
+        
+        if not has_events:
+            continue  # 이벤트 없으면 모니터링 범위에서 제외
+        
         # segment_end가 있으면 사용, 없으면 start + 10분
         s_start = segment.segment_start
         s_end = segment.segment_end if segment.segment_end else s_start + timedelta(minutes=10)
         raw_ranges.append((s_start, s_end))
         
     # 10-2. AnalysisLog 구간 추가
-    # AnalysisLog는 duration이 없으므로, 이벤트가 있으면 이벤트 범위, 없으면 created_at + 10분으로 추정
+    # 이벤트(safety_events 또는 development_events)가 있는 로그만 포함
     for log in today_logs:
-        # 이미 로드된 이벤트들에서 타임스탬프 수집 (추가 쿼리 없음)
-        log_events_timestamps = []
+        # 이벤트 개수 확인
+        has_events = len(log.safety_events) > 0 or len(log.development_events) > 0
         
-        # SafetyEvent (이미 로드됨)
+        if not has_events:
+            continue  # 이벤트 없으면 모니터링 범위에서 제외
+        
+        # 이벤트 타임스탬프 수집 (있으면 사용)
+        log_events_timestamps = []
         for e in log.safety_events:
             if e.event_timestamp:
                 log_events_timestamps.append(e.event_timestamp)
-                
-        # DevelopmentEvent (이미 로드됨)
         for e in log.development_events:
             if e.event_timestamp:
                 log_events_timestamps.append(e.event_timestamp)
         
         if log_events_timestamps:
+            # 이벤트 타임스탬프가 있으면 그 범위 사용
             log_start = min(log_events_timestamps)
             log_end = max(log_events_timestamps)
-            # 종료 시간이 시작 시간과 같으면 최소 5분 추가
             if log_end == log_start:
                 log_end = log_start + timedelta(minutes=5)
-            raw_ranges.append((log_start, log_end))
         else:
-            # 이벤트가 없으면 created_at ~ 10분 후로 가정
-            l_start = log.created_at
-            l_end = l_start + timedelta(minutes=10)
-            raw_ranges.append((l_start, l_end))
+            # 이벤트 타임스탬프가 없으면 created_at 기준 사용
+            log_start = log.created_at
+            log_end = log_start + timedelta(minutes=10)
+        
+        raw_ranges.append((log_start, log_end))
             
-    # 10-3. 구간 병합 수행
+    # 10-3. 1시간 단위로 반올림하여 모니터링 범위 생성
+    # 분석된 시간대가 있으면 해당 시간 전체(00분~00분)를 채움
+    monitored_hours = set()  # 분석된 시간대 (KST 기준)
+    
+    for start_utc, end_utc in raw_ranges:
+        # UTC → KST 변환
+        start_kst = start_utc.replace(tzinfo=pytz.UTC).astimezone(kst)
+        end_kst = end_utc.replace(tzinfo=pytz.UTC).astimezone(kst)
+        
+        # 시작~종료 시간에 포함되는 모든 시간대 추가
+        current_hour = start_kst.hour
+        end_hour = end_kst.hour
+        
+        # 같은 날인 경우
+        monitored_hours.add(current_hour)
+        if end_hour != current_hour:
+            monitored_hours.add(end_hour)
+    
+    # 연속된 시간대를 병합하여 merged_ranges 생성
     merged_ranges = []
-    if raw_ranges:
-        # 시작 시간 순으로 정렬
-        raw_ranges.sort(key=lambda x: x[0])
+    if monitored_hours:
+        sorted_hours = sorted(monitored_hours)
         
-        current_start, current_end = raw_ranges[0]
+        range_start = sorted_hours[0]
+        range_end = sorted_hours[0]
         
-        for i in range(1, len(raw_ranges)):
-            next_start, next_end = raw_ranges[i]
-            
-            # 구간이 겹치거나 연결되면 병합 (1분 정도의 오차는 허용해서 연결 - timedelta)
-            if next_start <= current_end + timedelta(minutes=1): 
-                current_end = max(current_end, next_end)
+        for hour in sorted_hours[1:]:
+            if hour == range_end + 1:
+                # 연속된 시간대
+                range_end = hour
             else:
+                # 불연속 - 이전 구간 저장
                 merged_ranges.append({
-                    "start": current_start.strftime("%H:%M"),
-                    "end": current_end.strftime("%H:%M")
+                    "start": f"{range_start:02d}:00",
+                    "end": f"{(range_end + 1) % 24:02d}:00"
                 })
-                current_start, current_end = next_start, next_end
+                range_start = hour
+                range_end = hour
         
         # 마지막 구간 추가
         merged_ranges.append({
-            "start": current_start.strftime("%H:%M"),
-            "end": current_end.strftime("%H:%M")
+            "start": f"{range_start:02d}:00",
+            "end": f"{(range_end + 1) % 24:02d}:00"
         })
     
+    # [DEBUG] merged_ranges 확인
+    print(f"[Dashboard] merged_ranges 개수: {len(merged_ranges)}")
+    if merged_ranges:
+        print(f"[Dashboard] merged_ranges: {merged_ranges[:5]}")  # 최대 5개
     
     # 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
     # latest_hourly_report는 이미 라인 115에서 조회됨 (중복 제거)

@@ -226,11 +226,7 @@ class HLSStreamGenerator:
     
     async def _start_unified_streaming(self, concat_file: Path, playlist_path: Path, segment_pattern: str):
         """
-        단일 FFmpeg 프로세스로 HLS + 10분 아카이브 동시 생성
-        
-        tee muxer를 사용하여 한 번의 인코딩으로 두 출력 생성:
-        - 출력 A: DVR형 HLS (시청용)
-        - 출력 B: 10분 단위 mp4 아카이브 (분석용)
+        HLS 스트림만 생성 (아카이브는 별도 타이머로 .ts → .mp4 변환)
         """
         try:
             # 이전 프로세스 종료
@@ -245,11 +241,10 @@ class HLSStreamGenerator:
             concat_file_absolute = concat_file.resolve()
             playlist_path_absolute = playlist_path.resolve()
             hls_dir_absolute = self.hls_dir.resolve()
-            archive_dir_absolute = self.archive_dir.resolve()
             
             # 디렉토리 생성 확인
             hls_dir_absolute.mkdir(parents=True, exist_ok=True)
-            archive_dir_absolute.mkdir(parents=True, exist_ok=True)
+            self.archive_dir.mkdir(parents=True, exist_ok=True)
             
             # segment_pattern에서 파일명만 추출
             segment_filename = Path(segment_pattern).name
@@ -260,67 +255,43 @@ class HLSStreamGenerator:
                 print(f"[HLS 스트림] ❌ concat 파일이 존재하지 않음: {concat_file_absolute}")
                 return
             
-            # filter_complex를 사용하여 한 번의 인코딩으로 두 출력 생성
-            # 비디오를 한 번 인코딩하고 split으로 두 스트림 생성
-            # - hls_stream: HLS용 (원본 FPS)
-            # - archive_stream: 아카이브용 (5fps 다운샘플링)
-            
-            # 비디오 인코딩 및 분기
-            video_filter = (
-                f"scale={self.target_width}:{self.target_height},"
-                f"fps={self.target_fps},"
-                f"split=2[hls_v][archive_v]"
-            )
-            
-            # 무음 오디오 생성
+            # HLS만 출력하는 FFmpeg 명령어 (tee muxer 제거)
             ffmpeg_cmd = [
                 self.ffmpeg_path,
                 '-hide_banner',
-                '-loglevel', 'warning', # 로그 다이어트: warning 이상만 출력
-                '-threads', '2',  # CPU 사용량 제한 (Docker 환경 최적화)
+                '-loglevel', 'warning',
+                '-threads', '2',
                 # 입력
                 '-stream_loop', '-1',
-                '-re', # 실시간 속도로 읽기 (CPU 폭주 방지 핵심 옵션)
+                '-re',  # 실시간 속도로 읽기
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file_absolute),
-                
-                # 무음 오디오 생성 (한 번만 입력)
+                # 무음 오디오 생성
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
-                
-                # 비디오 인코딩 (한 번만 수행!)
+                # 비디오 인코딩
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
-                # 해상도 및 FPS 설정
                 '-vf', f'scale={self.target_width}:{self.target_height},fps={self.target_fps}',
                 '-g', str(int(self.target_fps * self.segment_duration)),
                 '-keyint_min', str(int(self.target_fps * self.segment_duration)),
                 '-sc_threshold', '0',
-                
                 # 오디오 인코딩
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-ar', '48000',
-                
-                # Tee Muxer: 인코딩된 스트림을 두 곳(HLS, Segment)으로 복제
-                '-map', '0:v',  # 비디오
-                '-map', '1:a',  # 오디오
-                '-f', 'tee',
-                (
-                    f"[f=hls:hls_time={self.segment_duration}:hls_list_size=300:"
-                    f"hls_flags=delete_segments+append_list+program_date_time:"
-                    f"hls_segment_filename={segment_pattern_absolute}]"
-                    f"{playlist_path_absolute}|"
-                    
-                    # fragmented mp4: segment muxer와 호환되는 형식
-                    # movflags=frag_keyframe+empty_moov 로 moov atom 문제 해결
-                    f"[f=segment:segment_time={self.archive_duration_minutes * 60}:"
-                    f"reset_timestamps=1:strftime=1:"
-                    f"segment_format_options=movflags=+frag_keyframe+empty_moov]"
-                    f"{archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4"
-                )
+                # 출력 매핑
+                '-map', '0:v',
+                '-map', '1:a',
+                # HLS 출력
+                '-f', 'hls',
+                '-hls_time', str(self.segment_duration),
+                '-hls_list_size', '300',
+                '-hls_flags', 'delete_segments+append_list+program_date_time',
+                '-hls_segment_filename', segment_pattern_absolute,
+                str(playlist_path_absolute)
             ]
             
             self.ffmpeg_process = subprocess.Popen(
@@ -333,17 +304,15 @@ class HLSStreamGenerator:
             
             print(f"[HLS] ✅ 스트림 시작: {self.camera_id}")
             
-            # stderr 모니터링 스레드 (아카이브 파일 생성 감지)
+            # stderr 모니터링 스레드
             def read_stderr():
                 try:
                     while self.is_running and self.ffmpeg_process:
                         line = self.ffmpeg_process.stderr.readline()
                         if line:
                             decoded = line.decode('utf-8', errors='ignore').strip()
-                            if decoded:
-                                # 에러나 경고 메시지 출력
-                                if 'error' in decoded.lower() or 'failed' in decoded.lower():
-                                    print(f"[FFmpeg] {decoded}")
+                            if decoded and ('error' in decoded.lower() or 'failed' in decoded.lower()):
+                                print(f"[FFmpeg] {decoded}")
                 except:
                     pass
             
@@ -359,68 +328,115 @@ class HLSStreamGenerator:
             print(f"[HLS] ⚠️ 플레이리스트 생성 타임아웃")
             
         except Exception as e:
-            print(f"[통합 스트림] ❌ 프로세스 시작 실패: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[HLS] ❌ 프로세스 시작 실패: {e}")
     
     def _monitor_archive_files(self):
         """
-        아카이브 파일 생성 모니터링 (백그라운드 스레드)
-        파일이 생성되면 S3 업로드 및 VLM 분석 Job 등록
+        10분마다 HLS .ts 파일들을 mp4로 합쳐서 아카이브 생성
         """
         import asyncio
         
-        def monitor_loop():
-            processed_files = set()
+        def archive_loop():
+            archive_interval = self.archive_duration_minutes * 60  # 10분 = 600초
             
             while self.is_running:
                 try:
-                    # 아카이브 디렉토리에서 새 파일 확인
-                    archive_dir = self.archive_dir
-                    if archive_dir.exists():
-                        current_files = set(archive_dir.glob("archive_*.mp4"))
-                        new_files = current_files - processed_files
-                        
-                        for file_path in new_files:
-                            # 파일이 완전히 생성되었는지 확인 (크기 안정화)
-                            if self._is_file_stable(file_path):
-                                
-                                # S3 업로드 및 Job 등록 (동기적으로 실행)
-                                # 비동기 함수를 동기 스레드에서 실행
-                                try:
-                                    if self.event_loop and self.event_loop.is_running():
-                                        # 메인 루프가 실행 중이면 threadsafe하게 스케줄링
-                                        future1 = asyncio.run_coroutine_threadsafe(
-                                            self._upload_archive_to_s3_async(file_path), 
-                                            self.event_loop
-                                        )
-                                        future2 = asyncio.run_coroutine_threadsafe(
-                                            self._register_analysis_job_async(file_path), 
-                                            self.event_loop
-                                        )
-                                        # 결과 대기 (선택적, 에러 로깅용)
-                                        # future1.result(timeout=60)
-                                    else:
-                                        # 루프가 없거나 실행 중이 아니면 새 루프 사용 (주로 테스트용)
-                                        loop = asyncio.new_event_loop()
-                                        asyncio.set_event_loop(loop)
-                                        loop.run_until_complete(self._upload_archive_to_s3_async(file_path))
-                                        loop.run_until_complete(self._register_analysis_job_async(file_path))
-                                        loop.close()
-                                        
-                                except Exception as e:
-                                    pass  # 스케줄링 오류 무시
-                                
-                                processed_files.add(file_path)
+                    # 10분 대기
+                    time.sleep(archive_interval)
                     
-                    time.sleep(5)  # 5초마다 확인
+                    if not self.is_running:
+                        break
+                    
+                    # .ts 파일들을 mp4로 합치기
+                    archive_path = self._create_archive_from_ts()
+                    
+                    if archive_path and archive_path.exists():
+                        # Job 등록
+                        try:
+                            if self.event_loop and self.event_loop.is_running():
+                                asyncio.run_coroutine_threadsafe(
+                                    self._upload_archive_to_s3_async(archive_path), 
+                                    self.event_loop
+                                )
+                                asyncio.run_coroutine_threadsafe(
+                                    self._register_analysis_job_async(archive_path), 
+                                    self.event_loop
+                                )
+                        except Exception:
+                            pass
                     
                 except Exception:
-                    time.sleep(5)
+                    time.sleep(60)  # 오류 시 1분 대기
         
-        monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
-        monitor_thread.start()
-        return monitor_thread
+        archive_thread = threading.Thread(target=archive_loop, daemon=True)
+        archive_thread.start()
+        return archive_thread
+    
+    def _create_archive_from_ts(self) -> Optional[Path]:
+        """
+        HLS .ts 파일들을 mp4로 합치기
+        """
+        try:
+            # 현재 시간으로 아카이브 파일명 생성
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
+            archive_filename = f"archive_{now.strftime('%Y%m%d_%H%M%S')}.mp4"
+            archive_path = self.archive_dir / archive_filename
+            
+            # HLS 디렉토리에서 .ts 파일 목록 가져오기
+            ts_files = sorted(self.hls_dir.glob(f"{self.camera_id}_*.ts"), key=lambda x: x.stat().st_mtime)
+            
+            if len(ts_files) < 6:  # 최소 1분 (6개 * 10초)
+                return None
+            
+            # 최근 10분치 파일만 선택 (60개 * 10초 = 600초)
+            target_count = self.archive_duration_minutes * 6  # 10분 = 60개
+            recent_ts_files = ts_files[-target_count:] if len(ts_files) > target_count else ts_files
+            
+            if not recent_ts_files:
+                return None
+            
+            # concat 파일 생성
+            concat_list_path = self.archive_dir / "ts_concat.txt"
+            with open(concat_list_path, 'w') as f:
+                for ts_file in recent_ts_files:
+                    f.write(f"file '{ts_file.resolve()}'\n")
+            
+            # FFmpeg로 .ts → .mp4 변환 (re-encoding 없이 copy)
+            ffmpeg_cmd = [
+                self.ffmpeg_path,
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(concat_list_path),
+                '-c', 'copy',  # 재인코딩 없이 복사
+                '-movflags', '+faststart',  # 스트리밍 최적화
+                '-y',  # 덮어쓰기
+                str(archive_path)
+            ]
+            
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                timeout=120
+            )
+            
+            # concat 파일 삭제
+            try:
+                concat_list_path.unlink()
+            except:
+                pass
+            
+            if result.returncode == 0 and archive_path.exists():
+                file_size = archive_path.stat().st_size
+                if file_size > 1024 * 1024:  # 1MB 이상이면 성공
+                    return archive_path
+            
+            return None
+            
+        except Exception:
+            return None
     
     def _is_file_stable(self, file_path: Path, check_interval: float = 2.0) -> bool:
         """파일이 완전히 생성되었는지 확인 (크기 안정화)"""

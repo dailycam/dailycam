@@ -27,6 +27,7 @@ export const useDashboard = () => {
                 console.log(`📅 [Dashboard] 날짜 변경: ${dateStr}`)
                 const data = await getDashboardData(dateStr)
                 console.log('📦 [Dashboard] 받은 데이터:', data)
+                console.log('🔵 [Dashboard] monitoringRanges in response:', data?.monitoringRanges)
                 setDashboardData(data)
             } catch (err) {
                 console.error("Failed to fetch dashboard data:", err)
@@ -55,26 +56,20 @@ export const useDashboard = () => {
         }))
     }, [dashboardData])
 
-    // 모니터링 구간 데이터 준비 (실제 분석 시간 또는 이벤트 시간 기반)
+    // 모니터링 구간 데이터 준비 (백엔드 데이터만 사용 - 이벤트가 있는 구간만)
     const monitoringRanges: MonitoringRange[] = useMemo(() => {
-        // [수정] 백엔드에서 받은 실제 분석 구간 데이터가 있으면 우선 사용
+        console.log('🔍 [Monitoring Ranges] dashboardData:', dashboardData?.monitoringRanges)
+        
+        // 백엔드에서 받은 실제 분석 구간 데이터만 사용 (폴백 제거)
         if (dashboardData?.monitoringRanges && dashboardData.monitoringRanges.length > 0) {
             console.log('✅ [Monitoring Ranges] 백엔드 데이터 사용:', dashboardData.monitoringRanges)
             return dashboardData.monitoringRanges
         }
 
-        // 폴백: 백엔드 데이터가 없으면 타임라인 이벤트로 추정
-        if (timelineEvents.length === 0) return []
-
-        // 이벤트를 시간순으로 정렬
-        const sortedEvents = [...timelineEvents].sort((a, b) => a.time.localeCompare(b.time))
-
-        // 가장 빠른 시간과 가장 늦은 시간 찾기
-        const startTime = sortedEvents[0].time
-        const endTime = sortedEvents[sortedEvents.length - 1].time
-
-        return [{ start: startTime, end: endTime }]
-    }, [timelineEvents, dashboardData])
+        // 백엔드 데이터가 없으면 빈 배열 반환 (파란 띠 표시 안 함)
+        console.log('⚠️ [Monitoring Ranges] 데이터 없음, 빈 배열 반환')
+        return []
+    }, [dashboardData])
 
     // 시간대별 통계 - 백엔드 데이터 우선 사용
     const hourlyStats: HourlyStat[] = useMemo(() => {

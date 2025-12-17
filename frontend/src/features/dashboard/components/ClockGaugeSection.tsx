@@ -140,7 +140,7 @@ export function ClockGaugeSection({ selectedHour, hourlyStats = [] }: ClockGauge
                 </div>
                 <div className="flex items-baseline gap-2">
                     <div className="text-3xl font-bold text-gray-900">
-                        {selectedStat?.analysisCount || 0}
+                        {Math.min(selectedStat?.analysisCount || 0, 6)}
                     </div>
                     <span className="text-sm text-gray-500">회</span>
                 </div>
