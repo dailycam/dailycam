@@ -189,8 +189,8 @@ async def upload_camera_video(
                 if fps > 0:
                     duration = int(frame_count / fps)
             cap.release()
-        except Exception as e:
-            print(f"[영상 정보 추출 오류] {e}")
+        except Exception:
+            pass
         
         # S3에 업로드 (두 서버 간 공유를 위해)
         s3_key = None
@@ -199,12 +199,8 @@ async def upload_camera_video(
             s3_service = S3Service()
             if s3_service.is_enabled():
                 s3_key = s3_service.upload_camera_video(file_path, camera_id, safe_filename)
-                if s3_key:
-                    print(f"[비디오 업로드] ✅ S3 업로드 완료: {s3_key}")
-                    # 로컬 파일 삭제 (선택사항 - S3에 저장되었으므로)
-                    # file_path.unlink()  # 필요시 주석 해제
-        except Exception as e:
-            print(f"[S3 업로드 오류] {e}")  # S3 오류는 무시하고 계속 진행
+        except Exception:
+            pass  # S3 오류 무시
         
         # 기존 영상들의 order_index 가져오기
         max_order = db.query(CameraVideo).filter(
@@ -225,8 +221,6 @@ async def upload_camera_video(
         db.commit()
         db.refresh(camera_video)
         
-        print(f"[비디오 업로드] {camera_id}: {safe_filename} ({len(content)/1024/1024:.2f}MB, {duration}초, S3: {s3_key or '없음'})")
-        
         # 영상 업로드 후 자동으로 HLS 스트림 시작
         enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
         streaming_server_url = os.getenv("STREAMING_SERVER_URL", "https://stream.dailycam.net")
@@ -239,7 +233,6 @@ async def upload_camera_video(
                 
                 # 이미 스트림이 실행 중이면 재시작 (새 영상 반영)
                 if camera_id in active_hls_streams:
-                    print(f"[비디오 업로드] 기존 스트림 재시작 중: {camera_id}")
                     generator = active_hls_streams[camera_id]
                     generator.stop_streaming()
                     
@@ -280,12 +273,8 @@ async def upload_camera_video(
                 task = asyncio.create_task(generator.start_streaming())
                 hls_stream_tasks[camera_id] = task
                 
-                print(f"[비디오 업로드] ✅ HLS 스트림 자동 시작됨 (백그라운드 실행): {camera_id}")
-                
-            except Exception as e:
-                print(f"[비디오 업로드] ⚠️ HLS 스트림 자동 시작 실패 (수동 시작 가능): {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception:
+                pass  # 스트림 시작 실패 무시
         else:
             # 메인 서버에서는 스트리밍 서버의 API를 호출
             try:
@@ -322,7 +311,6 @@ async def upload_camera_video(
                         # S3 키가 있으면 파라미터로 전달 (DB 조회 생략)
                         if s3_key_list:
                             params["s3_keys"] = ",".join(s3_key_list)
-                            print(f"[비디오 업로드] 📤 S3 키 전달: {len(s3_key_list)}개")
                         
                         # 쿠키 가져오기 (인증용, S3 키가 없을 경우를 대비)
                         cookies = dict(request.cookies)
@@ -338,22 +326,9 @@ async def upload_camera_video(
                                 cookies=cookies,
                                 headers=headers
                             )
-                            if response.status_code == 200:
-                                result = response.json()
-                                print(f"[비디오 업로드] ✅ 스트리밍 서버에서 HLS 스트림 시작 요청 성공: {camera_id}")
-                                print(f"[비디오 업로드]   - 플레이리스트 URL: {result.get('playlist_url', 'N/A')}")
-                            else:
-                                error_detail = response.text[:200] if response.text else "응답 없음"
-                                print(f"[비디오 업로드] ⚠️ 스트리밍 서버 HLS 시작 요청 실패: {response.status_code}")
-                                print(f"[비디오 업로드]   - 오류 내용: {error_detail}")
-                    except httpx.TimeoutException:
-                        print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 타임아웃 (무시됨): {camera_id}")
-                    except httpx.ConnectError as e:
-                        print(f"[비디오 업로드] ⚠️ 스트리밍 서버 연결 실패 (무시됨 - 로컬 개발 환경일 수 있음): {e}")
-                    except Exception as e:
-                        print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 실패 (무시됨): {e}")
-                        # 개발 중에는 Traceback 너무 길게 출력하지 않음
-                        pass
+                            pass  # 응답 처리 불필요
+                    except Exception:
+                        pass  # 스트리밍 서버 호출 실패 무시
                 
                 # 비동기로 실행 (백그라운드)
                 try:
@@ -364,11 +339,9 @@ async def upload_camera_video(
                 
                 # 백그라운드 태스크로 실행
                 asyncio.create_task(call_streaming_server())
-                print(f"[비디오 업로드] 📡 스트리밍 서버로 HLS 시작 요청 전송 (비동기): {camera_id}")
                 
-            except Exception as e:
-                print(f"[비디오 업로드] ⚠️ 스트리밍 서버 호출 설정 실패: {e}")
-                # 치명적이지 않으므로 계속 진행
+            except Exception:
+                pass  # 스트리밍 서버 호출 실패 무시
         
         return {
             "id": camera_video.id,
@@ -381,13 +354,9 @@ async def upload_camera_video(
         }
 
     except HTTPException:
-        # 이미 정의된 HTTP 예외는 그대로 전달
         raise
     except Exception as e:
-        import traceback
-        error_log = traceback.format_exc()
-        print(f"[비디오 업로드 치명적 오류]\n{error_log}")
-        raise HTTPException(status_code=500, detail=f"서버 내부 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"서버 내부 오류: {str(e)}")
 
 
 @router.delete("/videos/{video_id}")
@@ -425,16 +394,12 @@ async def delete_camera_video(
     if file_path.exists():
         try:
             file_path.unlink()
-            print(f"[비디오 삭제] 로컬 파일 삭제 완료: {file_path}")
-        except Exception as e:
-            print(f"[비디오 삭제] ⚠️ 로컬 파일 삭제 실패: {e}")
-    else:
-        print(f"[비디오 삭제] ⚠️ 로컬 파일이 존재하지 않음: {file_path}")
+        except Exception:
+            pass
     
     from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
     
     if camera_id in active_hls_streams:
-        print(f"[비디오 삭제] 경고: {camera_id} 카메라의 스트림이 실행 중입니다. 스트림을 중지합니다.")
         
         # 스트림 중지
         generator = active_hls_streams[camera_id]
@@ -452,24 +417,59 @@ async def delete_camera_video(
             del hls_stream_tasks[camera_id]
         
         del active_hls_streams[camera_id]
-        print(f"[비디오 삭제] {camera_id} 카메라의 스트림이 중지되었습니다.")
     
     # 파일 삭제
     file_path = Path(video.file_path)
     if file_path.exists():
         try:
             file_path.unlink()
-            print(f"[비디오 삭제] 파일 삭제 성공: {video.filename}")
-        except Exception as e:
-            print(f"[비디오 삭제] 파일 삭제 실패: {e}")
+        except Exception:
+            pass
     
     # DB에서 삭제
     db.delete(video)
     db.commit()
     
+    # ✅ 남은 활성 영상이 있으면 스트림 재시작
+    remaining_videos = db.query(CameraVideo).filter(
+        CameraVideo.camera_setting_id == camera_setting.id,
+        CameraVideo.is_active == True
+    ).count()
+    
+    stream_restarted = False
+    if remaining_videos > 0:
+        try:
+            import asyncio
+            from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
+            
+            video_dir = Path(f"videos/{camera_id}")
+            output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+            
+            loop = asyncio.get_running_loop()
+            
+            generator = HLSStreamGenerator(
+                camera_id=camera_id,
+                video_source=video_dir,
+                output_dir=output_dir,
+                is_real_camera=False,
+                segment_duration=10,
+                enable_realtime_detection=True,
+                event_loop=loop,
+                db_session=db,
+                user_id=user_id
+            )
+            
+            active_hls_streams[camera_id] = generator
+            task = asyncio.create_task(generator.start_streaming())
+            hls_stream_tasks[camera_id] = task
+            stream_restarted = True
+        except Exception:
+            pass
+    
     return {
         "message": "영상이 삭제되었습니다",
-        "stream_stopped": camera_id in locals() and camera_id in active_hls_streams
+        "stream_restarted": stream_restarted,
+        "remaining_videos": remaining_videos
     }
 
 
@@ -482,6 +482,7 @@ async def toggle_video_active(
 ):
     """
     영상 활성화/비활성화
+    - 변경 후 해당 카메라의 스트림이 재시작됩니다
     """
     # 영상 조회 및 권한 확인
     video = db.query(CameraVideo).filter(
@@ -504,9 +505,63 @@ async def toggle_video_active(
     video.is_active = is_active
     db.commit()
     
+    # ✅ 스트림이 실행 중이면 재시작 (변경사항 반영)
+    camera_id = camera_setting.camera_id
+    stream_restarted = False
+    
+    from app.api.live_monitoring.router import active_hls_streams, hls_stream_tasks
+    
+    if camera_id in active_hls_streams:
+        # 기존 스트림 중지
+        generator = active_hls_streams[camera_id]
+        generator.stop_streaming()
+        
+        if camera_id in hls_stream_tasks:
+            task = hls_stream_tasks[camera_id]
+            if not task.done():
+                task.cancel()
+            del hls_stream_tasks[camera_id]
+        del active_hls_streams[camera_id]
+        
+        # 활성 영상이 있으면 재시작
+        active_video_count = db.query(CameraVideo).filter(
+            CameraVideo.camera_setting_id == camera_setting.id,
+            CameraVideo.is_active == True
+        ).count()
+        
+        if active_video_count > 0:
+            try:
+                import asyncio
+                from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
+                
+                video_dir = Path(f"videos/{camera_id}")
+                output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
+                
+                loop = asyncio.get_running_loop()
+                
+                new_generator = HLSStreamGenerator(
+                    camera_id=camera_id,
+                    video_source=video_dir,
+                    output_dir=output_dir,
+                    is_real_camera=False,
+                    segment_duration=10,
+                    enable_realtime_detection=True,
+                    event_loop=loop,
+                    db_session=db,
+                    user_id=user_id
+                )
+                
+                active_hls_streams[camera_id] = new_generator
+                task = asyncio.create_task(new_generator.start_streaming())
+                hls_stream_tasks[camera_id] = task
+                stream_restarted = True
+            except Exception:
+                pass
+    
     return {
         "id": video.id,
         "is_active": video.is_active,
+        "stream_restarted": stream_restarted,
         "message": f"영상이 {'활성화' if is_active else '비활성화'}되었습니다"
     }
 

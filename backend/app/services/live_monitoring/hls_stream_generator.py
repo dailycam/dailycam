@@ -151,12 +151,10 @@ class HLSStreamGenerator:
                     try:
                         returncode = self.ffmpeg_process.poll()
                         if returncode is not None:
-                            print(f"[통합 스트림] ⚠️ FFmpeg 프로세스 종료됨 (exit code: {returncode}), 재시작...")
                             await self._start_unified_streaming(concat_file, playlist_path, segment_pattern)
-                            # 모니터링 재시작
                             self._monitor_archive_files()
-                    except Exception as e:
-                        print(f"[통합 스트림] ⚠️ 프로세스 상태 확인 오류: {e}")
+                    except Exception:
+                        pass
         
         except Exception as e:
             print(f"[HLS 스트림] ❌ 오류: {e}")
@@ -218,12 +216,6 @@ class HLSStreamGenerator:
                     video_path = str(video_absolute).replace('\\', '/')
                     f.write(f"file '{video_path}'\n")
             
-            print(f"[HLS 스트림] ✅ concat 파일 생성: {len(video_list)}개 영상 (stream_loop로 반복)")
-            print(f"[HLS 스트림] concat 파일 경로: {concat_file.resolve()}")
-            # concat 파일 내용 샘플 출력 (디버깅용)
-            with open(concat_file, 'r') as f:
-                first_line = f.readline().strip()
-                print(f"[HLS 스트림] concat 파일 첫 줄 샘플: {first_line}")
             return concat_file
             
         except Exception as e:
@@ -331,11 +323,6 @@ class HLSStreamGenerator:
                 )
             ]
             
-            print(f"[통합 스트림] FFmpeg 명령어:")
-            print(f"  입력 파일: {concat_file_absolute}")
-            print(f"  HLS 출력: {playlist_path_absolute} (DVR 윈도우: 300 세그먼트)")
-            print(f"  아카이브 출력: {archive_dir_absolute}/archive_%Y%m%d_%H%M%S.mp4 (10분마다 자동 생성)")
-            
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
@@ -344,8 +331,7 @@ class HLSStreamGenerator:
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
             
-            print(f"[통합 스트림] ✅ FFmpeg 프로세스 시작 (PID: {self.ffmpeg_process.pid})")
-            print(f"[통합 스트림] CPU 사용량: 단일 프로세스로 약 50% 감소 예상")
+            print(f"[HLS] ✅ 스트림 시작: {self.camera_id}")
             
             # stderr 모니터링 스레드 (아카이브 파일 생성 감지)
             def read_stderr():
@@ -356,13 +342,8 @@ class HLSStreamGenerator:
                             decoded = line.decode('utf-8', errors='ignore').strip()
                             if decoded:
                                 # 에러나 경고 메시지 출력
-                                if 'error' in decoded.lower() or 'failed' in decoded.lower() or 'warning' in decoded.lower():
+                                if 'error' in decoded.lower() or 'failed' in decoded.lower():
                                     print(f"[FFmpeg] {decoded}")
-                                # 아카이브 파일 생성 감지 (segment muxer 로그)
-                                if 'Opening' in decoded and 'archive_' in decoded and '.mp4' in decoded:
-                                    print(f"[아카이브] 파일 생성 시작: {decoded}")
-                                if 'Output file' in decoded and 'archive_' in decoded:
-                                    print(f"[아카이브] 파일 생성 완료: {decoded}")
                 except:
                     pass
             
@@ -372,11 +353,10 @@ class HLSStreamGenerator:
             # 플레이리스트 생성 대기
             for _ in range(50):
                 if playlist_path.exists():
-                    print(f"[통합 스트림] ✅ HLS 플레이리스트 생성 완료")
                     return
                 await asyncio.sleep(0.1)
             
-            print(f"[통합 스트림] ⚠️ 플레이리스트 생성 대기 시간 초과")
+            print(f"[HLS] ⚠️ 플레이리스트 생성 타임아웃")
             
         except Exception as e:
             print(f"[통합 스트림] ❌ 프로세스 시작 실패: {e}")
@@ -404,7 +384,6 @@ class HLSStreamGenerator:
                         for file_path in new_files:
                             # 파일이 완전히 생성되었는지 확인 (크기 안정화)
                             if self._is_file_stable(file_path):
-                                print(f"[아카이브 모니터] ✅ 새 파일 발견: {file_path.name}")
                                 
                                 # S3 업로드 및 Job 등록 (동기적으로 실행)
                                 # 비동기 함수를 동기 스레드에서 실행
@@ -430,14 +409,13 @@ class HLSStreamGenerator:
                                         loop.close()
                                         
                                 except Exception as e:
-                                    print(f"[아카이브 모니터] ⚠️ 작업 스케줄링 오류: {e}")
+                                    pass  # 스케줄링 오류 무시
                                 
                                 processed_files.add(file_path)
                     
                     time.sleep(5)  # 5초마다 확인
                     
-                except Exception as e:
-                    print(f"[아카이브 모니터] ❌ 오류: {e}")
+                except Exception:
                     time.sleep(5)
         
         monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
@@ -489,13 +467,8 @@ class HLSStreamGenerator:
                 segment_start=segment_start
             )
             
-            if s3_url:
-                print(f"[아카이브] ✅ S3 업로드 완료: {filename} → {s3_url}")
-            else:
-                print(f"[아카이브] ⚠️ S3 업로드 실패: {filename}")
-                
-        except Exception as e:
-            print(f"[아카이브] ❌ S3 업로드 중 오류: {e}")
+        except Exception:
+            pass  # S3 업로드 실패 무시
     
     async def _register_analysis_job_async(self, file_path: Path):
         """아카이브 파일에 대한 VLM 분석 Job 등록 (비동기)"""
@@ -531,8 +504,7 @@ class HLSStreamGenerator:
             ).first()
             
             if existing_job:
-                print(f"[아카이브] ⏭️ 이미 등록된 Job: {filename}")
-                return
+                return  # 이미 등록됨
             
             # Job 등록
             segment_end_utc = segment_end.astimezone(pytz.UTC).replace(tzinfo=None)
@@ -559,12 +531,8 @@ class HLSStreamGenerator:
             db.add(analysis_job)
             db.commit()
             
-            print(f"[아카이브] ✅ 분석 Job 등록: {filename} (Job ID: {analysis_job.id})")
-            
-        except Exception as e:
-            print(f"[아카이브] ❌ Job 등록 중 오류: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass  # Job 등록 실패 무시
     
     def _upload_archive_to_s3(self):
         """아카이브 영상을 S3에 업로드"""
@@ -576,24 +544,16 @@ class HLSStreamGenerator:
             
             s3_service = S3Service()
             if not s3_service.is_enabled():
-                print(f"[HLS 아카이브] ℹ️ S3가 비활성화되어 있습니다.")
                 return
             
-            s3_url = s3_service.upload_archive(
+            s3_service.upload_archive(
                 file_path=self.current_archive_path,
                 camera_id=self.camera_id,
                 segment_start=self.current_archive_start
             )
-            
-            if s3_url:
-                print(f"[HLS 아카이브] ✅ S3 업로드 완료: {s3_url}")
-            else:
-                print(f"[HLS 아카이브] ⚠️ S3 업로드 실패")
                 
-        except Exception as e:
-            print(f"[HLS 아카이브] ❌ S3 업로드 중 오류: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass  # S3 업로드 실패 무시
     
     def _get_segment_start_time(self, now: datetime) -> datetime:
         """현재 시간을 10분 단위로 내림"""
@@ -609,11 +569,9 @@ class HLSStreamGenerator:
             while self.is_running:
                 try:
                     self._cleanup_old_hls_segments()
-                    # 10분마다 정리 작업 실행
-                    time.sleep(600)
-                except Exception as e:
-                    print(f"[HLS 정리] ❌ 오류: {e}")
-                    time.sleep(600)
+                except Exception:
+                    pass
+                time.sleep(600)  # 10분마다
         
         cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
         cleanup_thread.start()
@@ -649,16 +607,11 @@ class HLSStreamGenerator:
                         ts_file.unlink()
                         deleted_count += 1
                         total_size += file_size
-                except Exception as e:
-                    # 파일 삭제 실패 시 로그만 출력하고 계속 진행
-                    print(f"[HLS 정리] ⚠️ 파일 삭제 실패 ({ts_file.name}): {e}")
+                except Exception:
+                    pass  # 파일 삭제 실패 무시
             
-            if deleted_count > 0:
-                size_mb = total_size / (1024 * 1024)
-                print(f"[HLS 정리] ✅ 오래된 세그먼트 {deleted_count}개 삭제 (총 {size_mb:.2f}MB)")
-            
-        except Exception as e:
-            print(f"[HLS 정리] ❌ 정리 작업 오류: {e}")
+        except Exception:
+            pass
     
     def _cleanup(self):
         """리소스 정리"""
@@ -668,8 +621,6 @@ class HLSStreamGenerator:
                 self.ffmpeg_process.wait(timeout=5)
             except:
                 pass
-        
-        print(f"[통합 스트림] 종료: {self.camera_id}")
     
     async def _start_real_camera_hls(self):
         """실제 홈캠으로 HLS 스트림 생성"""
@@ -718,25 +669,23 @@ class HLSStreamGenerator:
                     self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 await asyncio.sleep(1)
         
-        except Exception as e:
-            print(f"[HLS 스트림] 오류: {e}")
+        except Exception:
+            pass
         finally:
             if self.ffmpeg_process:
                 self.ffmpeg_process.terminate()
                 self.ffmpeg_process.wait()
-            print(f"[HLS 스트림] 종료: {self.camera_id}")
     
     def stop_streaming(self):
         """스트리밍 중지"""
-        print(f"[HLS 스트림] 중지 요청: {self.camera_id}")
         self.is_running = False
         
         if self.ffmpeg_process:
             try:
                 self.ffmpeg_process.terminate()
                 self.ffmpeg_process.wait(timeout=5)
-            except Exception as e:
-                print(f"[HLS 스트림] ⚠️ FFmpeg 프로세스 종료 중 오류: {e}")
+            except Exception:
+                pass
     
     def get_playlist_url(self) -> str:
         """HLS 플레이리스트 URL 반환"""

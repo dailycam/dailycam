@@ -39,8 +39,6 @@ class AnalysisWorker:
     def start(self):
         """워커 시작"""
         self.is_running = True
-        print(f"[워커 {self.worker_id}] 🚀 시작됨")
-        print(f"[워커 {self.worker_id}] 폴링 간격: {self.poll_interval}초")
         
         # Graceful shutdown 설정
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -55,7 +53,6 @@ class AnalysisWorker:
     
     def _signal_handler(self, signum, frame):
         """시그널 핸들러 (Ctrl+C 등)"""
-        print(f"\n[워커 {self.worker_id}] 종료 신호 수신, 정리 중...")
         self.is_running = False
     
     async def _main_loop(self):
@@ -77,19 +74,13 @@ class AnalysisWorker:
                     start_kst = start_utc.astimezone(kst)
                     end_kst = end_utc.astimezone(kst)
                     
-                    print(f"\n[워커 {self.worker_id}] 📋 Job 발견: ID={job.id}, 구간={start_kst.strftime('%H:%M:%S')}~{end_kst.strftime('%H:%M:%S')} (KST)")
                     await self._process_job(job)
                 else:
                     # Job이 없으면 대기
                     await asyncio.sleep(self.poll_interval)
                     
-            except Exception as e:
-                print(f"[워커 {self.worker_id}] ❌ 메인 루프 오류: {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception:
                 await asyncio.sleep(self.poll_interval)
-        
-        print(f"[워커 {self.worker_id}] 종료됨")
     
     def _get_next_job(self) -> AnalysisJob:
         """다음 처리할 Job 가져오기"""
@@ -115,7 +106,6 @@ class AnalysisWorker:
     
     async def _process_job(self, job: AnalysisJob):
         """Job 처리"""
-        print(f"[워커 {self.worker_id}] 🚀 Job 처리 시작: ID={job.id}")
         db = next(get_db())
         
         # camera_id로 user_id 조회 (먼저 조회해야 나이 계산 등에 사용 가능)
@@ -142,8 +132,6 @@ class AnalysisWorker:
             
             # 파일이 없으면 여러 경로 시도
             if not video_path.exists():
-                print(f"[워커 {self.worker_id}] ⚠️ 원본 경로에 파일 없음: {video_path}")
-                
                 # 파일명 기반으로 가능한 모든 경로 시도
                 possible_paths = [
                     backend_dir / "temp_videos" / "hls_buffer" / job.camera_id / "archive" / filename,
@@ -163,7 +151,6 @@ class AnalysisWorker:
                         found_file = archive_dir / filename
                         if found_file.exists():
                             video_path = found_file
-                            print(f"[워커 {self.worker_id}] ✅ 파일 발견: {video_path}")
                             break
                 
                 # 여전히 없으면 possible_paths도 확인
@@ -171,7 +158,6 @@ class AnalysisWorker:
                     for possible_path in possible_paths:
                         if possible_path.exists():
                             video_path = possible_path
-                            print(f"[워커 {self.worker_id}] ✅ 파일 발견 (대체 경로): {video_path}")
                             break
             
             # 1. S3 우선 확인, 없으면 로컬 파일 사용
@@ -211,13 +197,10 @@ class AnalysisWorker:
                 # S3에도 없고 로컬에도 없음
                 # 마지막으로 파일명 기반 전체 검색 (성능 고려하여 제한적 검색)
                 if not video_path.exists():
-                    print(f"[워커 {self.worker_id}] 🔍 파일명 기반 전체 검색: {filename}")
-                    
                     # temp_videos 전체에서 파일명으로 검색 (깊이 제한: 최대 3단계)
                     temp_videos_dir = backend_dir / "temp_videos"
                     if temp_videos_dir.exists():
                         try:
-                            # rglob 대신 제한된 깊이로 검색 (성능 최적화)
                             search_paths = [
                                 temp_videos_dir / "hls_buffer" / "**" / filename,
                                 temp_videos_dir / "hourly_buffer" / "**" / filename,
@@ -228,13 +211,11 @@ class AnalysisWorker:
                                 for found_file in temp_videos_dir.glob(str(search_pattern.relative_to(temp_videos_dir))):
                                     if found_file.exists() and found_file.name == filename:
                                         video_path = found_file
-                                        print(f"[워커 {self.worker_id}] ✅ 파일 발견 (전체 검색): {video_path}")
                                         break
                                 if video_path.exists():
                                     break
-                        except Exception as e:
-                            # 전체 검색 실패 시 무시 (이미 여러 경로 시도했으므로)
-                            print(f"[워커 {self.worker_id}] ⚠️ 전체 검색 중 오류 (무시): {e}")
+                        except Exception:
+                            pass
                 
                 if not video_path.exists():
                     if s3_service.is_enabled():
@@ -244,7 +225,6 @@ class AnalysisWorker:
             
             # 2. 파일 안정화 대기 (S3에서 다운로드한 경우는 스킵)
             if not downloaded_from_s3:
-                print(f"[워커 {self.worker_id}] ⏳ 파일 안정화 대기 중...")
                 await asyncio.sleep(30)
                 
                 # 파일 크기 안정화 확인
@@ -279,8 +259,6 @@ class AnalysisWorker:
                 try:
                     # 파일 읽기(bytes loading) 제거 - GeminiService가 직접 파일 경로를 처리함
                     
-                    if attempt > 0:
-                        print(f"[워커 {self.worker_id}] 🔄 Gemini VLM 분석 재시도 중... ({attempt + 1}/{max_retries})")
                     
                     # 아이 개월 수 계산
                     user = db.query(User).filter(User.id == user_id).first()
@@ -313,9 +291,8 @@ class AnalysisWorker:
                     
                     if "500" in error_msg or "Internal" in error_msg:
                         if is_last_attempt:
-                            raise Exception(f"Gemini VLM 분석 최종 실패 (500 에러, 재시도 {max_retries}회): {e}")
+                            raise Exception(f"Gemini VLM 분석 최종 실패 (500 에러): {e}")
                         else:
-                            print(f"[워커 {self.worker_id}] ⚠️ Gemini 500 에러, {retry_delay}초 후 재시도...")
                             await asyncio.sleep(retry_delay)
                             continue
                     else:
@@ -418,24 +395,17 @@ class AnalysisWorker:
             
             db.commit()
             
-            print(f"[워커 {self.worker_id}] ✅ Job 완료: ID={job.id}, 안전점수={job.safety_score}, 발달점수={segment_analysis.development_score}")
-            
             # 7. 하이라이트 클립 자동 생성
             try:
                 from app.services.highlight_clip_service import HighlightClipService
                 
                 clip_service = HighlightClipService(camera_id=job.camera_id)
-                clips = clip_service.create_clips_from_segment_analysis(
+                clip_service.create_clips_from_segment_analysis(
                     segment_analysis=segment_analysis,
                     db=db
                 )
-                
-                if clips:
-                    print(f"[워커 {self.worker_id}] ✅ 하이라이트 클립 {len(clips)}개 생성 완료")
-                    
-            except Exception as clip_error:
-                print(f"[워커 {self.worker_id}] ⚠️  클립 생성 실패 (분석은 완료됨): {clip_error}")
-                # 클립 생성 실패해도 분석은 성공으로 처리
+            except Exception:
+                pass  # 클립 생성 실패해도 분석은 성공으로 처리
             
             # 8. S3 아카이브 삭제 (분석 완료 후 즉시 삭제 - 비용 절감)
             # 주의: 원본 영상을 보관하려면 이 로직을 비활성화하고 S3 Lifecycle 정책 사용 권장
@@ -462,11 +432,6 @@ class AnalysisWorker:
                     pass
             
         except Exception as e:
-            import traceback
-            error_trace = traceback.format_exc()
-            print(f"[워커 {self.worker_id}] ❌ Job 실패: ID={job.id}, 오류: {e}")
-            print(error_trace)
-            
             # 재시도 가능 여부 확인
             job.retry_count += 1
             
@@ -475,13 +440,11 @@ class AnalysisWorker:
                 job.status = JobStatus.PENDING
                 job.worker_id = None
                 job.started_at = None
-                print(f"[워커 {self.worker_id}] 🔄 Job 재시도 대기열로 복귀 (재시도 {job.retry_count}/{job.max_retries})")
             else:
                 # 재시도 횟수 초과 - FAILED로 표시
                 job.status = JobStatus.FAILED
                 job.error_message = str(e)
                 job.completed_at = datetime.now()
-                print(f"[워커 {self.worker_id}] ❌ Job 최종 실패 (재시도 {job.max_retries}회 초과)")
                 
                 # 최종 실패 시에도 파일 삭제 (불필요한 용량 차지 방지)
                 delete_after = os.getenv("DELETE_VIDEO_AFTER_ANALYSIS", "True").lower() == "true"
@@ -525,17 +488,14 @@ class AnalysisWorker:
             ).all()
             
             if stuck_jobs:
-                print(f"[워커 {self.worker_id}] ⚠️ 비정상 종료된 Job {len(stuck_jobs)}개 발견 - 초기화 진행")
                 for job in stuck_jobs:
                     job.status = JobStatus.PENDING
                     job.worker_id = None
                     job.started_at = None
-                
                 db.commit()
-                print(f"[워커 {self.worker_id}] ✅ 복구 완료")
                 
-        except Exception as e:
-            print(f"[워커 {self.worker_id}] ❌ 복구 중 오류: {e}")
+        except Exception:
+            pass
         finally:
             db.close()
 
@@ -544,15 +504,6 @@ class AnalysisWorker:
 if __name__ == "__main__":
     import os
     
-    # 워커 ID (환경 변수나 인자로 받을 수 있음)
     worker_id = os.getenv("WORKER_ID", "worker-1")
-    
-    print("=" * 60)
-    print("🤖 VLM 분석 워커 프로세스")
-    print("=" * 60)
-    print(f"워커 ID: {worker_id}")
-    print(f"시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
-    
     worker = AnalysisWorker(worker_id=worker_id)
     worker.start()

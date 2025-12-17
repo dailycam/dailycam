@@ -184,8 +184,6 @@ def create_app() -> FastAPI:
                     all_cameras = db.query(CameraSetting).all()
                     cameras_to_start = []
                     
-                    print(f"[HLS 자동 시작] DB에서 카메라 조회 중... (총 {len(all_cameras)}개)")
-                    
                     for camera_setting in all_cameras:
                         # 활성 영상이 있는지 확인
                         active_videos = db.query(CameraVideo).filter(
@@ -193,17 +191,12 @@ def create_app() -> FastAPI:
                             CameraVideo.is_active == True
                         ).count()
                         
-                        print(f"[HLS 자동 시작] 카메라 {camera_setting.camera_id}: 활성 영상 {active_videos}개")
-                        
                         if active_videos > 0:
                             cameras_to_start.append(camera_setting.camera_id)
                     
                     return cameras_to_start
                     
-                except Exception as e:
-                    print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
-                    import traceback
-                    print(traceback.format_exc())
+                except Exception:
                     return []
                 finally:
                     db.close()
@@ -213,15 +206,9 @@ def create_app() -> FastAPI:
                 cameras_to_start = await asyncio.to_thread(get_cameras_with_active_videos)
                 
                 if not cameras_to_start:
-                    print("⚠️  HLS 자동 시작 스킵: 활성 영상이 있는 카메라가 없습니다")
                     return
                 
-                print(f"📹 HLS 자동 시작 대상 카메라: {', '.join(cameras_to_start)}")
-                
-            except Exception as e:
-                print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
-                import traceback
-                print(traceback.format_exc())
+            except Exception:
                 return
             
             # 짧은 대기 후 시작 (다른 초기화 작업 완료 대기)
@@ -231,15 +218,13 @@ def create_app() -> FastAPI:
             for camera_id in cameras_to_start:
                 try:
                     video_dir = Path(f"videos/{camera_id}")
-                    # 디렉토리가 없으면 생성 (S3 다운로드 대비)
-                    if not video_dir.exists():
-                        print(f"📁 영상 디렉토리 생성: {video_dir}")
-                        video_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    print(f"\n🎥 HLS 스트림 자동 시작 중: {camera_id}")
+                    video_dir.mkdir(parents=True, exist_ok=True)
                     
                     output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
                     loop = asyncio.get_running_loop()
+                    
+                    # ✅ 각 카메라에 대해 새 DB 세션 생성 (카메라 세팅 영상만 사용하도록)
+                    db_for_camera = SessionLocal()
                     
                     generator = HLSStreamGenerator(
                         camera_id=camera_id,
@@ -249,7 +234,8 @@ def create_app() -> FastAPI:
                         segment_duration=10,
                         enable_realtime_detection=True,
                         age_months=None,
-                        event_loop=loop
+                        event_loop=loop,
+                        db_session=db_for_camera  # DB 세션 전달
                     )
                     
                     # 전역 스트림 관리에 등록 (router.py와 공유)
@@ -266,14 +252,8 @@ def create_app() -> FastAPI:
                     # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
                     await start_hourly_aggregation_for_camera(camera_id)
                     
-                    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
-                    print(f"   스트림 URL: {backend_url}/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
-                    
-                except Exception as e:
-                    print(f"❌ HLS 자동 시작 실패 ({camera_id}): {e}")
-                    import traceback
-                    print(traceback.format_exc())
+                except Exception:
+                    pass
         
         asyncio.create_task(auto_start_hls_streams())
         
@@ -322,7 +302,6 @@ def create_app() -> FastAPI:
         from .services.live_monitoring.segment_analyzer import stop_segment_analysis_for_camera
         
         for camera_id, generator in list(active_hls_streams.items()):
-            print(f"   HLS 스트림 중지: {camera_id}")
             generator.stop_streaming()
             await stop_segment_analysis_for_camera(camera_id)
         
@@ -333,9 +312,6 @@ def create_app() -> FastAPI:
         
         # 자동 정리 스케줄러 중지
         stop_cleanup_scheduler()
-        
-        print("✅ HLS 스트림 정리 완료")
-        print("✅ 자동 정리 스케줄러 중지 완료")
 
     # ----------------------------------------------------
     # 루트 엔드포인트
