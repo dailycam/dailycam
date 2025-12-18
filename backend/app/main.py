@@ -40,7 +40,7 @@ from app.database import SessionLocal
 
 # 모델 import (Base.metadata에 등록하기 위해 - 테이블 자동 생성용)
 from app.models import (
-    User, TokenBlacklist, AnalysisLog, SafetyEvent, DevelopmentEvent,
+    User, TokenBlacklist, RefreshToken, AnalysisLog, SafetyEvent, DevelopmentEvent,
     DailySummary, HighlightClip, CameraSetting, CameraVideo,
     DevelopmentScoreTracking, DevelopmentMilestoneTracking,
     RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport,
@@ -67,34 +67,49 @@ def create_app() -> FastAPI:
     # ----------------------------------------------------
     # CORS 설정 (라우터 등록 전에 먼저 설정해야 함)
     # ----------------------------------------------------
-    # 환경 변수에서 CORS 허용 도메인 읽기 (콤마로 구분)
-    cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
-    origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+    # 워커 모드인지 확인 (워커는 웹 서버가 아니므로 CORS 불필요)
+    # WORKER_ID 환경 변수가 있으면 워커 모드로 간주
+    is_worker_mode = os.getenv("WORKER_ID") is not None
     
-    # 개발용 로컬호스트 기본 추가
-    default_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    
-    # 중복 제거하여 합치기
-    allow_origins = list(set(origins + default_origins))
-    
-    print(f"🌐 CORS 허용 도메인: {allow_origins}")
+    if is_worker_mode:
+        # 워커 모드에서는 CORS 설정 스킵
+        print("🔧 워커 모드: CORS 설정 스킵 (HTTP 요청을 받지 않으므로 불필요)")
+    else:
+        # 환경 변수에서 CORS 허용 도메인 읽기 (콤마로 구분)
+        cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+        origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+        
+        # 개발 환경에서만 로컬호스트 자동 추가 및 모든 Origin 허용
+        is_development = os.getenv("ENVIRONMENT", "development") != "production"
+        if is_development:
+            # 개발 모드에서는 모든 Origin 허용 (CORS 문제 원천 차단)
+            print("[DEV] 개발 모드: 모든 Origin 허용 (allow_origins=['*'])")
+            allow_origins = ["*"]
+        else:
+            # 프로덕션에서는 환경 변수만 사용
+            if not origins:
+                raise ValueError(
+                    "프로덕션 환경에서는 CORS_ALLOWED_ORIGINS 환경 변수를 반드시 설정해야 합니다."
+                )
+            allow_origins = origins
+            print(f"🌐 CORS 허용 도메인 (프로덕션): {allow_origins}")
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+            allow_headers=["*"],
+            expose_headers=["*"],
+        )
 
     # 세션 미들웨어 추가 (OAuth에 필요)
+    # 워커에서는 세션 미들웨어가 필요 없으므로 환경 변수가 없어도 기본값 사용
+    session_secret = os.getenv("JWT_SECRET_KEY", "default-session-secret-for-worker")
+    
     app.add_middleware(
         SessionMiddleware,
-        secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key"),
+        secret_key=session_secret,
     )
 
     # ----------------------------------------------------
@@ -149,8 +164,15 @@ def create_app() -> FastAPI:
         asyncio.create_task(billing_worker())
 
         # ✅ 3) HLS 스트림 자동 시작 (DB에 활성 영상이 있는 모든 카메라)
+        # 환경 변수로 제어: ENABLE_HLS_STREAMING=true일 때만 실행 (스트리밍 서버에서만)
+        enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
+        
         async def auto_start_hls_streams():
             """서버 시작 시 자동으로 HLS 스트림 시작 (DB에 활성 영상이 있는 모든 카메라)"""
+            
+            if not enable_hls_streaming:
+                print("⏭️  HLS 자동 시작 스킵: ENABLE_HLS_STREAMING=false (메인 서버에서는 비활성화)")
+                return
             
             # DB에서 활성 영상이 있는 모든 카메라 조회 (동기 DB 작업을 별도 스레드에서 실행)
             def get_cameras_with_active_videos():
@@ -162,8 +184,6 @@ def create_app() -> FastAPI:
                     all_cameras = db.query(CameraSetting).all()
                     cameras_to_start = []
                     
-                    print(f"[HLS 자동 시작] DB에서 카메라 조회 중... (총 {len(all_cameras)}개)")
-                    
                     for camera_setting in all_cameras:
                         # 활성 영상이 있는지 확인
                         active_videos = db.query(CameraVideo).filter(
@@ -171,17 +191,12 @@ def create_app() -> FastAPI:
                             CameraVideo.is_active == True
                         ).count()
                         
-                        print(f"[HLS 자동 시작] 카메라 {camera_setting.camera_id}: 활성 영상 {active_videos}개")
-                        
                         if active_videos > 0:
                             cameras_to_start.append(camera_setting.camera_id)
                     
                     return cameras_to_start
                     
-                except Exception as e:
-                    print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
-                    import traceback
-                    print(traceback.format_exc())
+                except Exception:
                     return []
                 finally:
                     db.close()
@@ -191,28 +206,10 @@ def create_app() -> FastAPI:
                 cameras_to_start = await asyncio.to_thread(get_cameras_with_active_videos)
                 
                 if not cameras_to_start:
-                    print("⚠️  HLS 자동 시작 스킵: 활성 영상이 있는 카메라가 없습니다")
-                    # 폴백: 로컬 파일 시스템 확인 (camera-1 디렉토리가 있으면 시작)
-                    video_dir = Path(f"videos/camera-1")
-                    if video_dir.exists() and any(video_dir.glob("*.mp4")):
-                        print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
-                        cameras_to_start = ["camera-1"]
-                    else:
-                        return
-                
-                print(f"📹 HLS 자동 시작 대상 카메라: {', '.join(cameras_to_start)}")
-                
-            except Exception as e:
-                print(f"⚠️  HLS 자동 시작 DB 확인 실패: {e}")
-                import traceback
-                print(traceback.format_exc())
-                # 폴백: camera-1 확인
-                video_dir = Path(f"videos/camera-1")
-                if video_dir.exists() and any(video_dir.glob("*.mp4")):
-                    print("📹 폴백: camera-1 디렉토리에 영상이 있어 자동 시작")
-                    cameras_to_start = ["camera-1"]
-                else:
                     return
+                
+            except Exception:
+                return
             
             # 짧은 대기 후 시작 (다른 초기화 작업 완료 대기)
             await asyncio.sleep(2)
@@ -221,14 +218,13 @@ def create_app() -> FastAPI:
             for camera_id in cameras_to_start:
                 try:
                     video_dir = Path(f"videos/{camera_id}")
-                    if not video_dir.exists():
-                        print(f"⚠️  HLS 자동 시작 스킵: 영상 디렉토리가 없습니다 ({video_dir})")
-                        continue
-                    
-                    print(f"\n🎥 HLS 스트림 자동 시작 중: {camera_id}")
+                    video_dir.mkdir(parents=True, exist_ok=True)
                     
                     output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
                     loop = asyncio.get_running_loop()
+                    
+                    # ✅ 각 카메라에 대해 새 DB 세션 생성 (카메라 세팅 영상만 사용하도록)
+                    db_for_camera = SessionLocal()
                     
                     generator = HLSStreamGenerator(
                         camera_id=camera_id,
@@ -238,7 +234,8 @@ def create_app() -> FastAPI:
                         segment_duration=10,
                         enable_realtime_detection=True,
                         age_months=None,
-                        event_loop=loop
+                        event_loop=loop,
+                        db_session=db_for_camera  # DB 세션 전달
                     )
                     
                     # 전역 스트림 관리에 등록 (router.py와 공유)
@@ -255,14 +252,8 @@ def create_app() -> FastAPI:
                     # 1시간 단위 텍스트 데이터 종합 분석 스케줄러 시작
                     await start_hourly_aggregation_for_camera(camera_id)
                     
-                    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    print(f"✅ HLS 스트림 자동 시작 완료: {camera_id}")
-                    print(f"   스트림 URL: {backend_url}/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8")
-                    
-                except Exception as e:
-                    print(f"❌ HLS 자동 시작 실패 ({camera_id}): {e}")
-                    import traceback
-                    print(traceback.format_exc())
+                except Exception:
+                    pass
         
         asyncio.create_task(auto_start_hls_streams())
         
@@ -293,9 +284,10 @@ def create_app() -> FastAPI:
 
         asyncio.create_task(clip_cleanup_worker())
 
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
         print("\n" + "=" * 60)
         print("✨ 서버가 준비되었습니다!")
-        print("   API 문서: http://localhost:8000/docs")
+        print(f"   API 문서: {backend_url}/docs")
         print("   HLS 스트림: 자동 시작 중...")
         print("   클립 정리: 24시간마다 자동 실행")
         print("=" * 60 + "\n")
@@ -310,7 +302,6 @@ def create_app() -> FastAPI:
         from .services.live_monitoring.segment_analyzer import stop_segment_analysis_for_camera
         
         for camera_id, generator in list(active_hls_streams.items()):
-            print(f"   HLS 스트림 중지: {camera_id}")
             generator.stop_streaming()
             await stop_segment_analysis_for_camera(camera_id)
         
@@ -321,9 +312,6 @@ def create_app() -> FastAPI:
         
         # 자동 정리 스케줄러 중지
         stop_cleanup_scheduler()
-        
-        print("✅ HLS 스트림 정리 완료")
-        print("✅ 자동 정리 스케줄러 중지 완료")
 
     # ----------------------------------------------------
     # 루트 엔드포인트

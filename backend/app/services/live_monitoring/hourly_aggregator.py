@@ -39,17 +39,34 @@ class HourlyAggregator:
         Returns:
             HourlyReport: 생성된 리포트 (실패 시 None)
         """
+        
+        # KST -> UTC 변환 (DB 조회용)
+        # hour_start는 timezone-aware datetime이어야 함 (KST)
+        if hour_start.tzinfo is None:
+            kst = pytz.timezone('Asia/Seoul')
+            hour_start = kst.localize(hour_start)
+        else:
+            # 이미 timezone이 있다면 KST인지 확인 (다르면 변환)
+            kst = pytz.timezone('Asia/Seoul')
+            if hour_start.tzinfo != kst:
+                hour_start = hour_start.astimezone(kst)
+            
         hour_end = hour_start + timedelta(hours=1)
         
-        print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} ~ {hour_end.strftime('%H:%M')} 종합 분석 시작")
+        # DB 쿼리용 UTC 시간 (naive)
+        hour_start_utc = hour_start.astimezone(pytz.UTC).replace(tzinfo=None)
+        hour_end_utc = hour_end.astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} (KST) 종합 분석 시작")
+        print(f"  - DB 조회 범위(UTC): {hour_start_utc} ~ {hour_end_utc}")
         
         # 1. 해당 시간대의 완료된 세그먼트 조회 (최대 6개)
         segments = (
             db.query(SegmentAnalysis)
             .filter(
                 SegmentAnalysis.camera_id == camera_id,
-                SegmentAnalysis.segment_start >= hour_start,
-                SegmentAnalysis.segment_start < hour_end,
+                SegmentAnalysis.segment_start >= hour_start_utc,
+                SegmentAnalysis.segment_start < hour_end_utc,
                 SegmentAnalysis.status == 'completed'
             )
             .order_by(SegmentAnalysis.segment_start.asc())
@@ -266,6 +283,56 @@ class HourlyAggregator:
         except Exception as e:
             print(f"[HourlyAggregator] Gemini API 호출 실패: {e}")
             raise
+    
+    def _extract_and_parse_json(self, text: str) -> dict:
+        """
+        텍스트에서 JSON 추출 및 파싱
+        """
+        cleaned_text = text
+
+        if "```json" in cleaned_text:
+            start = cleaned_text.find("```json")
+            if start != -1:
+                start = cleaned_text.find("\n", start) + 1
+                end = cleaned_text.find("```", start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+        elif "```" in cleaned_text:
+            start = cleaned_text.find("```")
+            if start != -1:
+                start = cleaned_text.find("\n", start) + 1
+                end = cleaned_text.find("```", start)
+                if end != -1:
+                    cleaned_text = cleaned_text[start:end].strip()
+
+        first_brace = cleaned_text.find("{")
+        if first_brace != -1:
+            brace_count = 0
+            last_brace = first_brace
+            for i in range(first_brace, len(cleaned_text)):
+                ch = cleaned_text[i]
+                if ch == "{":
+                    brace_count += 1
+                elif ch == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        last_brace = i
+                        break
+
+            if brace_count == 0:
+                cleaned_text = cleaned_text[first_brace : last_brace + 1]
+            else:
+                last_brace = cleaned_text.rfind("}")
+                if last_brace != -1 and last_brace > first_brace:
+                    cleaned_text = cleaned_text[first_brace : last_brace + 1]
+
+        try:
+            return json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON 파싱 실패: {str(e)}")
+            print(f"[에러 위치] Line: {e.lineno}, Column: {e.colno}")
+            print(f"[추출된 텍스트 (처음 800자)]\n{cleaned_text[:800]}")
+            raise ValueError(f"JSON 파싱 실패 (Line {e.lineno}, Col {e.colno}): {str(e)}")
     
     def _build_aggregation_prompt(self, text_data: Dict[str, Any]) -> str:
         """

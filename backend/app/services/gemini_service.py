@@ -6,6 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
+import asyncio
 
 import cv2
 import time
@@ -31,7 +32,7 @@ class GeminiService:
     변경 포인트:
       - timeline_observations 최대 400개, safety_observations 최대 150개로 잘라서 사용
       - metadata JSON은 pretty-print 대신 compact 형식으로 전송해 토큰 절감
-      - 비디오 최적화(_optimize_video) 유지: 480p / 1fps로 다운샘플링
+      - 비디오 최적화(_optimize_video) 유지: 480p / 15fps로 다운샘플링 (원본 30fps 기준)
     """
 
     # 메타데이터 상한 (토큰/시간 절감용)
@@ -65,32 +66,41 @@ class GeminiService:
         # 프롬프트 캐시 딕셔너리 초기화
         self.prompt_cache: Dict[str, str] = {}
 
-    def _upload_to_gemini(self, video_bytes: bytes, mime_type: str = "video/mp4"):
-        """Gemini File API를 사용하여 비디오 업로드"""
-        # 임시 파일 생성
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp.write(video_bytes)
-            tmp_path = tmp.name
+    async def _upload_to_gemini(self, video_path: str, mime_type: str = "video/mp4"):
+        """
+        Gemini File API를 사용하여 비디오 업로드 (비동기 처리)
+        
+        Args:
+            video_path: 업로드할 비디오 파일의 경로
+            mime_type: MIME 타입
+        """
+        def upload_sync():
+            print(f"[Gemini 업로드] 파일 업로드 시작: {video_path} ({os.path.getsize(video_path)/1024/1024:.2f}MB)")
+            return genai.upload_file(video_path, mime_type=mime_type)
 
         try:
-            print(f"[Gemini 업로드] 파일 업로드 시작: {tmp_path} ({len(video_bytes)/1024/1024:.2f}MB)")
-            video_file = genai.upload_file(tmp_path, mime_type=mime_type)
+            # 업로드는 동기 함수이므로 쓰레드로 실행
+            video_file = await asyncio.to_thread(upload_sync)
             print(f"[Gemini 업로드] 완료: {video_file.name}")
             
-            # 파일 처리가 완료될 때까지 대기
+            # 파일 처리가 완료될 때까지 대기 (비동기 polling)
             while video_file.state.name == "PROCESSING":
                 print("[Gemini 업로드] 처리 중...")
-                time.sleep(2)
-                video_file = genai.get_file(video_file.name)
+                await asyncio.sleep(2)
+                
+                def get_file_sync():
+                    return genai.get_file(video_file.name)
+                
+                video_file = await asyncio.to_thread(get_file_sync)
                 
             if video_file.state.name == "FAILED":
                 raise ValueError(f"Gemini 파일 처리 실패: {video_file.state.name}")
                 
             print(f"[Gemini 업로드] 처리 완료 (상태: {video_file.state.name})")
             return video_file
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+        except Exception as e:
+            print(f"[Gemini 업로드] 오류: {e}")
+            raise
 
     # ------------------------------------------------------------------
     # 공통 유틸
@@ -133,20 +143,6 @@ class GeminiService:
     def _determine_stage_from_age_months(self, age_months: int) -> str:
         """
         개월 수를 기준으로 초기 발달 단계를 결정합니다.
-        이는 AI 분석의 시작점(기준점)으로 사용되며, AI는 실제 관찰을 통해 다른 단계를 제안할 수 있습니다.
-        
-        Stage 범위 (config.yaml 기준):
-        - Stage 1: 0-2개월
-        - Stage 2: 3-5개월
-        - Stage 3: 6-8개월
-        - Stage 4: 9-11개월
-        - Stage 5: 12-17개월
-        - Stage 6: 18-23개월
-        - Stage 7: 24-29개월
-        - Stage 8: 30-35개월
-        - Stage 9: 36-47개월
-        - Stage 10: 48-59개월
-        - Stage 11: 60-71개월
         """
         if age_months <= 2:
             return "1"
@@ -289,178 +285,163 @@ class GeminiService:
     # ------------------------------------------------------------------
     # 비디오 길이/최적화 유틸
     # ------------------------------------------------------------------
-    def _get_video_duration(
-        self, video_bytes: bytes, mime_type: str = "video/mp4"
+    async def _get_video_duration(
+        self, video_path: str, mime_type: str = "video/mp4"
     ) -> Optional[float]:
-        """비디오 바이트 데이터에서 비디오 길이(초)를 계산합니다."""
+        """비디오 파일에서 비디오 길이(초)를 계산합니다."""
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-                temp_file.write(video_bytes)
-                temp_path = temp_file.name
-
-            try:
-                cap = cv2.VideoCapture(temp_path)
-                if not cap.isOpened():
-                    print("[비디오 길이 계산 실패] 비디오를 열 수 없습니다.")
-                    return None
-
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-                cap.release()
-
-                if fps > 0 and frame_count > 0:
-                    duration = frame_count / fps
-                    print(
-                        f"[비디오 길이 계산 성공] FPS: {fps}, 프레임 수: {frame_count}, 길이: {duration}초"
-                    )
-                    return duration
-                else:
-                    print(
-                        f"[비디오 길이 계산 실패] FPS 또는 프레임 수가 유효하지 않습니다. "
-                        f"FPS: {fps}, 프레임 수: {frame_count}"
-                    )
-                    return None
-            finally:
+            # OpenCV는 IO 작업이므로 Thread에서 실행
+            def calculate_duration():
                 try:
-                    os.unlink(temp_path)
+                    cap = cv2.VideoCapture(str(video_path))
+                    if not cap.isOpened():
+                        print("[비디오 길이 계산 실패] 비디오를 열 수 없습니다.")
+                        return None
+
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                    cap.release()
+
+                    if fps > 0 and frame_count > 0:
+                        duration = frame_count / fps
+                        print(
+                            f"[비디오 길이 계산 성공] FPS: {fps}, 프레임 수: {frame_count}, 길이: {duration}초"
+                        )
+                        return duration
+                    else:
+                        print(
+                            f"[비디오 길이 계산 실패] FPS 또는 프레임 수가 유효하지 않습니다. "
+                            f"FPS: {fps}, 프레임 수: {frame_count}"
+                        )
+                        return None
                 except Exception as e:
-                    print(f"[비디오 길이 계산] 임시 파일 삭제 실패: {e}")
+                    print(f"[비디오 길이 계산 오류] {str(e)}")
+                    return None
+
+            return await asyncio.to_thread(calculate_duration)
+            
         except Exception as e:
             print(f"[비디오 길이 계산 오류] {str(e)}")
             return None
 
-    def _optimize_video(self, video_bytes: bytes) -> bytes:
+    async def _optimize_video(self, input_path: str) -> str:
         """
         비디오 최적화: 해상도 축소 및 FPS 조정
+        - 파일 경로를 받아 최적화된 파일 경로를 반환합니다.
         - 해상도: 높이 480px (비율 유지)
-        - FPS: 1fps (초당 1프레임)
-        - 이미 충분히 낮은 경우(높이 <=480, fps <=2)는 원본 사용
-        - FFmpeg를 사용하여 moov atom을 파일 시작 부분에 배치 (faststart)
+        - FPS: 15fps
         """
         print("[비디오 최적화] 전처리 시작...")
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as input_temp:
-            input_temp.write(video_bytes)
-            input_path = input_temp.name
-
-        output_path = input_path.replace(".mp4", "_opt.mp4")
+        
+        # 출력 경로 생성
+        input_path_obj = Path(input_path)
+        output_path = str(input_path_obj.parent / f"{input_path_obj.stem}_opt{input_path_obj.suffix}")
 
         try:
-            # 먼저 비디오 정보 확인
-            cap = cv2.VideoCapture(input_path)
-            if not cap.isOpened():
-                print("[비디오 최적화] ❌ 비디오 열기 실패, 원본 사용")
-                print(f"  파일 크기: {len(video_bytes) / (1024 * 1024):.2f}MB")
-                return video_bytes
+            # 블로킹 작업들을 쓰레드로 실행
+            def run_optimization():
+                # 먼저 비디오 정보 확인
+                cap = cv2.VideoCapture(input_path)
+                if not cap.isOpened():
+                    print("[비디오 최적화] ❌ 비디오 열기 실패, 원본 사용")
+                    return input_path
 
-            orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            orig_fps = cap.get(cv2.CAP_PROP_FPS)
-            cap.release()
+                orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                orig_fps = cap.get(cv2.CAP_PROP_FPS)
+                file_size = os.path.getsize(input_path)
+                cap.release()
 
-            target_height = 480
-            target_fps = 1.0
+                target_height = 480
+                target_fps = 15.0
 
-            # 이미 최적화된 상태면 패스
-            if orig_height <= target_height and orig_fps <= 2:
+                # 이미 최적화된 상태면 패스
+                if orig_height <= target_height and orig_fps <= 18.0:
+                    print(
+                        f"[비디오 최적화] ✅ 이미 최적화된 상태 ({orig_width}x{orig_height}, {orig_fps}fps)"
+                    )
+                    return input_path
+
+                scale = target_height / float(orig_height)
+                target_width = int(orig_width * scale)
+                if target_width % 2 != 0:
+                    target_width += 1
+
                 print(
-                    f"[비디오 최적화] ✅ 이미 최적화된 상태 ({orig_width}x{orig_height}, {orig_fps}fps)"
+                    f"[비디오 최적화] {orig_width}x{orig_height} {orig_fps}fps "
+                    f"-> {target_width}x{target_height} {target_fps}fps"
                 )
-                return video_bytes
 
-            scale = target_height / float(orig_height)
-            target_width = int(orig_width * scale)
-            # 짝수로 맞추기 (FFmpeg 요구사항)
-            if target_width % 2 != 0:
-                target_width += 1
+                # FFmpeg
+                import subprocess
+                import shutil
+                import platform
+                
+                ffmpeg_path = None
+                # 현재 파일 위치: backend/app/services/gemini_service.py
+                # backend_dir: backend
+                backend_dir = Path(__file__).resolve().parents[2]
+                
+                is_windows = platform.system() == 'Windows'
+                ffmpeg_filename = "ffmpeg.exe" if is_windows else "ffmpeg"
+                local_ffmpeg = backend_dir / "bin" / ffmpeg_filename
+                
+                if local_ffmpeg.exists():
+                    ffmpeg_path = str(local_ffmpeg)
+                else:
+                    ffmpeg_path = shutil.which('ffmpeg')
+                
+                if not ffmpeg_path:
+                    print("[비디오 최적화] ⚠️ FFmpeg를 찾을 수 없습니다. 원본 사용")
+                    return input_path
+                
+                cmd = [
+                    ffmpeg_path,
+                    '-i', input_path,
+                    '-vf', f'scale={target_width}:{target_height},fps={target_fps}',
+                    '-c:v', 'libx264',
+                    '-pix_fmt', 'yuv420p',
+                    '-profile:v', 'baseline',
+                    '-level', '3.0',
+                    '-preset', 'fast',
+                    '-crf', '28',
+                    '-movflags', '+faststart',
+                    '-an',
+                    '-y',
+                    output_path
+                ]
+                
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
 
-            print(
-                f"[비디오 최적화] {orig_width}x{orig_height} {orig_fps}fps "
-                f"-> {target_width}x{target_height} {target_fps}fps"
-            )
+                if result.returncode != 0:
+                    print(f"[비디오 최적화] ❌ FFmpeg 실행 실패, 원본 사용")
+                    return input_path
 
-            # FFmpeg를 사용하여 최적화
-            import subprocess
-            import shutil
-            import platform
-            
-            # FFmpeg 경로 찾기 (OS별 처리)
-            ffmpeg_path = None
-            backend_dir = Path(__file__).resolve().parents[2]
-            
-            # Windows vs Linux 구분
-            is_windows = platform.system() == 'Windows'
-            ffmpeg_filename = "ffmpeg.exe" if is_windows else "ffmpeg"
-            local_ffmpeg = backend_dir / "bin" / ffmpeg_filename
-            
-            if local_ffmpeg.exists():
-                ffmpeg_path = str(local_ffmpeg)
-            else:
-                # 시스템 PATH에서 찾기
-                ffmpeg_path = shutil.which('ffmpeg')
-            
-            if not ffmpeg_path:
-                print("[비디오 최적화] ⚠️ FFmpeg를 찾을 수 없습니다. 원본 사용")
-                return video_bytes
-            
-            # FFmpeg 명령어 구성
-            cmd = [
-                ffmpeg_path,
-                '-i', input_path,
-                '-vf', f'scale={target_width}:{target_height},fps={target_fps}',
-                '-c:v', 'libx264',
-                '-pix_fmt', 'yuv420p',  # Gemini 호환성 필수
-                '-profile:v', 'baseline', # 호환성 강화
-                '-level', '3.0',
-                '-preset', 'fast',
-                '-crf', '28',  # 압축률 높임 (품질은 충분)
-                '-movflags', '+faststart',  # moov atom을 파일 시작 부분에 배치
-                '-an',  # 오디오 제거 (필요 없음)
-                '-y',  # 덮어쓰기
-                output_path
-            ]
-            
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-            )
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                    print("[비디오 최적화] ❌ 출력 파일 생성 실패, 원본 사용")
+                    return input_path
 
-            if result.returncode != 0:
-                print(f"[비디오 최적화] ❌ FFmpeg 실행 실패, 원본 사용")
-                stderr_output = result.stderr.decode('utf-8', errors='ignore')
-                print(f"  FFmpeg 오류: {stderr_output[:200]}")
-                return video_bytes
+                opt_size = os.path.getsize(output_path)
+                reduction_ratio = (1 - opt_size / file_size) * 100
+                print(
+                    f"[비디오 최적화] ✅ 완료: "
+                    f"{file_size/1024/1024:.2f}MB -> {opt_size/1024/1024:.2f}MB "
+                    f"({reduction_ratio:.1f}% 감소)"
+                )
+                return output_path
 
-            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-                print("[비디오 최적화] ❌ 출력 파일 생성 실패, 원본 사용")
-                return video_bytes
-
-            with open(output_path, "rb") as f:
-                optimized_bytes = f.read()
-
-            reduction_ratio = (1 - len(optimized_bytes) / len(video_bytes)) * 100
-            print(
-                f"[비디오 최적화] ✅ 완료: "
-                f"{len(video_bytes)/1024/1024:.2f}MB -> {len(optimized_bytes)/1024/1024:.2f}MB "
-                f"({reduction_ratio:.1f}% 감소)"
-            )
-            return optimized_bytes
+            return await asyncio.to_thread(run_optimization)
 
         except Exception as e:
             import traceback
             print(f"[비디오 최적화] ❌ 오류: {e}")
             print(traceback.format_exc())
-            return video_bytes
-        finally:
-            try:
-                if os.path.exists(input_path):
-                    os.unlink(input_path)
-                if os.path.exists(output_path):
-                    os.unlink(output_path)
-            except Exception as e:
-                print(f"[비디오 최적화] 임시 파일 삭제 실패: {e}")
+            return input_path
 
     # ------------------------------------------------------------------
     # 안전 점수 계산
@@ -468,12 +449,6 @@ class GeminiService:
     def _calculate_safety_score(self, safety_analysis: dict) -> Tuple[int, list]:
         """
         안전 점수 및 감점 내역을 계산합니다.
-
-        감점 규칙:
-          - 사고/사고발생: -50 (최대 1회)
-          - 위험: -30 (최대 1회)
-          - 주의: -10 (최대 1회)
-          - 권장: -2점 × 발생 건수, 최대 -16점
         """
         total_deduction = 0
         has_accident = False
@@ -589,8 +564,6 @@ class GeminiService:
     def _extract_and_parse_json(self, text: str) -> dict:
         """
         텍스트에서 JSON 블록을 추출하고 파싱합니다.
-        - ```json 코드블록 제거
-        - 첫 '{'부터 마지막 '}'까지를 우선 사용
         """
         cleaned_text = text
 
@@ -649,14 +622,6 @@ class GeminiService:
     ) -> dict:
         """
         실시간 프레임 또는 짧은 영상을 분석합니다.
-        
-        Args:
-            frame_or_video: 이미지(JPEG) 또는 짧은 비디오 바이트
-            content_type: MIME 타입 (image/jpeg 또는 video/mp4)
-            age_months: 아이의 개월 수
-        
-        Returns:
-            dict: 실시간 분석 결과
         """
         try:
             # 프롬프트
@@ -700,23 +665,26 @@ class GeminiService:
             # 이미지/비디오 인코딩
             media_base64 = base64.b64encode(frame_or_video).decode("utf-8")
             
-            # Gemini API 호출
+            # Gemini API 호출 (Sync call wrapped in thread)
             generation_config = genai.types.GenerationConfig(
                 temperature=0.3,
                 top_k=30,
                 top_p=0.95,
             )
             
-            response = self.model.generate_content(
-                [
-                    {
-                        "mime_type": content_type,
-                        "data": media_base64,
-                    },
-                    prompt,
-                ],
-                generation_config=generation_config,
-            )
+            def generate_snapshot_sync():
+                return self.model.generate_content(
+                    [
+                        {
+                            "mime_type": content_type,
+                            "data": media_base64,
+                        },
+                        prompt,
+                    ],
+                    generation_config=generation_config,
+                )
+            
+            response = await asyncio.to_thread(generate_snapshot_sync)
             
             if not response or not hasattr(response, "text"):
                 raise ValueError("Gemini 응답이 올바르지 않습니다.")
@@ -759,13 +727,15 @@ class GeminiService:
     async def generate_text_from_prompt(self, prompt: str) -> str:
         """
         순수 텍스트 프롬프트를 사용하여 텍스트 응답을 생성합니다. (LLM 모드)
-        주로 리포트 요약, 메시지 생성 등에 사용됩니다.
         """
         try:
             print(f"[Gemini] 텍스트 생성 요청: {prompt[:50]}...")
-            # generate_content는 동기 함수이므로 asyncio.to_thread 사용 고려 (일단은 그냥 호출)
-            # 텍스트 전용 모델을 명시하는 게 좋지만, 기존 model(flash)도 텍스트 처리가 가능함.
-            response = self.model.generate_content(prompt)
+            
+            def generate_text_sync():
+                return self.model.generate_content(prompt)
+                
+            response = await asyncio.to_thread(generate_text_sync)
+            
             if response and hasattr(response, "text"):
                 return response.text.strip()
             return "응답을 생성할 수 없습니다."
@@ -778,7 +748,7 @@ class GeminiService:
     # ------------------------------------------------------------------
     async def analyze_video_vlm(
         self,
-        video_bytes: bytes,
+        video_path: str,
         content_type: str,
         stage: Optional[str] = None,
         age_months: Optional[int] = None,
@@ -786,59 +756,44 @@ class GeminiService:
     ) -> dict:
         """
         메타데이터 방식으로 비디오를 분석합니다.
-        3단계 프로세스:
-          1) VLM으로 메타데이터 추출 (영상 기반)
-          2) LLM으로 발달 단계 판단 (메타데이터 기반)
-          3) LLM으로 단계별 상세 분석 (메타데이터 + 단계별 프롬프트)
-
-        NOTE:
-          - 홈캠 8시간짜리 영상은 1시간 단위로 잘라서 이 함수에 전달하는 것을 권장합니다.
-          - 이 함수는 "최대 1시간 분량의 클립"을 한 번 분석하는 단위로 설계되었습니다.
+        
+        Args:
+            video_path: 비디오 파일 경로 (문자열)
         """
         try:
             mime_type = content_type or "video/mp4"
 
-            # ----------------------------------------------------------
-            # 0단계: 비디오 최적화 (해상도/FPS 다운샘플링)
-            # ----------------------------------------------------------
-            print(f"[0단계] 비디오 최적화 시작 (원본 크기: {len(video_bytes) / (1024 * 1024):.2f}MB)")
-            optimized_video_bytes = self._optimize_video(video_bytes)
-            print(f"[0단계] ✅ 비디오 최적화 완료 (최적화 크기: {len(optimized_video_bytes) / (1024 * 1024):.2f}MB)")
-
-            # ----------------------------------------------------------
-            # 1단계: VLM 호출 → 메타데이터 추출
-            # ----------------------------------------------------------
-            # ----------------------------------------------------------
-            # 1단계: VLM 호출 → 메타데이터 추출
-            # ----------------------------------------------------------
+            # 0단계: 비디오 최적화
+            print(f"[0단계] 비디오 최적화 시작 (파일: {video_path})")
+            optimized_video_path = await self._optimize_video(video_path)
+            
+            # 1단계: VLM 호출
             print("[1단계] 비디오에서 메타데이터 추출 중...")
 
             try:
-                # Base64 대신 File API 사용 (20MB 이상 파일 지원)
-                video_file = self._upload_to_gemini(optimized_video_bytes, mime_type)
+                # File API 사용
+                video_file = await self._upload_to_gemini(optimized_video_path, mime_type)
                 
                 metadata_prompt = self._load_prompt("vlm_metadata.ko.txt")
-                print(f"[1단계] 프롬프트 로드 완료 (크기: {len(metadata_prompt)} 문자)")
-
+                
                 vlm_generation_config = genai.types.GenerationConfig(
-                    temperature=0.0,  # 사실 기반 추출
+                    temperature=0.0,
                     top_k=30,
                     top_p=0.95,
                 )
 
                 print("[1단계] Gemini VLM API 호출 중...")
-                response = self.model.generate_content(
-                    [
-                        video_file,
-                        metadata_prompt,
-                    ],
-                    generation_config=vlm_generation_config,
-                )
+                def generate_metadata_sync():
+                    return self.model.generate_content(
+                        [video_file, metadata_prompt],
+                        generation_config=vlm_generation_config,
+                    )
+                
+                response = await asyncio.to_thread(generate_metadata_sync)
                 
                 # 원격 파일 삭제
                 try:
-                    genai.delete_file(video_file.name)
-                    print(f"[Gemini 업로드] 원격 파일 삭제 완료: {video_file.name}")
+                    await asyncio.to_thread(genai.delete_file, video_file.name)
                 except Exception as e:
                     print(f"[Gemini 업로드] 원격 파일 삭제 실패: {e}")
 
@@ -846,151 +801,80 @@ class GeminiService:
                     raise ValueError("Gemini VLM 응답이 올바르지 않습니다.")
 
                 metadata_text = response.text.strip()
-                print(f"[1단계] ✅ Gemini VLM 응답 수신 (크기: {len(metadata_text)} 문자)")
-                
                 metadata = self._extract_and_parse_json(metadata_text)
-                print(f"[1단계] ✅ JSON 파싱 완료")
                 
             except Exception as e:
                 print(f"[1단계] ❌ 메타데이터 추출 실패: {e}")
-                import traceback
-                print(traceback.format_exc())
                 raise
+            finally:
+                if optimized_video_path != video_path and os.path.exists(optimized_video_path):
+                    try:
+                        os.unlink(optimized_video_path)
+                    except Exception:
+                        pass
 
-            print(
-                f"[1차 완료] 관찰 {len(metadata.get('timeline_observations', []))}개, "
-                f"안전 이벤트 {len(metadata.get('safety_observations', []))}개"
-            )
-
-            # 1-1) 비디오 길이 계산 (OpenCV → 메타데이터 보정)
-            calculated_duration = self._get_video_duration(video_bytes, mime_type)
+            # 1-1) 비디오 길이 계산
+            calculated_duration = await self._get_video_duration(video_path, mime_type)
             if calculated_duration:
                 video_duration_seconds = calculated_duration
                 if "video_metadata" not in metadata:
                     metadata["video_metadata"] = {}
                 metadata["video_metadata"]["total_duration_seconds"] = calculated_duration
-                print(f"[비디오 길이] OpenCV 측정값 사용: {calculated_duration}초")
             else:
-                video_duration_seconds = metadata.get("video_metadata", {}).get(
-                    "total_duration_seconds"
-                )
-                print(f"[비디오 길이] VLM 추정값 사용: {video_duration_seconds}초")
+                video_duration_seconds = metadata.get("video_metadata", {}).get("total_duration_seconds")
 
+            # 메타데이터 상한 적용
+            timeline_obs = metadata.get("timeline_observations")
+            if isinstance(timeline_obs, list) and len(timeline_obs) > self.MAX_TIMELINE_OBS:
+                metadata["timeline_observations"] = timeline_obs[: self.MAX_TIMELINE_OBS]
+
+            safety_obs = metadata.get("safety_observations")
+            if isinstance(safety_obs, list) and len(safety_obs) > self.MAX_SAFETY_OBS:
+                metadata["safety_observations"] = safety_obs[: self.MAX_SAFETY_OBS]
+
+            # 2단계: LLM 호출
+            detected_stage = stage
+            stage_determination_result = None
+            initial_stage_from_age = None
+            
             video_duration_minutes = (
                 round(video_duration_seconds / 60, 2)
                 if video_duration_seconds
                 else None
             )
-            print(
-                f"[비디오 길이] {video_duration_seconds}초 ({video_duration_minutes}분)"
-            )
-
-            # 1-2) 메타데이터 상한 적용 (토큰 절감)
-            timeline_obs = metadata.get("timeline_observations")
-            if isinstance(timeline_obs, list) and len(timeline_obs) > self.MAX_TIMELINE_OBS:
-                print(
-                    f"[메타데이터 압축] timeline_observations "
-                    f"{len(timeline_obs)}개 → {self.MAX_TIMELINE_OBS}개로 축소"
-                )
-                metadata["timeline_observations"] = timeline_obs[: self.MAX_TIMELINE_OBS]
-
-            safety_obs = metadata.get("safety_observations")
-            if isinstance(safety_obs, list) and len(safety_obs) > self.MAX_SAFETY_OBS:
-                print(
-                    f"[메타데이터 압축] safety_observations "
-                    f"{len(safety_obs)}개 → {self.MAX_SAFETY_OBS}개로 축소"
-                )
-                metadata["safety_observations"] = safety_obs[: self.MAX_SAFETY_OBS]
-
-            # ----------------------------------------------------------
-            # 2단계: LLM 호출 → 발달 단계 판단
-            # ----------------------------------------------------------
-            detected_stage = stage
-            stage_determination_result = None
-            initial_stage_from_age = None
 
             if stage is None:
                 if age_months is not None:
-                    initial_stage_from_age = self._determine_stage_from_age_months(
-                        age_months
-                    )
-                    print(
-                        f"[발달 단계 초기화] age_months={age_months}개월 "
-                        f"→ 초기 단계: {initial_stage_from_age}단계"
-                    )
-
-                print("[2차 LLM] 메타데이터로 발달 단계 판단 중...")
+                    initial_stage_from_age = self._determine_stage_from_age_months(age_months)
 
                 stage_header_prompt = self._load_prompt("header.ko.txt")
-
                 age_hint = ""
                 if age_months is not None and initial_stage_from_age is not None:
-                    age_hint = f"""
-[개월 수 정보]
-- 이 아이의 개월 수: {age_months}개월
-- 개월 수 기반 예상 단계: {initial_stage_from_age}단계
-- 이 정보는 **매우 중요한 기준점**입니다. 특별한 사유(확연히 빠른/느린 발달 행동 관찰)가 없다면 이 단계를 우선적으로 고려하세요.
-- 다만, 관찰된 행동이 예상 단계와 **명확하게 일치하지 않는 경우에만** 다른 단계를 선택하세요.
-"""
+                    age_hint = f"\n[개월 수 정보]\n- 이 아이의 개월 수: {age_months}개월\n- 개월 수 기반 예상 단계: {initial_stage_from_age}단계\n"
 
-                # compact JSON으로 토큰 절감
                 metadata_json_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+                combined_prompt_stage = f"[입력 방식]\n비디오 대신 비디오에서 추출된 메타데이터를 제공합니다.\n{age_hint}\n[메타데이터]\n```json\n{metadata_json_str}\n```\n\n{stage_header_prompt}\n"
 
-                combined_prompt_stage = f"""[입력 방식]
-비디오 대신 비디오에서 추출된 메타데이터를 제공합니다.
-이 메타데이터를 바탕으로 발달 단계를 판단하세요.
-{age_hint}
-[메타데이터]
-```json
-{metadata_json_str}
-```
-
-{stage_header_prompt}
-
-[판단 방법]
-- timeline_observations에서 관찰된 행동 패턴 분석
-- behavior_summary에서 각 행동의 빈도 확인
-- 위 발달 단계 기준과 비교하여 판단
-- evidence에는 구체적인 빈도/지속시간을 포함
-"""
-
-                response = self.model.generate_content(combined_prompt_stage)
+                def generate_stage_sync():
+                    return self.model.generate_content(combined_prompt_stage)
+                
+                response = await asyncio.to_thread(generate_stage_sync)
 
                 if not response or not hasattr(response, "text"):
                     raise ValueError("Gemini 단계 판단 응답이 올바르지 않습니다.")
 
-                result_text = response.text.strip()
-                stage_determination_result = self._extract_and_parse_json(result_text)
+                stage_determination_result = self._extract_and_parse_json(response.text.strip())
                 detected_stage = stage_determination_result.get("detected_stage")
-
                 if not detected_stage:
                     raise ValueError("발달 단계를 판단할 수 없습니다.")
-
-                if initial_stage_from_age and detected_stage != initial_stage_from_age:
-                    print(
-                        f"[발달 단계 조정] 초기 {initial_stage_from_age}단계 "
-                        f"→ AI 판단 {detected_stage}단계 "
-                        f"(신뢰도: {stage_determination_result.get('confidence')})"
-                    )
-                else:
-                    print(
-                        f"[2차 완료] 판단된 단계: {detected_stage}, "
-                        f"신뢰도: {stage_determination_result.get('confidence')}"
-                    )
             else:
-                print(f"[발달 단계] 제공된 단계 사용: {stage}단계")
                 detected_stage = stage
 
-            # ----------------------------------------------------------
-            # 3단계: LLM 호출 → 단계별 상세 분석
-            # ----------------------------------------------------------
-            print(f"[3차 LLM] {detected_stage}단계 기준으로 상세 분석 중...")
-
+            # 3단계: LLM 호출
             if age_months is None and stage_determination_result:
                 estimated_age = stage_determination_result.get("age_months_estimate")
                 if estimated_age:
                     age_months = estimated_age
-                    print(f"[개월 수] 판단 결과에서 추정: {age_months}개월")
 
             stage_prompt = self._load_vlm_prompt(
                 stage=detected_stage,
@@ -999,191 +883,74 @@ class GeminiService:
             )
 
             metadata_json_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
-
-            combined_prompt_detail = f"""[입력 방식 - 중요!]
-비디오를 직접 보는 것이 아니라, 비디오에서 이미 추출된 메타데이터를 분석합니다.
-메타데이터에는 timeline_observations, behavior_summary, safety_observations 등이 포함되어 있습니다.
-
-[메타데이터]
-```json
-{metadata_json_str}
-```
-
-{stage_prompt}
-
-[메타데이터 기반 분석 방법]
-아래 프롬프트에서 "탐지", "관찰", "기록" 등의 표현은 메타데이터를 분석하는 것으로 해석하세요.
-
-1. development_analysis.skills 생성:
-   - behavior_summary에서 각 행동의 빈도(count)와 지속시간(total_duration_seconds) 확인
-   - timeline_observations에서 해당 행동의 구체적 예시(examples) 추출
-   - frequency는 behavior_summary의 count 값 사용
-   - examples는 timeline_observations에서 해당 action의 detail 사용
-
-2. safety_analysis.incident_events 생성:
-   - safety_observations의 각 항목을 incident_events로 변환
-   - event_id는 "E001", "E002" 형식으로 순차 부여
-   - severity는 safety_observations의 severity 값 사용
-   - timestamp_range는 safety_observations의 timestamp 사용
-     (단일 시점인 경우 +5초 하여 "HH:MM:SS-HH:MM:SS" 범위로 변환)
-   - description은 description에 trigger_behavior와 environment_factor를 포함하여 상세히 기술
-   - has_safety_device는 safety_observations의 has_safety_device 값 사용
-
-3. safety_analysis.critical_events 생성:
-   - safety_observations 중 severity가 '사고발생' 또는 '위험'인 항목은 critical_events에도 기록
-   - event_type은 severity에 따라 '실제사고' 또는 '사고직전위험상황'으로 분류
-
-4. safety_analysis.environment_risks 생성:
-   - environment.hazards_identified의 각 항목을 environment_risks로 변환
-   - risk_type, severity, environment_factor, has_safety_device 등을 적절히 채움
-
-5. safety_analysis.overall_safety_level 평가:
-   - adult_presence 정보를 반영하여 보호자의 개입 수준과 동반 여부를 고려해 판단
-
-6. development_analysis.next_stage_signs 생성:
-   - 현재 단계보다 더 발달된 행동이 보이면 이를 추출하여 기록
-
-7. development_analysis.summary 생성:
-   - behavior_summary의 전체 패턴을 보고 2-3문장으로 요약
-   - 빈도가 높은 행동들을 중심으로 서술
-
-8. 출력 스키마:
-   - 프롬프트에 정의된 JSON 스키마를 정확히 따를 것
-   - 모든 필수 필드를 포함할 것
-"""
+            combined_prompt_detail = f"[입력 방식 - 중요!]\n비디오를 직접 보는 것이 아니라, 비디오에서 이미 추출된 메타데이터를 분석합니다.\n[메타데이터]\n```json\n{metadata_json_str}\n```\n\n{stage_prompt}\n"
 
             generation_config = None
             if generation_params:
-                print(f"[Generation Config] 사용자 설정 적용: {generation_params}")
                 generation_config = genai.types.GenerationConfig(
                     temperature=generation_params.get("temperature", 0.4),
                     top_k=generation_params.get("top_k", 30),
                     top_p=generation_params.get("top_p", 0.95),
                 )
 
-            print("[Gemini API 호출 시작 (LLM 상세 분석 모드)]")
-            response = self.model.generate_content(
-                combined_prompt_detail,
-                generation_config=generation_config,
-            )
-            print("[Gemini API 호출 완료]")
+            def generate_detail_sync():
+                return self.model.generate_content(
+                    combined_prompt_detail,
+                    generation_config=generation_config,
+                )
+            
+            response = await asyncio.to_thread(generate_detail_sync)
 
             if not response or not hasattr(response, "text"):
                 raise ValueError("Gemini 상세 분석 응답이 올바르지 않습니다.")
 
             result_text = response.text.strip()
-            print(f"[Gemini 원본 응답 길이] {len(result_text)}자")
-            print(f"[Gemini 원본 응답 미리보기 (처음 500자)]\n{result_text[:500]}")
+            analysis_data = self._extract_and_parse_json(result_text)
 
-            try:
-                analysis_data = self._extract_and_parse_json(result_text)
-                print(f"[JSON 파싱 성공] 파싱된 키: {list(analysis_data.keys())}")
+            # 병합 및 마무리
+            if stage_determination_result:
+                analysis_data["stage_determination"] = {
+                    "detected_stage": stage_determination_result.get("detected_stage"),
+                    "confidence": stage_determination_result.get("confidence"),
+                    "evidence": stage_determination_result.get("evidence", []),
+                    "alternative_stages": stage_determination_result.get("alternative_stages", []),
+                }
 
-                # 단계 판단 결과 추가
-                if stage_determination_result:
-                    analysis_data["stage_determination"] = {
-                        "detected_stage": stage_determination_result.get(
-                            "detected_stage"
-                        ),
-                        "confidence": stage_determination_result.get("confidence"),
-                        "evidence": stage_determination_result.get("evidence", []),
-                        "alternative_stages": stage_determination_result.get(
-                            "alternative_stages", []
-                        ),
-                    }
+                if "meta" not in analysis_data:
+                    analysis_data["meta"] = {}
+                if "assumed_stage" not in analysis_data["meta"] or not analysis_data["meta"].get("assumed_stage"):
+                    analysis_data["meta"]["assumed_stage"] = detected_stage
+                if age_months is None:
+                    estimated_age = stage_determination_result.get("age_months_estimate")
+                    if estimated_age and ("age_months" not in analysis_data["meta"] or analysis_data["meta"].get("age_months") is None):
+                        analysis_data["meta"]["age_months"] = estimated_age
 
-                    if "meta" not in analysis_data:
-                        analysis_data["meta"] = {}
+            if video_duration_minutes is not None:
+                if "meta" not in analysis_data:
+                    analysis_data["meta"] = {}
+                analysis_data["meta"]["observation_duration_minutes"] = video_duration_minutes
 
-                    if (
-                        "assumed_stage" not in analysis_data["meta"]
-                        or not analysis_data["meta"].get("assumed_stage")
-                    ):
-                        analysis_data["meta"]["assumed_stage"] = detected_stage
+            if "safety_analysis" in analysis_data:
+                safety_score, incident_summary = self._calculate_safety_score(analysis_data["safety_analysis"])
+                analysis_data["safety_analysis"]["safety_score"] = safety_score
+                analysis_data["safety_analysis"]["incident_summary"] = incident_summary
+                
+                score = analysis_data["safety_analysis"]["safety_score"]
+                if score >= 90: level = "매우높음"
+                elif score >= 75: level = "높음"
+                elif score >= 65: level = "중간"
+                elif score >= 55: level = "낮음"
+                else: level = "매우낮음"
+                analysis_data["safety_analysis"]["overall_safety_level"] = level
 
-                    if age_months is None:
-                        estimated_age = stage_determination_result.get(
-                            "age_months_estimate"
-                        )
-                        if estimated_age and (
-                            "age_months" not in analysis_data["meta"]
-                            or analysis_data["meta"].get("age_months") is None
-                        ):
-                            analysis_data["meta"]["age_months"] = estimated_age
+            analysis_data["_extracted_metadata"] = metadata
+            return analysis_data
 
-                    print(
-                        f"[2단계 정보 병합] 최종 발달 단계: {detected_stage}단계 "
-                        f"(신뢰도: {stage_determination_result.get('confidence')})"
-                    )
-
-                # 비디오 길이 meta 설정
-                if video_duration_minutes is not None:
-                    if "meta" not in analysis_data:
-                        analysis_data["meta"] = {}
-                    analysis_data["meta"][
-                        "observation_duration_minutes"
-                    ] = video_duration_minutes
-                    print(
-                        f"[비디오 길이 자동 설정] observation_duration_minutes: {video_duration_minutes}분"
-                    )
-
-                # safety_score / overall_safety_level 재계산
-                if "safety_analysis" in analysis_data:
-                    safety_analysis = analysis_data["safety_analysis"]
-                    safety_score, incident_summary = self._calculate_safety_score(
-                        safety_analysis
-                    )
-                    safety_analysis["safety_score"] = safety_score
-                    safety_analysis["incident_summary"] = incident_summary
-
-                    if isinstance(
-                        safety_analysis.get("safety_score"), (int, float)
-                    ):
-                        score = safety_analysis["safety_score"]
-                        if score >= 90:
-                            level = "매우높음"
-                        elif score >= 75:
-                            level = "높음"
-                        elif score >= 65:
-                            level = "중간"
-                        elif score >= 55:
-                            level = "낮음"
-                        else:
-                            level = "매우낮음"
-                        safety_analysis["overall_safety_level"] = level
-                        print(
-                            f"[안전도 레벨 자동 설정] safety_score: {score} → overall_safety_level: {level}"
-                        )
-
-                # 디버깅용: 추출 메타데이터도 함께 반환
-                analysis_data["_extracted_metadata"] = metadata
-
-                print("[3차 완료] 상세 분석 완료")
-                return analysis_data
-
-            except json.JSONDecodeError as json_err:
-                print("⚠️ JSON 파싱 실패.")
-                print(f"[추출된 JSON 텍스트 (처음 500자)]\n{result_text[:500]}")
-                print(f"[추출된 JSON 텍스트 (마지막 500자)]\n{result_text[-500:]}")
-                print(f"[에러 위치] {json_err}")
-                raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(json_err)}")
-
-        except json.JSONDecodeError as e:
-            import traceback
-
-            print(f"❌ JSON 파싱 오류: {str(e)}")
-            print(f"상세:\n{traceback.format_exc()}")
-            raise ValueError(f"AI 응답을 파싱할 수 없습니다: {str(e)}")
-        except ValueError:
-            # 400 계열로 매핑될 수 있도록 그대로 올림
-            raise
         except Exception as e:
             import traceback
-
-            error_trace = traceback.format_exc()
             error_msg = str(e)
             print(f"❌ Gemini 메타데이터 기반 비디오 분석 오류: {error_msg}")
-            print(f"상세 에러:\n{error_trace}")
+            print(traceback.format_exc())
             raise Exception(f"비디오 분석 중 오류 발생: {error_msg}")
 
 

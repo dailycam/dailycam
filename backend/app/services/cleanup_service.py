@@ -10,6 +10,7 @@ from app.database.session import get_db
 from app.models.live_monitoring.models import SegmentAnalysis
 from app.models.clip import HighlightClip
 from app.models.camera_setting import CameraSetting, CameraVideo
+from sqlalchemy import and_
 
 
 class CleanupService:
@@ -129,9 +130,19 @@ class CleanupService:
                         
                         if segment_analysis:
                             # 분석 완료된 파일: 7일 후 삭제
+                            # 단, 클립 생성 실패 후 재시도를 위해 최대 8일까지 보호 (2일 연장)
+                            # 스토리지 부담 최소화: 대부분의 클립은 분석 직후 생성되므로, 
+                            # 7일이 지난 파일 중 최근 1일 이내만 추가 보호
                             if file_age_days >= 7:
-                                should_delete = True
-                                reason = f"분석 완료 후 {file_age_days}일 경과"
+                                # 분석 완료 후 7일 이상 지났지만, 최근 1일 이내면 클립 생성 실패 후 재시도 가능성
+                                # 스토리지 부담을 줄이기 위해 보호 기간을 최소화 (7일 → 최대 8일)
+                                # 대부분의 클립은 분석 직후 생성되므로, 7일이 지난 파일 중 최근 1일만 추가 보호
+                                if file_age_days < 8:
+                                    should_delete = False
+                                    reason = f"클립 생성 보호 기간 (분석 완료 후 {file_age_days}일, 최대 8일까지 보호)"
+                                else:
+                                    should_delete = True
+                                    reason = f"분석 완료 후 {file_age_days}일 경과"
                         else:
                             # 분석되지 않은 파일: 30일 후 삭제
                             if file_age_days >= 30:

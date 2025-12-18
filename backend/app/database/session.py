@@ -31,6 +31,8 @@ engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=3600,
+    pool_size=20,  # 커넥션 풀 크기 증가
+    max_overflow=40,  # 최대 오버플로우 커넥션 수
     echo=False  # SQL 쿼리 로깅 (개발 시 True로 변경 가능)
 )
 

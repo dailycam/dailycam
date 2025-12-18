@@ -15,7 +15,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
       - ./backend/app/commands/db/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
-      - ./backend/app/commands/db/add_camera_settings_table.sql:/docker-entrypoint-initdb.d/03_add_camera_settings_table.sql
+      # camera_settings 테이블은 SQLAlchemy ORM이 자동 생성 (users 테이블 의존성 때문)
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dailycam_root_2024}" ]
@@ -52,6 +52,14 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Seoul
+      # 로컬 개발 환경: S3 비활성화 (명시적 빈 값 설정)
+      - S3_BUCKET_NAME=
+      - AWS_REGION=
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - CLOUDFRONT_DOMAIN=
+      # 로컬 개발 환경: HLS 스트리밍 활성화 (직접 실행)
+      - ENABLE_HLS_STREAMING=true
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos
@@ -78,42 +86,12 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WORKER_ID=worker-1
       - DELETE_VIDEO_AFTER_ANALYSIS=false
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
-    volumes:
-      - ./backend/temp_videos:/app/temp_videos
-      - ./backend/videos:/app/videos
-      - ./backend:/app
-    command: python app/workers/analysis_worker.py
-    restart: unless-stopped
-    networks:
-      - dailycam-network
-
-  vlm-worker-2:
-    build: ./backend
-    container_name: dailycam-worker-2
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=dailycam_user
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dailycam_pass_2024}
-      - MYSQL_DATABASE=dailycam
-      - PYTHONUNBUFFERED=1
-      - TZ=Asia/Seoul
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - WORKER_ID=worker-2
-      - DELETE_VIDEO_AFTER_ANALYSIS=false
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+      # 로컬 개발 환경: S3 비활성화 (명시적 빈 값 설정)
+      - S3_BUCKET_NAME=
+      - AWS_REGION=
+      - AWS_ACCESS_KEY_ID=
+      - AWS_SECRET_ACCESS_KEY=
+      - CLOUDFRONT_DOMAIN=
     volumes:
       - ./backend/temp_videos:/app/temp_videos
       - ./backend/videos:/app/videos

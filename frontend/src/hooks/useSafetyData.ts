@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getAuthHeader } from '../lib/auth';
 import { SafetyReportData, ClockData } from '../types/safety';
 import { API_BASE_URL } from '@/constants/api';
 
@@ -30,9 +29,7 @@ export function useSafetyData() {
                     `${API_BASE_URL}/api/safety/summary?period_type=${periodType}`,
                     {
                         method: 'GET',
-                        headers: {
-                            ...getAuthHeader(),
-                        },
+                        credentials: 'include',
                     }
                 );
 

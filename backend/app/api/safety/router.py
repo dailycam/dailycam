@@ -1,7 +1,7 @@
 """Safety Report API Router"""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -27,6 +27,9 @@ def get_safety_report_summary(
     특정 날짜의 하루치 데이터를 조회합니다. (최근 7일 이내)
     period_type은 트렌드 차트의 기간을 결정합니다.
     """
+    import time
+    start_time = time.time()
+    
     # 조회할 날짜 설정 (기본값: 오늘)
     if target_date:
         try:
@@ -51,9 +54,10 @@ def get_safety_report_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    # 기간 내 분석 로그들
+    # 기간 내 분석 로그들 (관련 이벤트를 함께 로드하여 N+1 쿼리 방지)
     logs = (
         db.query(AnalysisLog)
+        .options(selectinload(AnalysisLog.safety_events))  # SafetyEvent를 미리 로드
         .filter(
             AnalysisLog.user_id == user_id,
             AnalysisLog.created_at >= start_date
@@ -63,62 +67,100 @@ def get_safety_report_summary(
     )
     
     # 주간/월간 안전도 추이 데이터
+    # 👉 화면 상단 "오늘의 종합 안전 점수"와 일관성을 유지하기 위해
+    #    모두 SegmentAnalysis.safety_score 기준으로 계산한다.
+    #    Fallback: 데이터가 없으면 AnalysisLog(사용자 기준)를 사용한다.
     trend_data: List[Dict[str, Any]] = []
+
+    # 현재 구현에서는 camera_id를 고정값으로 사용
+    # TODO: 추후 사용자별 카메라 매핑으로 확장
+    trend_camera_id = "camera-1"
     
     if period_type == "week":
-        # 주간: 오늘을 기준으로 지난 7일
+        # 주간: 오늘을 기준으로 지난 7일 (6일 전 ~ 오늘)
         today = datetime.now()
         day_names_ko = ["월", "화", "수", "목", "금", "토", "일"]
         
-        for i in range(6, -1, -1): # 6일 전부터 오늘까지 (오름차순으로 추가)
+        for i in range(6, -1, -1):  # 6일 전부터 오늘까지 (오름차순)
             day_to_query = today - timedelta(days=i)
-            
             day_start = day_to_query.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
-            
-            day_stats = (
-                db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+
+            # 1. SegmentAnalysis 조회 (카메라 기준)
+            day_segments = (
+                db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
-                    AnalysisLog.user_id == user_id,
-                    AnalysisLog.created_at >= day_start,
-                    AnalysisLog.created_at < day_end
+                    SegmentAnalysis.camera_id == trend_camera_id,
+                    SegmentAnalysis.segment_start >= day_start,
+                    SegmentAnalysis.segment_start < day_end,
+                    SegmentAnalysis.status == "completed",
                 )
                 .first()
             )
+
+            day_avg = int(day_segments.avg_safety or 0) if day_segments and day_segments.avg_safety else 0
             
-            # 요일 이름 가져오기
+            # 2. Fallback: AnalysisLog 조회 (사용자 기준)
+            if day_avg == 0:
+                user_logs_avg = (
+                    db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                    .filter(
+                        AnalysisLog.user_id == user_id,
+                        AnalysisLog.created_at >= day_start,
+                        AnalysisLog.created_at < day_end
+                    )
+                    .first()
+                )
+                if user_logs_avg and user_logs_avg.avg_safety:
+                    day_avg = int(user_logs_avg.avg_safety)
+
             day_label = day_names_ko[day_to_query.weekday()]
             
             trend_data.append({
                 "date": day_label,
-                "안전도": int(day_stats.avg_safety or 0) if day_stats.avg_safety else 0
+                "안전도": day_avg,
             })
-    else: # month
-        # 월간: 오늘을 기준으로 지난 4주간의 주간 평균
+    else:  # month
+        # 월간: 오늘을 기준으로 지난 4주간의 "주간 평균 안전 점수"
         today = datetime.now()
         
-        for i in range(3, -1, -1): # 3주 전부터 이번 주까지 (오름차순으로 추가)
+        for i in range(3, -1, -1):  # 3주 전부터 이번 주까지 (오름차순)
             # 각 주의 끝나는 날짜 (이번 주, 1주 전, 2주 전, 3주 전)
             end_of_week = today - timedelta(weeks=i)
-            
             # 각 주의 시작 날짜 (끝나는 날짜로부터 6일 전)
             start_of_week = end_of_week - timedelta(days=6)
-            
-            # DB 쿼리를 위한 시간 범위 설정
+
             week_start_query = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
             week_end_query = end_of_week.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+            # 1. SegmentAnalysis 조회
             week_stats = (
-                db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                db.query(func.avg(SegmentAnalysis.safety_score).label("avg_safety"))
                 .filter(
-                    AnalysisLog.user_id == user_id,
-                    AnalysisLog.created_at >= week_start_query,
-                    AnalysisLog.created_at <= week_end_query
+                    SegmentAnalysis.camera_id == trend_camera_id,
+                    SegmentAnalysis.segment_start >= week_start_query,
+                    SegmentAnalysis.segment_start <= week_end_query,
+                    SegmentAnalysis.status == "completed",
                 )
                 .first()
             )
             
-            # 주차 라벨링 (예: "3주 전", "2주 전", "지난주", "이번 주")
+            week_avg = int(week_stats.avg_safety or 0) if week_stats and week_stats.avg_safety else 0
+
+            # 2. Fallback: AnalysisLog 조회
+            if week_avg == 0:
+                 user_logs_avg = (
+                    db.query(func.avg(AnalysisLog.safety_score).label("avg_safety"))
+                    .filter(
+                        AnalysisLog.user_id == user_id,
+                        AnalysisLog.created_at >= week_start_query,
+                        AnalysisLog.created_at <= week_end_query
+                    )
+                    .first()
+                )
+                 if user_logs_avg and user_logs_avg.avg_safety:
+                    week_avg = int(user_logs_avg.avg_safety)
+
             if i == 0:
                 week_label = "이번 주"
             elif i == 1:
@@ -128,7 +170,7 @@ def get_safety_report_summary(
 
             trend_data.append({
                 "date": week_label,
-                "안전도": int(week_stats.avg_safety or 0) if week_stats.avg_safety else 0
+                "안전도": week_avg,
             })
     
     # 선택한 날짜의 하루치 데이터 조회 기준
@@ -246,8 +288,14 @@ def get_safety_report_summary(
         .all()
     )
     
-    today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
-    today_safety_scores.extend([s.safety_score for s in today_segments if s.safety_score is not None])
+    # AnalysisLog와 SegmentAnalysis 중복 합산 방지 (SegmentAnalysis 기준)
+    # today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+    today_safety_scores = [s.safety_score for s in today_segments if s.safety_score is not None]
+    
+    # Fallback: SegmentAnalysis 데이터가 없으면 AnalysisLog 데이터 사용
+    if not today_safety_scores and today_logs:
+        today_safety_scores = [log.safety_score for log in today_logs if log.safety_score is not None]
+
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     
     # 체크리스트 데이터 생성 (SafetyEvent 기반)
@@ -367,6 +415,10 @@ def get_safety_report_summary(
         safety_insights = latest_log.safety_insights
     else:
         safety_insights = []
+    
+    # 인사이트는 프롬프트에서 50자 이내로 생성되도록 지시됨 (백엔드 제한 제거)
+    
+    elapsed_time = time.time() - start_time
     
     return {
         "trendData": trend_data,  # 실시간

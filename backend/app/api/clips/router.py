@@ -31,6 +31,9 @@ def get_clip_highlights(
     
     - target_date: 특정 날짜의 클립만 조회 (예: 2025-12-09)
     """
+    import time
+    start_time = time.time()
+    
     # 기본 쿼리
     query = db.query(HighlightClip).order_by(HighlightClip.created_at.desc())
     
@@ -89,6 +92,8 @@ def get_clip_highlights(
             "duration_seconds": clip.duration_seconds or 0,
             "created_at": created_at_kst,
         })
+    
+    elapsed_time = time.time() - start_time
     
     return {
         "total": len(result),
@@ -224,8 +229,6 @@ async def test_create_clip(
     # 가장 최근 파일은 아직 생성 중일 수 있으므로 두 번째 파일 사용
     source_video = archive_videos[1]
     
-    print(f"[테스트 클립] 원본 영상 선택: {source_video.name}")
-    print(f"[테스트 클립] 파일 크기: {source_video.stat().st_size / (1024*1024):.2f} MB")
     
     # 클립 생성
     service = HighlightClipService()

@@ -17,10 +17,17 @@ export const useDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true)
+            setError(null)
+            // 날짜 변경 시 이전 데이터 초기화 (깜빡임 방지하려면 이 줄 제거)
+            setDashboardData(null)
+            
             try {
                 const dateStr = selectedDate.toISOString().split('T')[0] // YYYY-MM-DD 형식
+                console.log(`📅 [Dashboard] 날짜 변경: ${dateStr}`)
                 const data = await getDashboardData(dateStr)
                 console.log('📦 [Dashboard] 받은 데이터:', data)
+                console.log('🔵 [Dashboard] monitoringRanges in response:', data?.monitoringRanges)
                 setDashboardData(data)
             } catch (err) {
                 console.error("Failed to fetch dashboard data:", err)
@@ -49,26 +56,20 @@ export const useDashboard = () => {
         }))
     }, [dashboardData])
 
-    // 모니터링 구간 데이터 준비 (실제 분석 시간 또는 이벤트 시간 기반)
+    // 모니터링 구간 데이터 준비 (백엔드 데이터만 사용 - 이벤트가 있는 구간만)
     const monitoringRanges: MonitoringRange[] = useMemo(() => {
-        // [수정] 백엔드에서 받은 실제 분석 구간 데이터가 있으면 우선 사용
+        console.log('🔍 [Monitoring Ranges] dashboardData:', dashboardData?.monitoringRanges)
+        
+        // 백엔드에서 받은 실제 분석 구간 데이터만 사용 (폴백 제거)
         if (dashboardData?.monitoringRanges && dashboardData.monitoringRanges.length > 0) {
             console.log('✅ [Monitoring Ranges] 백엔드 데이터 사용:', dashboardData.monitoringRanges)
             return dashboardData.monitoringRanges
         }
 
-        // 폴백: 백엔드 데이터가 없으면 타임라인 이벤트로 추정
-        if (timelineEvents.length === 0) return []
-
-        // 이벤트를 시간순으로 정렬
-        const sortedEvents = [...timelineEvents].sort((a, b) => a.time.localeCompare(b.time))
-
-        // 가장 빠른 시간과 가장 늦은 시간 찾기
-        const startTime = sortedEvents[0].time
-        const endTime = sortedEvents[sortedEvents.length - 1].time
-
-        return [{ start: startTime, end: endTime }]
-    }, [timelineEvents, dashboardData])
+        // 백엔드 데이터가 없으면 빈 배열 반환 (파란 띠 표시 안 함)
+        console.log('⚠️ [Monitoring Ranges] 데이터 없음, 빈 배열 반환')
+        return []
+    }, [dashboardData])
 
     // 시간대별 통계 - 백엔드 데이터 우선 사용
     const hourlyStats: HourlyStat[] = useMemo(() => {
@@ -177,12 +178,13 @@ export const useDashboard = () => {
 
     // 백엔드에서 받은 실제 데이터 직접 사용
     const dailyStats: DailyStats = useMemo(() => {
-        const now = new Date()
-        const currentHour = now.getHours()
-
-        // 자정 이후 (0시 0분~0시 59분)면 초기화
-        if (currentHour === 0) {
-            console.log('🌙 [Daily Stats] 자정 이후 - 점수 초기화 (0점)')
+        // 선택한 날짜가 오늘인지 확인
+        const today = new Date()
+        const isToday = selectedDate.toDateString() === today.toDateString()
+        
+        // 오늘이고 자정 직후 (0시)라면 초기화
+        if (isToday && today.getHours() === 0) {
+            console.log('🌙 [Daily Stats] 오늘 자정 이후 - 점수 초기화 (0점)')
             return {
                 safetyScore: 0,
                 developmentScore: 0,
@@ -193,6 +195,7 @@ export const useDashboard = () => {
 
         // 백엔드에서 받은 데이터를 직접 사용
         console.log('📊 [Daily Stats] 백엔드 데이터 사용:', {
+            selectedDate: selectedDate.toISOString().split('T')[0],
             safetyScore: dashboardData?.safetyScore,
             developmentScore: dashboardData?.developmentScore,
             monitoringHours: dashboardData?.monitoringHours,
@@ -207,7 +210,7 @@ export const useDashboard = () => {
             monitoringHours: dashboardData?.monitoringHours ?? 0,
             incidentCount: dashboardData?.incidentCount ?? 0
         }
-    }, [dashboardData])
+    }, [dashboardData, selectedDate])
 
     const handleEventClick = (events: any[], timeRange: string, category: string) => {
         setModalEvents(events)

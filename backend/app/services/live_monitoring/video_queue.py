@@ -34,7 +34,6 @@ class VideoQueue:
         self.current_queue = []
         
         if not self.db:
-            print(f"[영상 큐] ⚠️ DB 세션이 없어 로컬 파일 시스템을 사용합니다.")
             # 폴백: 로컬 파일 시스템 사용
             user_uploaded_videos = list(self.video_dir.glob("user_uploaded_*.mp4"))
             if user_uploaded_videos:
@@ -43,7 +42,6 @@ class VideoQueue:
                     random.shuffle(user_uploaded_videos)
                 while len(self.current_queue) * 5 < target_duration_minutes * 60:
                     self.current_queue.extend(user_uploaded_videos)
-                print(f"[영상 큐] 로컬 파일 {len(user_uploaded_videos)}개 사용")
             return
         
         # DB에서 활성화된 영상 조회
@@ -55,7 +53,6 @@ class VideoQueue:
             ).first()
             
             if not camera_setting:
-                print(f"[영상 큐] ⚠️ 카메라 설정을 찾을 수 없습니다: {self.camera_id}")
                 return
             
             # 활성화된 영상들 조회 (order_index 순서대로)
@@ -65,23 +62,34 @@ class VideoQueue:
             ).order_by(CameraVideo.order_index).all()
             
             if not camera_videos:
-                print(f"[영상 큐] ⚠️ 활성화된 영상이 없습니다. Settings 페이지에서 영상을 업로드해주세요.")
                 return
             
             # 파일 경로로 변환하고 존재 여부 확인
             valid_videos = []
             for video in camera_videos:
                 video_path = Path(video.file_path)
+                if not video_path.exists():
+                    # 로컬에 파일이 없으면 S3에서 다운로드 시도
+                    try:
+                        from app.services.s3_service import S3Service
+                        s3_service = S3Service()
+                        
+                        if s3_service.is_enabled():
+                            s3_key = f"videos/{self.camera_id}/{video_path.name}"
+                            video_path.parent.mkdir(parents=True, exist_ok=True)
+                            s3_service.s3_client.download_file(
+                                s3_service.bucket_name,
+                                s3_key,
+                                str(video_path)
+                            )
+                    except Exception:
+                        pass
+
                 if video_path.exists():
                     valid_videos.append(video_path)
-                else:
-                    print(f"[영상 큐] ⚠️ 파일이 존재하지 않습니다: {video.file_path}")
             
             if not valid_videos:
-                print(f"[영상 큐] ⚠️ 유효한 영상 파일이 없습니다.")
                 return
-            
-            print(f"[영상 큐] ✅ DB에서 활성화된 영상 {len(valid_videos)}개 발견")
             
             if shuffle:
                 random.shuffle(valid_videos)
@@ -90,10 +98,7 @@ class VideoQueue:
             while len(self.current_queue) * 5 < target_duration_minutes * 60:
                 self.current_queue.extend(valid_videos)
             
-            print(f"[영상 큐] 영상을 순환 재생 큐에 추가 (총 {len(self.current_queue)}개)")
-            
-        except Exception as e:
-            print(f"[영상 큐] ❌ DB 조회 중 오류: {e}")
+        except Exception:
             # 폴백: 로컬 파일 시스템 사용
             user_uploaded_videos = list(self.video_dir.glob("user_uploaded_*.mp4"))
             if user_uploaded_videos:
@@ -102,7 +107,6 @@ class VideoQueue:
                     random.shuffle(user_uploaded_videos)
                 while len(self.current_queue) * 5 < target_duration_minutes * 60:
                     self.current_queue.extend(user_uploaded_videos)
-                print(f"[영상 큐] 폴백: 로컬 파일 {len(user_uploaded_videos)}개 사용")
     
     def get_next_video(self) -> Optional[Path]:
         """

@@ -17,7 +17,7 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react'
-import { getAuthToken, removeAuthToken } from '../lib/auth'
+import { removeAuthToken } from '../lib/auth'
 import { API_BASE_URL } from '@/constants/api'
 import { getUserCameras, uploadCameraVideo, deleteCameraVideo, getStorageUsage, type CameraSetting } from '@/lib/api'
 import {
@@ -112,14 +112,22 @@ export default function Settings() {
         setCameras(result.cameras)
 
         // 카메라가 있으면 첫 번째 카메라 선택
-        if (result.cameras.length > 0 && !selectedCameraId) {
-          setSelectedCameraId(result.cameras[0].camera_id)
-        } else if (result.cameras.length === 0) {
-          // 카메라가 없으면 기본값 설정
-          setSelectedCameraId('camera-1')
+        if (result.cameras.length > 0) {
+          if (!selectedCameraId) {
+            setSelectedCameraId(result.cameras[0].camera_id)
+          }
+        } else {
+          // 카메라가 없으면(로컬 테스트 등) 기본값 'camera-1' 설정
+          if (!selectedCameraId) {
+             setSelectedCameraId('camera-1')
+          }
         }
       } catch (error) {
         console.error('카메라 설정 조회 오류:', error)
+         // 에러 발생 시에도 기본값 설정 (로컬 테스트 편의성)
+         if (!selectedCameraId) {
+            setSelectedCameraId('camera-1')
+         }
       }
     }
 
@@ -223,15 +231,13 @@ export default function Settings() {
       const base64String = reader.result as string
 
       try {
-        const token = getAuthToken()
-
         // 즉시 서버에 저장
         const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
+          credentials: 'include',
           body: JSON.stringify({
             ...profileForm,
             picture: base64String
@@ -263,13 +269,12 @@ export default function Settings() {
 
     try {
       setIsCancelling(true)
-      const token = getAuthToken()
       const res = await fetch(`${API_BASE_URL}/api/payments/subscribe/basic/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
 
       if (!res.ok) {
@@ -326,15 +331,14 @@ export default function Settings() {
 
     try {
       setIsSavingProfile(true)
-      const token = getAuthToken()
 
       // 프로필 업데이트 API 호출
       const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(profileForm),
       })
 
@@ -407,6 +411,13 @@ export default function Settings() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    // 현재 선택된 카메라 ID 확인 및 기본값 처리
+    let activeCameraId = selectedCameraId
+    if (!activeCameraId) {
+      activeCameraId = 'camera-1'
+      setSelectedCameraId(activeCameraId)
+    }
+
     // 파일 검증
     if (!file.type.startsWith('video/')) {
       alert('비디오 파일만 업로드 가능합니다')
@@ -428,7 +439,7 @@ export default function Settings() {
         setUploadProgress((prev) => Math.min(prev + 10, 90))
       }, 500)
 
-      await uploadCameraVideo(selectedCameraId, file)
+      await uploadCameraVideo(activeCameraId, file)
 
       clearInterval(progressInterval)
       setUploadProgress(100)
@@ -543,13 +554,10 @@ export default function Settings() {
 
     try {
       setIsDeletingAccount(true)
-      const token = getAuthToken()
 
       const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',  // httpOnly Cookie 전송
       })
 
       if (!response.ok) {

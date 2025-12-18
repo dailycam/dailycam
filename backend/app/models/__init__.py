@@ -3,6 +3,7 @@
 from app.database import Base
 from app.models.user import User
 from app.models.token_blacklist import TokenBlacklist
+from app.models.refresh_token import RefreshToken
 from app.models.analysis import AnalysisLog, SafetyEvent, DevelopmentEvent
 from app.models.summary import DailySummary
 from app.models.clip import HighlightClip
@@ -15,6 +16,7 @@ __all__ = [
     "Base",
     "User",
     "TokenBlacklist",
+    "RefreshToken",
     "AnalysisLog",
     "SafetyEvent",
     "DevelopmentEvent",

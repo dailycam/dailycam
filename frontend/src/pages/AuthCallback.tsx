@@ -1,31 +1,28 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { setAuthToken } from '../lib/auth'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { API_BASE_URL } from '@/constants/api'
 
+const IS_DEV = import.meta.env.DEV
+
+function devLog(...args: any[]): void {
+  if (IS_DEV) {
+    console.log(...args)
+  }
+}
+
 export default function AuthCallback() {
-    const [searchParams] = useSearchParams()
     const navigate = useNavigate()
     const { refreshUser } = useAuth()
     const [status, setStatus] = useState('로그인 처리 중...')
 
     useEffect(() => {
         const handleCallback = async () => {
-            const token = searchParams.get('token')
-
-            if (!token) {
-                console.warn('[AuthCallback] 토큰이 없습니다.')
-                navigate('/login', { replace: true })
-                return
-            }
-
             try {
-                // 1. 토큰 저장
-                setAuthToken(token)
-                console.log('[AuthCallback] 토큰 저장 완료')
+                // httpOnly Cookie가 이미 설정되었으므로 토큰 처리 불필요
+                devLog('[AuthCallback] httpOnly Cookie로 인증 완료')
 
-                // 2. 사용자 정보 조회 (Context에서 가져오기)
+                // 1. 사용자 정보 조회
                 setStatus('사용자 정보 확인 중...')
                 await refreshUser()
                 
@@ -34,11 +31,8 @@ export default function AuthCallback() {
                 let currentUserInfo = null
                 while (retries < 10) {
                     await new Promise(resolve => setTimeout(resolve, 100))
-                    // Context에서 직접 가져오기 위해 다시 확인
                     const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
+                        credentials: 'include',
                     })
                     if (response.ok) {
                         currentUserInfo = await response.json()
@@ -51,55 +45,49 @@ export default function AuthCallback() {
                     throw new Error('사용자 정보를 가져올 수 없습니다')
                 }
                 
-                console.log('[AuthCallback] 사용자 정보:', currentUserInfo)
+                devLog('[AuthCallback] 사용자 정보:', currentUserInfo)
 
-                // 3. 구독 상태 확인
+                // 2. 구독 상태 확인
                 const isSubscribed = Boolean(currentUserInfo.is_subscribed)
 
-                // 4. 프로필 완성 여부 확인 (아이 이름, 생년월일)
+                // 3. 프로필 완성 여부 확인 (아이 이름, 생년월일)
                 const profileCompleted = Boolean(currentUserInfo.child_name && currentUserInfo.child_birthdate)
 
-                // 5. 리다이렉트 로직
+                // 4. 리다이렉트 로직
                 if (!isSubscribed) {
-                    // 미구독 회원 -> 구독 페이지
-                    console.log('[AuthCallback] 미구독 회원 - 구독 페이지로 이동')
+                    devLog('[AuthCallback] 미구독 회원 - 구독 페이지로 이동')
                     navigate('/subscription', { replace: true })
                 } else if (!profileCompleted) {
-                    // 구독 회원이지만 프로필 미완성 -> 프로필 등록 페이지
-                    console.log('[AuthCallback] 프로필 미완성 - 프로필 등록 페이지로 이동')
+                    devLog('[AuthCallback] 프로필 미완성 - 프로필 등록 페이지로 이동')
                     navigate('/profile-setup', { replace: true })
                 } else {
-                    // 구독 회원 + 프로필 완성 -> 대시보드로 이동
-                    console.log('[AuthCallback] 구독 회원 + 프로필 완성 - 대시보드로 이동')
+                    devLog('[AuthCallback] 구독 회원 + 프로필 완성 - 대시보드로 이동')
 
-                    // 상태 업데이트
                     setStatus('대시보드로 이동 중...')
-
-                    // 대시보드로 즉시 이동
                     navigate('/dashboard', { replace: true })
 
                     // AI 콘텐츠 미리 로드 (대시보드 데이터 로드 후 실행되도록 약간 지연)
                     setTimeout(() => {
-                        console.log('[AuthCallback] AI 콘텐츠 미리 로드 시작')
+                        devLog('[AuthCallback] AI 콘텐츠 미리 로드 시작')
                         Promise.all([
                             fetch(`${API_BASE_URL}/api/content/recommended-videos`, {
-                                headers: { Authorization: `Bearer ${token}` }
+                                credentials: 'include'
                             }),
                             fetch(`${API_BASE_URL}/api/content/recommended-blogs`, {
-                                headers: { Authorization: `Bearer ${token}` }
+                                credentials: 'include'
                             }),
                             fetch(`${API_BASE_URL}/api/content/recommended-news`, {
-                                headers: { Authorization: `Bearer ${token}` }
+                                credentials: 'include'
                             }),
                             fetch(`${API_BASE_URL}/api/content/trending`, {
-                                headers: { Authorization: `Bearer ${token}` }
+                                credentials: 'include'
                             })
                         ]).then(() => {
-                            console.log('[AuthCallback] AI 콘텐츠 미리 로드 완료')
+                            devLog('[AuthCallback] AI 콘텐츠 미리 로드 완료')
                         }).catch(err => {
                             console.warn('[AuthCallback] AI 콘텐츠 미리 로드 실패 (무시):', err)
                         })
-                    }, 500) // 500ms 지연
+                    }, 500)
                 }
             } catch (error) {
                 console.error('[AuthCallback] 오류 발생:', error)
@@ -108,7 +96,7 @@ export default function AuthCallback() {
         }
 
         handleCallback()
-    }, [searchParams, navigate])
+    }, [navigate])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">

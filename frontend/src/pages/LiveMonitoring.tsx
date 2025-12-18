@@ -7,44 +7,122 @@ import {
   MapPin,
   Upload,
   X,
+  MonitorPlay,
+  TrendingUp,
+  Shield,
 } from 'lucide-react'
 import { stopStream } from '../lib/api'
 import { API_BASE_URL } from '@/constants/api'
-import HLSVideoPlayer from '../components/HLSVideoPlayer'
+import { useOutletContext } from 'react-router-dom'
+
+// Clip Type Definition
+interface Clip {
+  id: number
+  title: string
+  description: string
+  video_url: string
+  thumbnail_url: string
+  category: string
+  created_at: string
+  importance: 'high' | 'medium' | 'low'
+}
 
 export default function LiveMonitoring() {
-  const [isMuted] = useState(false)
-  const [selectedCamera, setSelectedCamera] = useState('camera-1')
-  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
+  // AppLayout에서 전달된 컨텍스트 사용 (플레이어는 AppLayout에서 관리)
+  const outletContext = useOutletContext<{
+    hlsUrl: string | null
+    setHlsUrl: (url: string | null) => void
+    selectedCamera: string
+    setSelectedCamera: (camera: string) => void
+  }>()
+
+  const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
+  const [hlsUrl, setHlsUrl] = useState<string | null>(outletContext?.hlsUrl || null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [clips, setClips] = useState<Clip[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 페이지 로드 시 스트림 상태 확인 및 자동 재생
+  // AppLayout의 상태와 동기화
+  useEffect(() => {
+    if (outletContext) {
+      setHlsUrl(outletContext.hlsUrl)
+      setSelectedCamera(outletContext.selectedCamera)
+    }
+  }, [outletContext])
+
+  // 카메라 변경 시 AppLayout에 알림
+  useEffect(() => {
+    if (outletContext?.setSelectedCamera) {
+      outletContext.setSelectedCamera(selectedCamera)
+    }
+  }, [selectedCamera, outletContext])
+
+  // 최근 클립 폴링
+  useEffect(() => {
+    const fetchClips = async () => {
+      try {
+        // 로컬 시간 기준 오늘 날짜 구하기 (YYYY-MM-DD)
+        const d = new Date()
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        const today = `${year}-${month}-${day}`
+
+        const response = await fetch(`${API_BASE_URL}/api/clips/list?limit=10&target_date=${today}`)
+        if (response.ok) {
+          const data = await response.json()
+          setClips(data.clips)
+        }
+      } catch (error) {
+        console.error('클립 목록 조회 실패:', error)
+      }
+    }
+
+    fetchClips()
+    const interval = setInterval(fetchClips, 5000) // 5초마다 갱신
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // 플레이어는 AppLayout에서 관리됨 (DOM 조작 제거)
+
+  // 페이지 로드 시 스트림 상태 확인 (AppLayout에서도 확인하므로 여기서는 초기 로드만)
   useEffect(() => {
     const checkStreamStatus = async () => {
       try {
-        const status = await fetch(`${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`)
+        const status = await fetch(
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+          { credentials: 'include' }
+        )
         const data = await status.json()
-        
+
         if (data.is_active && data.is_running) {
-          // 서버에서 스트림이 이미 실행 중이면 HLS URL 설정
-          console.log('[HLS] 서버에서 스트림 실행 중, HLS 플레이어 시작')
           const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
           setHlsUrl(url)
+          if (outletContext?.setHlsUrl) {
+            outletContext.setHlsUrl(url)
+          }
           setIsStreamActive(true)
+        } else {
+          setHlsUrl(null)
+          if (outletContext?.setHlsUrl) {
+            outletContext.setHlsUrl(null)
+          }
+          setIsStreamActive(false)
         }
       } catch (error) {
         console.error('[HLS] 스트림 상태 확인 실패:', error)
       }
     }
-    
+
+    // 초기 로드 시 한 번만 확인 (AppLayout에서 주기적으로 확인함)
     checkStreamStatus()
-  }, [selectedCamera])
+  }, [selectedCamera, outletContext])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,7 +148,7 @@ export default function LiveMonitoring() {
       // Settings API를 통해 업로드 (카메라 설정 API 사용)
       const formData = new FormData()
       formData.append('video', videoFile)
-      
+
       const response = await fetch(`${API_BASE_URL}/api/camera-settings/cameras/${selectedCamera}/upload-video`, {
         method: 'POST',
         body: formData,
@@ -80,17 +158,21 @@ export default function LiveMonitoring() {
         throw new Error('업로드 실패')
       }
 
-      console.log('[HLS] 비디오 업로드 완료, 서버가 HLS 스트림 시작 중...')
-      
       // 잠시 대기 후 스트림 상태 확인
       await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      const status = await fetch(`${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`)
+
+      const status = await fetch(
+        `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+        { credentials: 'include' }  // httpOnly Cookie 전송
+      )
       const data = await status.json()
-      
+
       if (data.is_active && data.is_running) {
         const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
         setHlsUrl(url)
+        if (outletContext?.setHlsUrl) {
+          outletContext.setHlsUrl(url)
+        }
         setIsStreamActive(true)
         setShowUploadModal(false)
       } else {
@@ -109,26 +191,33 @@ export default function LiveMonitoring() {
     try {
       await stopStream(selectedCamera)
       setHlsUrl(null)
+      if (outletContext?.setHlsUrl) {
+        outletContext.setHlsUrl(null)
+      }
       setIsStreamActive(false)
       setHlsError(null)
-      console.log('[HLS] 스트림 중지')
     } catch (error: any) {
       console.error('[HLS] 스트림 중지 오류:', error)
     }
   }
 
-  // HLS 플레이어 이벤트 핸들러
-  const handleHlsPlay = () => {
-    setIsStreamActive(true)
+  // 시간 포맷팅 함수
+  const formatTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString)
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch (e) {
+      return ''
+    }
   }
 
-  const handleHlsPause = () => {
-    // 필요시 추가 로직
-  }
-
-  const handleHlsError = (error: string) => {
-    setHlsError(error)
-    console.error('[HLS] 에러:', error)
+  // 중요도에 따른 타입 반환
+  const getClipType = (importance: string): 'warning' | 'info' | 'safe' => {
+    switch (importance) {
+      case 'high': return 'warning'
+      case 'medium': return 'info'
+      default: return 'safe'
+    }
   }
 
   return (
@@ -164,22 +253,18 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed */}
+          {/* Main Camera Feed - 플레이어는 AppLayout 상단에 표시됨 */}
           <div className="card p-0 overflow-hidden">
-            <div className="relative bg-gray-900 aspect-video">
-              {/* HLS Video Player */}
-              {hlsUrl ? (
-                <HLSVideoPlayer
-                  src={hlsUrl}
-                  autoPlay={true}
-                  muted={isMuted}
-                  onPlay={handleHlsPlay}
-                  onPause={handleHlsPause}
-                  onError={handleHlsError}
-                  className="w-full h-full"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="relative bg-gray-900 aspect-video"
+              style={{
+                pointerEvents: 'none',
+                overflow: 'hidden'
+              }}
+            >
+              {/* 플레이어는 AppLayout 상단에 표시되므로 여기서는 안내 메시지만 */}
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-0">
+                {!hlsUrl ? (
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
                     <p className="text-base">카메라 피드</p>
@@ -194,8 +279,15 @@ export default function LiveMonitoring() {
                       비디오 파일을 업로드하여 스트리밍을 시작하세요
                     </p>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center text-gray-400">
+                    <p className="text-base">라이브 스트림 재생 중</p>
+                    <p className="text-xs mt-2 text-gray-500">
+                      비디오 플레이어는 상단에 표시됩니다
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Live Indicator */}
               {hlsUrl && isStreamActive && (
@@ -234,8 +326,6 @@ export default function LiveMonitoring() {
                   <span className="text-sm">데드존 근처 접근 감지</span>
                 </div>
               </div>
-
-              {/* 비디오 컨트롤은 HLS 플레이어 자체 컨트롤 사용 */}
             </div>
           </div>
 
@@ -290,57 +380,28 @@ export default function LiveMonitoring() {
 
         {/* Right Sidebar - Activity Log & Alerts */}
         <div className="space-y-4">
-          {/* Real-time Alerts */}
+          {/* Real-time Clips Log */}
           <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">알림</h3>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              <AlertItem
-                type="warning"
-                message="데드존 근처 접근"
-                time="방금 전"
-              />
-              <AlertItem
-                type="info"
-                message="세이프존으로 이동"
-                time="2분 전"
-              />
-              <AlertItem
-                type="warning"
-                message="가구 모서리 근접"
-                time="5분 전"
-              />
-              <AlertItem
-                type="safe"
-                message="안전한 활동 중"
-                time="10분 전"
-              />
-            </div>
-          </div>
-
-          {/* Activity Timeline */}
-          <div className="card">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">활동 타임라인</h3>
-            <div className="space-y-4">
-              <TimelineItem
-                time="15:45"
-                activity="거실에서 놀이 중"
-                status="safe"
-              />
-              <TimelineItem
-                time="15:30"
-                activity="주방 근처 접근"
-                status="warning"
-              />
-              <TimelineItem
-                time="15:15"
-                activity="낮잠에서 깨어남"
-                status="info"
-              />
-              <TimelineItem
-                time="14:00"
-                activity="낮잠 시작"
-                status="safe"
-              />
+            <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <MonitorPlay className="w-5 h-5 text-primary-600" />
+              AI 감지 로그
+            </h3>
+            <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              {clips.length > 0 ? (
+                clips.map((clip) => (
+                  <AlertItem
+                    key={clip.id}
+                    type={getClipType(clip.importance)}
+                    message={clip.title}
+                    time={formatTime(clip.created_at)}
+                    category={clip.category}
+                  />
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <p>감지된 클립이 없습니다.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -505,10 +566,12 @@ function AlertItem({
   type,
   message,
   time,
+  category,
 }: {
   type: 'warning' | 'info' | 'safe'
   message: string
   time: string
+  category?: string
 }) {
   const typeConfig = {
     warning: { bg: 'bg-warning-50', icon: 'text-warning', border: 'border-warning-200' },
@@ -517,48 +580,20 @@ function AlertItem({
   }
 
   const config = typeConfig[type]
+  
+  // 클립 하이라이트 페이지와 동일한 Lucide 아이콘 사용
+  // 발달: TrendingUp (text-safe), 안전: Shield (text-warning)
+  const IconComponent = category === '발달' ? TrendingUp : Shield
+  const iconColor = category === '발달' ? 'text-safe' : 'text-warning'
 
   return (
     <div className={`p-3 rounded-lg border ${config.bg} ${config.border}`}>
       <div className="flex items-start gap-2">
-        <AlertTriangle className={`w-4 h-4 mt-0.5 ${config.icon}`} />
+        <IconComponent className={`w-4 h-4 mt-0.5 ${iconColor}`} />
         <div className="flex-1">
           <p className="text-sm text-gray-900">{message}</p>
           <p className="text-xs text-gray-500 mt-1">{time}</p>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// Timeline Item Component
-function TimelineItem({
-  time,
-  activity,
-  status,
-}: {
-  time: string
-  activity: string
-  status: 'safe' | 'warning' | 'info'
-}) {
-  const statusColors = {
-    safe: 'bg-safe',
-    warning: 'bg-warning',
-    info: 'bg-blue-500',
-  }
-
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
-        <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
-      </div>
-      <div className="flex-1 pb-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Clock className="w-3 h-3 text-gray-400" />
-          <span className="text-xs text-gray-500">{time}</span>
-        </div>
-        <p className="text-sm text-gray-900">{activity}</p>
       </div>
     </div>
   )
