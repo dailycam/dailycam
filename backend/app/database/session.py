@@ -10,8 +10,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
-# .env 파일 경로 확인 (선택사항)
-env_path = Path(__file__).parent.parent.parent / '.env'
+# .env 파일 경로 확인 (루트 디렉토리)
+env_path = Path(__file__).parent.parent.parent.parent / '.env'
 if env_path.exists():
     load_dotenv(dotenv_path=env_path, override=True)
 
@@ -31,6 +31,8 @@ engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=3600,
+    pool_size=20,  # 커넥션 풀 크기 증가
+    max_overflow=40,  # 최대 오버플로우 커넥션 수
     echo=False  # SQL 쿼리 로깅 (개발 시 True로 변경 가능)
 )
 

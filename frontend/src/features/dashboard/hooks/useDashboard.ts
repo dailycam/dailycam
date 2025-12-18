@@ -3,6 +3,7 @@ import { getDashboardData } from '../../../lib/api'
 import { TimelineEvent, MonitoringRange, HourlyStat, DailyStats, ClockData } from '../types'
 
 export const useDashboard = () => {
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date())
     const [dashboardData, setDashboardData] = useState<any>(null)
     const [loading, setLoading] = useState(false) // 초기값 false로 변경
     const [error, setError] = useState<string | null>(null)
@@ -16,8 +17,15 @@ export const useDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true)
+            setError(null)
+            // 날짜 변경 시 이전 데이터 초기화 (깜빡임 방지하려면 이 줄 제거)
+            setDashboardData(null)
+            
             try {
-                const data = await getDashboardData()
+                const dateStr = selectedDate.toISOString().split('T')[0] // YYYY-MM-DD 형식
+                console.log(`📅 [Dashboard] 날짜 변경: ${dateStr}`)
+                const data = await getDashboardData(dateStr)
                 console.log('📦 [Dashboard] 받은 데이터:', data)
                 setDashboardData(data)
             } catch (err) {
@@ -28,7 +36,7 @@ export const useDashboard = () => {
             }
         }
         fetchData()
-    }, [])
+    }, [selectedDate])
 
     // 타임라인 이벤트 데이터 준비
     const timelineEvents: TimelineEvent[] = useMemo(() => {
@@ -47,8 +55,15 @@ export const useDashboard = () => {
         }))
     }, [dashboardData])
 
-    // 모니터링 구간 데이터 준비 (실제 이벤트 시간 기반)
+    // 모니터링 구간 데이터 준비 (실제 분석 시간 또는 이벤트 시간 기반)
     const monitoringRanges: MonitoringRange[] = useMemo(() => {
+        // [수정] 백엔드에서 받은 실제 분석 구간 데이터가 있으면 우선 사용
+        if (dashboardData?.monitoringRanges && dashboardData.monitoringRanges.length > 0) {
+            console.log('✅ [Monitoring Ranges] 백엔드 데이터 사용:', dashboardData.monitoringRanges)
+            return dashboardData.monitoringRanges
+        }
+
+        // 폴백: 백엔드 데이터가 없으면 타임라인 이벤트로 추정
         if (timelineEvents.length === 0) return []
 
         // 이벤트를 시간순으로 정렬
@@ -59,7 +74,7 @@ export const useDashboard = () => {
         const endTime = sortedEvents[sortedEvents.length - 1].time
 
         return [{ start: startTime, end: endTime }]
-    }, [timelineEvents])
+    }, [timelineEvents, dashboardData])
 
     // 시간대별 통계 - 백엔드 데이터 우선 사용
     const hourlyStats: HourlyStat[] = useMemo(() => {
@@ -166,15 +181,18 @@ export const useDashboard = () => {
         return data
     }, [timelineEvents, hourlyStats])
 
-    // [수정] 백엔드에서 받은 실제 데이터 직접 사용
+    // 백엔드에서 받은 실제 데이터 직접 사용
     const dailyStats: DailyStats = useMemo(() => {
-        const currentHour = new Date().getHours()
-
-        // 22시 이후면 초기화 (이 로직은 유지)
-        if (currentHour >= 22) {
+        // 선택한 날짜가 오늘인지 확인
+        const today = new Date()
+        const isToday = selectedDate.toDateString() === today.toDateString()
+        
+        // 오늘이고 자정 직후 (0시)라면 초기화
+        if (isToday && today.getHours() === 0) {
+            console.log('🌙 [Daily Stats] 오늘 자정 이후 - 점수 초기화 (0점)')
             return {
-                safetyScore: 100,
-                developmentScore: 50,
+                safetyScore: 0,
+                developmentScore: 0,
                 monitoringHours: 0,
                 incidentCount: 0
             }
@@ -182,19 +200,22 @@ export const useDashboard = () => {
 
         // 백엔드에서 받은 데이터를 직접 사용
         console.log('📊 [Daily Stats] 백엔드 데이터 사용:', {
+            selectedDate: selectedDate.toISOString().split('T')[0],
             safetyScore: dashboardData?.safetyScore,
             developmentScore: dashboardData?.developmentScore,
             monitoringHours: dashboardData?.monitoringHours,
             incidentCount: dashboardData?.incidentCount
         })
 
+        // ?? 연산자 사용 (0도 유효한 값으로 처리)
+        // 데이터가 없으면 0으로 표시
         return {
-            safetyScore: dashboardData?.safetyScore || 100,
-            developmentScore: dashboardData?.developmentScore || 50,
-            monitoringHours: dashboardData?.monitoringHours || 0,
-            incidentCount: dashboardData?.incidentCount || 0
+            safetyScore: dashboardData?.safetyScore ?? 0,
+            developmentScore: dashboardData?.developmentScore ?? 0,
+            monitoringHours: dashboardData?.monitoringHours ?? 0,
+            incidentCount: dashboardData?.incidentCount ?? 0
         }
-    }, [dashboardData])
+    }, [dashboardData, selectedDate])
 
     const handleEventClick = (events: any[], timeRange: string, category: string) => {
         setModalEvents(events)
@@ -205,7 +226,27 @@ export const useDashboard = () => {
 
     const closeModal = () => setIsModalOpen(false)
 
+    // 날짜 변경 핸들러
+    const handleDateChange = (newDate: Date) => {
+        setSelectedDate(newDate)
+    }
+
+    // 사용 가능한 날짜 범위 (최근 7일)
+    const getAvailableDates = (): Date[] => {
+        const dates: Date[] = []
+        const today = new Date()
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() - i)
+            dates.push(date)
+        }
+        return dates
+    }
+
     return {
+        selectedDate,
+        handleDateChange,
+        availableDates: getAvailableDates(),
         dashboardData,
         loading,
         error,

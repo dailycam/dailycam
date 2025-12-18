@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: dailycam-mysql-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: dailycam
+      MYSQL_USER: dailycam_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "0.0.0.0:3306:3306"  # 스트리밍 서버 접근 허용 (Lightsail 방화벽에서 스트리밍 서버 IP만 허용)
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/app/commands/db/create_analysis_jobs_table.sql:/docker-entrypoint-initdb.d/01_create_analysis_jobs_table.sql
+      - ./backend/app/commands/db/create_hourly_reports_table.sql:/docker-entrypoint-initdb.d/02_create_hourly_reports_table.sql
+      # camera_settings 테이블은 SQLAlchemy ORM이 자동 생성 (users 테이블 의존성 때문)
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
+      timeout: 5s
+      retries: 10
+      interval: 10s
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+  fastapi:
+    build: ./backend
+    container_name: dailycam-fastapi-prod
+    ports:
+      - "127.0.0.1:8000:8000" # Nginx를 통해서만 접근
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=dailycam
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - PORTONE_API_KEY=${PORTONE_API_KEY}
+      - PORTONE_API_SECRET=${PORTONE_API_SECRET}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - BACKEND_URL=${BACKEND_URL:-http://localhost:8000}
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
+      - ENVIRONMENT=production
+      - ENABLE_HLS_STREAMING=false  # 메인 서버에서는 HLS 스트림 비활성화
+      - STREAMING_SERVER_URL=https://stream.dailycam.net  # 스트리밍 서버 URL
+    volumes:
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+  vlm-worker-1:
+    build: ./backend
+    container_name: dailycam-worker-1-prod
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=dailycam_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=dailycam
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Seoul
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_ID=worker-1
+      - DELETE_VIDEO_AFTER_ANALYSIS=false
+      - ENVIRONMENT=production
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - CLOUDFRONT_DOMAIN=${CLOUDFRONT_DOMAIN:-}
+    volumes:
+      # 프로덕션: Docker 볼륨 사용 (컨테이너 간 공유)
+      - ./backend/temp_videos:/app/temp_videos
+      - ./backend/videos:/app/videos
+    command: python app/workers/analysis_worker.py
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+  # 자동 클립 하이라이트 생성 워커 (향후 추가 예정)
+  # clip-highlight-worker:
+  #   build: ./backend
+  #   container_name: dailycam-clip-worker-prod
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #   environment:
+  #     - MYSQL_HOST=mysql
+  #     - MYSQL_PORT=3306
+  #     - MYSQL_USER=dailycam_user
+  #     - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+  #     - MYSQL_DATABASE=dailycam
+  #     - GEMINI_API_KEY=${GEMINI_API_KEY}
+  #     - PYTHONUNBUFFERED=1
+  #     - TZ=Asia/Seoul
+  #     - ENVIRONMENT=production
+  #   volumes:
+  #     - ./backend/temp_videos:/app/temp_videos
+  #     - ./backend/videos:/app/videos
+  #   command: python clip_highlight_worker.py
+  #   restart: unless-stopped
+  #   networks:
+  #     - dailycam-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: dailycam-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.main.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro # SSL 인증서
+    depends_on:
+      - fastapi
+    restart: unless-stopped
+    networks:
+      - dailycam-network
+
+volumes:
+  mysql_data:
+    driver: local
+  temp_videos:
+    driver: local
+  videos:
+    driver: local
+
+networks:
+  dailycam-network:
+    driver: bridge

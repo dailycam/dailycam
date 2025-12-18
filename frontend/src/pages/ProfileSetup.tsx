@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAuthToken } from '../lib/auth'
 import { Baby, Phone, Calendar } from 'lucide-react'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function ProfileSetup() {
     const navigate = useNavigate()
@@ -58,23 +56,21 @@ export default function ProfileSetup() {
         setIsSubmitting(true)
 
         try {
-            const token = getAuthToken()
-            if (!token) {
-                alert('로그인이 필요합니다')
-                navigate('/login')
-                return
-            }
-
             const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
                 },
+                credentials: 'include',
                 body: JSON.stringify(formData),
             })
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    alert('로그인이 필요합니다')
+                    navigate('/login')
+                    return
+                }
                 const error = await response.json()
                 throw new Error(error.detail || '프로필 등록에 실패했습니다')
             }

@@ -60,21 +60,36 @@ async def analyze_video(
         else:
             print("[발달 단계] 자동 판단 모드")
 
-        # 비디오 내용 읽기
-        video_content = await video.read()
+        # 임시 파일로 저장
+        import tempfile
+        import shutil
+        import os
         
-        # Gemini 서비스를 통해 분석 (video_file 대신 video_content 전달)
-        result = await gemini_service.analyze_video_vlm(
-            video_bytes=video_content,
-            content_type=video.content_type or "video/mp4",
-            stage=stage,
-            age_months=age_months,
-            generation_params={
-                "temperature": temperature,
-                "top_k": top_k,
-                "top_p": top_p
-            }
-        )
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            # UploadFile은 SpooledTemporaryFile일 수 있으므로 copyfileobj 사용
+            shutil.copyfileobj(video.file, temp_file)
+            temp_path = temp_file.name
+        
+        try:
+            # Gemini 서비스를 통해 분석 (video_path 전달)
+            result = await gemini_service.analyze_video_vlm(
+                video_path=temp_path,
+                content_type=video.content_type or "video/mp4",
+                stage=stage,
+                age_months=age_months,
+                generation_params={
+                    "temperature": temperature,
+                    "top_k": top_k,
+                    "top_p": top_p
+                }
+            )
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                    print(f"[API] 임시 업로드 파일 삭제: {temp_path}")
+                except Exception as e:
+                    print(f"[API] 임시 파일 삭제 실패: {e}")
         
         end_time = time.time()  # 분석 종료 시간 기록
         analysis_time = end_time - start_time

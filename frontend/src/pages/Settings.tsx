@@ -1,34 +1,37 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import {
   User as UserIcon,
   Bell,
   Shield,
   CreditCard,
   Camera,
-  Smartphone,
-  Mail,
-  Lock,
   Globe,
   Save,
-  LogOut,
+  Upload,
+  Trash2,
+  Video,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Info,
 } from 'lucide-react'
-import { getAuthToken, removeAuthToken } from '../lib/auth'
+import { removeAuthToken } from '../lib/auth'
+import { API_BASE_URL } from '@/constants/api'
+import { getUserCameras, uploadCameraVideo, deleteCameraVideo, getStorageUsage, type CameraSetting } from '@/lib/api'
+import {
+  getNotifications,
+  deleteNotification,
+  clearAllNotifications,
+  markAllAsRead,
+  formatAbsoluteTime,
+  formatRelativeTime,
+  addNotification,
+  type StoredNotification
+} from '@/lib/notifications'
 
-interface UserInfo {
-  id: number
-  email: string
-  name: string
-  picture: string
-  created_at: string
-  is_subscribed: boolean | number
-  next_billing_at?: string | null
-  subscription_plan?: string | null
-  has_billing_key?: boolean
-  phone?: string | null
-  child_name?: string | null
-  child_birthdate?: string | null
-}
+
 
 type Section =
   | 'profile'
@@ -47,7 +50,7 @@ export default function Settings() {
   const initialSection: Section =
     ((location.state as { section?: Section } | null)?.section) ?? 'profile'
 
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const { user: userInfo, refreshUser } = useAuth()
   const [activeSection, setActiveSection] = useState<Section>(initialSection)
   const [isCancelling, setIsCancelling] = useState(false)
 
@@ -62,13 +65,22 @@ export default function Settings() {
     picture: ''
   })
 
-  const [notifications, setNotifications] = useState({
-    danger: true,
-    warning: true,
-    info: false,
-    email: true,
-    push: true,
-  })
+  const [notificationLogs, setNotificationLogs] = useState<StoredNotification[]>([])
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'checklist_completed' | 'system' | 'analysis'>('all')
+
+  // 카메라 설정 상태
+  const [cameras, setCameras] = useState<CameraSetting[]>([])
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('')
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [storageUsage, setStorageUsage] = useState<{
+    total_size_gb: number
+    max_size_gb: number
+    usage_percent: number
+    video_count: number
+    remaining_gb: number
+  } | null>(null)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
 
   useEffect(() => {
     const sectionFromState =
@@ -79,51 +91,115 @@ export default function Settings() {
   }, [location.state, activeSection])
 
 
-  // 사용자 정보 가져오기
+  // 사용자 정보가 변경되면 프로필 폼 초기화
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const token = getAuthToken()
+    if (userInfo) {
+      setProfileForm({
+        name: userInfo.name || '',
+        phone: userInfo.phone || '',
+        child_name: userInfo.child_name || '',
+        child_birthdate: userInfo.child_birthdate || '',
+        picture: userInfo.picture || ''
+      })
+    }
+  }, [userInfo])
 
-      if (!token) {
-        navigate('/login')
-        return
-      }
-
+  // 카메라 설정 가져오기
+  useEffect(() => {
+    const fetchCameras = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/auth/me', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
+        const result = await getUserCameras()
+        setCameras(result.cameras)
 
-        if (response.ok) {
-          const data = await response.json()
-          const userData = {
-            ...data,
-            is_subscribed: Boolean(data.is_subscribed),
-            has_billing_key: Boolean(data.has_billing_key),
-          }
-          setUserInfo(userData)
-
-          // 프로필 폼 초기화
-          setProfileForm({
-            name: data.name || '',
-            phone: data.phone || '',
-            child_name: data.child_name || '',
-            child_birthdate: data.child_birthdate || '',
-            picture: data.picture || ''
-          })
-        } else {
-          removeAuthToken()
-          navigate('/login')
+        // 카메라가 있으면 첫 번째 카메라 선택
+        if (result.cameras.length > 0 && !selectedCameraId) {
+          setSelectedCameraId(result.cameras[0].camera_id)
+        } else if (result.cameras.length === 0) {
+          // 카메라가 없으면 기본값 설정
+          setSelectedCameraId('camera-1')
         }
       } catch (error) {
-        console.error('사용자 정보 가져오기 오류:', error)
+        console.error('카메라 설정 조회 오류:', error)
       }
     }
 
-    fetchUserInfo()
-  }, [navigate])
+    const fetchStorage = async () => {
+      try {
+        const usage = await getStorageUsage()
+        setStorageUsage(usage)
+      } catch (error) {
+        console.error('저장 공간 조회 오류:', error)
+      }
+    }
+
+    if (activeSection === 'camera') {
+      fetchCameras()
+      fetchStorage()
+    }
+
+    if (activeSection === 'notifications') {
+      loadNotificationLogs()
+    }
+  }, [activeSection, selectedCameraId])
+
+  // 알림 로그 로드
+  const loadNotificationLogs = () => {
+    const logs = getNotifications()
+    setNotificationLogs(logs)
+  }
+
+  // 알림 삭제 핸들러
+  const handleDeleteNotification = (id: string) => {
+    deleteNotification(id)
+    loadNotificationLogs()
+  }
+
+  // 모든 알림 삭제
+  const handleClearAllNotifications = () => {
+    if (confirm('모든 알림을 삭제하시겠습니까?')) {
+      clearAllNotifications()
+      loadNotificationLogs()
+    }
+  }
+
+  // 모든 알림 읽음 처리
+  const handleMarkAllAsRead = () => {
+    markAllAsRead()
+    loadNotificationLogs()
+  }
+
+  // 알림 타입별 아이콘
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'checklist_completed':
+        return <CheckCircle className="w-5 h-5 text-green-500" />
+      case 'system':
+        return <Info className="w-5 h-5 text-blue-500" />
+      case 'analysis':
+        return <AlertCircle className="w-5 h-5 text-amber-500" />
+      default:
+        return <Bell className="w-5 h-5 text-gray-500" />
+    }
+  }
+
+  // 알림 타입별 라벨
+  const getNotificationTypeLabel = (type: string) => {
+    switch (type) {
+      case 'checklist_completed':
+        return '체크리스트'
+      case 'system':
+        return '시스템'
+      case 'analysis':
+        return '분석'
+      default:
+        return '기타'
+    }
+  }
+
+  // 필터링된 알림
+  const filteredNotifications = selectedFilter === 'all'
+    ? notificationLogs
+    : notificationLogs.filter(n => n.type === selectedFilter)
 
   const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -147,15 +223,13 @@ export default function Settings() {
       const base64String = reader.result as string
 
       try {
-        const token = getAuthToken()
-
         // 즉시 서버에 저장
-        const response = await fetch('http://localhost:8000/api/profile/setup', {
+        const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
+          credentials: 'include',
           body: JSON.stringify({
             ...profileForm,
             picture: base64String
@@ -167,27 +241,7 @@ export default function Settings() {
         }
 
         // 사용자 정보 다시 가져오기
-        const meResponse = await fetch('http://localhost:8000/api/auth/me', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (meResponse.ok) {
-          const data = await meResponse.json()
-          setUserInfo({
-            ...data,
-            is_subscribed: Boolean(data.is_subscribed),
-            has_billing_key: Boolean(data.has_billing_key),
-          })
-          setProfileForm({
-            name: data.name || '',
-            phone: data.phone || '',
-            child_name: data.child_name || '',
-            child_birthdate: data.child_birthdate || '',
-            picture: data.picture || ''
-          })
-        }
+        await refreshUser()
 
         alert('프로필 사진이 변경되었습니다!')
       } catch (error) {
@@ -207,13 +261,12 @@ export default function Settings() {
 
     try {
       setIsCancelling(true)
-      const token = getAuthToken()
-      const res = await fetch('http://localhost:8000/api/payments/subscribe/basic/cancel', {
+      const res = await fetch(`${API_BASE_URL}/api/payments/subscribe/basic/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
 
       if (!res.ok) {
@@ -223,22 +276,12 @@ export default function Settings() {
         return
       }
 
-      const data = await res.json().catch(() => null)
+      await res.json().catch(() => null)
 
       // ✅ 구독 정보(플랜, 남은 기간)는 그대로 두고,
       //    필요하면 안내 텍스트만 바꾸는 용도로 쓸 수 있음
-      setUserInfo((prev) =>
-        prev
-          ? {
-            ...prev,
-            // 백엔드에서 내려주면 동기화
-            is_subscribed: data?.is_subscribed ?? prev.is_subscribed,
-            next_billing_at: data?.next_billing_at ?? prev.next_billing_at,
-            subscription_plan: data?.subscription_plan ?? prev.subscription_plan,
-            has_billing_key: data?.has_billing_key ?? false,
-          }
-          : prev
-      )
+      // 사용자 정보 새로고침
+      await refreshUser()
 
       // 사이드바 등 다른 컴포넌트에 알려주기 (여전히 남은 기간은 보이게 됨)
       window.dispatchEvent(new Event('subscriptionChanged'))
@@ -280,15 +323,14 @@ export default function Settings() {
 
     try {
       setIsSavingProfile(true)
-      const token = getAuthToken()
 
       // 프로필 업데이트 API 호출
-      const response = await fetch('http://localhost:8000/api/profile/setup', {
+      const response = await fetch(`${API_BASE_URL}/api/profile/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(profileForm),
       })
 
@@ -298,25 +340,14 @@ export default function Settings() {
       }
 
       // 사용자 정보 다시 가져오기
-      const meResponse = await fetch('http://localhost:8000/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (meResponse.ok) {
-        const data = await meResponse.json()
-        setUserInfo({
-          ...data,
-          is_subscribed: Boolean(data.is_subscribed),
-          has_billing_key: Boolean(data.has_billing_key),
-        })
+      await refreshUser()
+      if (userInfo) {
         setProfileForm({
-          name: data.name || '',
-          phone: data.phone || '',
-          child_name: data.child_name || '',
-          child_birthdate: data.child_birthdate || '',
-          picture: data.picture || ''
+          name: userInfo.name || '',
+          phone: userInfo.phone || '',
+          child_name: userInfo.child_name || '',
+          child_birthdate: userInfo.child_birthdate || '',
+          picture: userInfo.picture || ''
         })
       }
 
@@ -367,6 +398,122 @@ export default function Settings() {
     return `${totalMonths}개월`
   }
 
+  // 영상 업로드 핸들러
+  const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // 파일 검증
+    if (!file.type.startsWith('video/')) {
+      alert('비디오 파일만 업로드 가능합니다')
+      return
+    }
+
+    // 파일 크기 제한 (500MB)
+    if (file.size > 500 * 1024 * 1024) {
+      alert('파일 크기는 500MB 이하여야 합니다')
+      return
+    }
+
+    try {
+      setIsUploadingVideo(true)
+      setUploadProgress(0)
+
+      // 진행률 시뮬레이션 (실제 업로드 진행률은 FormData로는 추적 불가)
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90))
+      }, 500)
+
+      await uploadCameraVideo(selectedCameraId, file)
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
+      // 카메라 목록 새로고침
+      const result = await getUserCameras()
+      setCameras(result.cameras)
+
+      // 저장 공간 사용량 새로고침
+      const usage = await getStorageUsage()
+      setStorageUsage(usage)
+
+      // 시스템 알림 추가
+      addNotification({
+        title: '영상 업로드 완료',
+        message: `${file.name} 파일이 성공적으로 업로드되었습니다. (${formatFileSize(file.size)})`,
+        type: 'system'
+      })
+
+      // 저장 공간 부족 경고
+      if (usage.usage_percent > 90) {
+        addNotification({
+          title: '⚠️ 저장 공간 부족',
+          message: `저장 공간이 ${usage.usage_percent.toFixed(0)}% 사용되었습니다. 오래된 영상을 삭제해주세요.`,
+          type: 'system'
+        })
+      }
+
+      alert('영상이 성공적으로 업로드되었습니다!')
+    } catch (error) {
+      console.error('영상 업로드 오류:', error)
+      alert(error instanceof Error ? error.message : '영상 업로드 중 오류가 발생했습니다')
+    } finally {
+      setIsUploadingVideo(false)
+      setUploadProgress(0)
+      // 파일 인풋 초기화
+      event.target.value = ''
+    }
+  }
+
+  // 영상 삭제 핸들러
+  const handleVideoDelete = async (videoId: number, filename: string) => {
+    if (!confirm(`"${filename}" 영상을 삭제하시겠습니까?\n\n⚠️ 주의: 해당 카메라의 스트림이 실행 중이면 자동으로 중지됩니다.`)) {
+      return
+    }
+
+    try {
+      await deleteCameraVideo(videoId)
+
+      // 카메라 목록 새로고침
+      const result = await getUserCameras()
+      setCameras(result.cameras)
+
+      // 저장 공간 사용량 새로고침
+      const usage = await getStorageUsage()
+      setStorageUsage(usage)
+
+      // 시스템 알림 추가
+      addNotification({
+        title: '영상 삭제 완료',
+        message: `${filename} 파일이 삭제되었습니다. 스트림이 실행 중이었다면 자동으로 중지되었습니다.`,
+        type: 'system'
+      })
+
+      // 스트림 상태 업데이트를 위한 이벤트 발생
+      window.dispatchEvent(new CustomEvent('video-deleted'))
+
+      alert('영상이 삭제되었습니다')
+    } catch (error) {
+      console.error('영상 삭제 오류:', error)
+      alert(error instanceof Error ? error.message : '영상 삭제 중 오류가 발생했습니다')
+    }
+  }
+
+  // 파일 크기 포맷팅
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+  }
+
+  // 영상 길이 포맷팅
+  const formatDuration = (seconds: number | null): string => {
+    if (!seconds) return '알 수 없음'
+    const minutes = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${minutes}:${secs.toString().padStart(2, '0')}`
+  }
+
 
   const formatNextBillingDate = (iso?: string | null) => {
     if (!iso) return '-'
@@ -378,6 +525,40 @@ export default function Settings() {
       month: '2-digit',
       day: '2-digit',
     })
+  }
+
+  // 계정 삭제 핸들러
+  const handleDeleteAccount = async () => {
+    if (!confirm('⚠️ 정말로 계정을 삭제하시겠습니까?\n\n모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.')) {
+      return
+    }
+
+    if (!confirm('⚠️ 최종 확인\n\n계정을 삭제하면:\n• 모든 분석 데이터가 삭제됩니다\n• 업로드한 영상이 모두 삭제됩니다\n• 구독이 자동으로 해지됩니다\n• 이 작업은 되돌릴 수 없습니다\n\n정말 계속하시겠습니까?')) {
+      return
+    }
+
+    try {
+      setIsDeletingAccount(true)
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/delete-account`, {
+        method: 'DELETE',
+        credentials: 'include',  // httpOnly Cookie 전송
+      })
+
+      if (!response.ok) {
+        throw new Error('계정 삭제에 실패했습니다')
+      }
+
+      // 로그아웃 처리
+      removeAuthToken()
+      alert('계정이 성공적으로 삭제되었습니다. 그동안 이용해주셔서 감사합니다.')
+      navigate('/login')
+    } catch (error) {
+      console.error('계정 삭제 오류:', error)
+      alert(error instanceof Error ? error.message : '계정 삭제 중 오류가 발생했습니다')
+    } finally {
+      setIsDeletingAccount(false)
+    }
   }
 
   return (
@@ -575,58 +756,178 @@ export default function Settings() {
                   ) : null}
                 </div>
               </div>
+
+              {/* 계정 삭제 - 위험 영역 */}
+              <div className="card border-red-200 bg-red-50">
+                <h2 className="text-lg font-semibold text-red-900 mb-4">⚠️ 위험 영역</h2>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">계정 삭제</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={isDeletingAccount}
+                      className="text-sm text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isDeletingAccount ? '삭제 중...' : '계정 삭제'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
-          {/* 알림 탭 */}
+          {/* 알림 탭 - 로그 형식 */}
           {activeSection === 'notifications' && (
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">알림 설정</h2>
-              <div className="space-y-4">
-                <NotificationToggle
-                  icon={Bell}
-                  label="위험 알림 (높음)"
-                  description="즉각적인 대응이 필요한 위험 상황"
-                  checked={notifications.danger}
-                  onChange={(checked) => setNotifications({ ...notifications, danger: checked })}
-                />
-                <NotificationToggle
-                  icon={Bell}
-                  label="주의 알림 (중간)"
-                  description="주의가 필요한 상황"
-                  checked={notifications.warning}
-                  onChange={(checked) =>
-                    setNotifications({ ...notifications, warning: checked })
-                  }
-                />
-                <NotificationToggle
-                  icon={Bell}
-                  label="정보 알림 (낮음)"
-                  description="일반적인 활동 정보"
-                  checked={notifications.info}
-                  onChange={(checked) => setNotifications({ ...notifications, info: checked })}
-                />
+            <div className="space-y-4">
+              {/* 헤더 */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">알림 로그</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      체크리스트 완료, 시스템 알림 등의 기록을 확인하세요
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="btn-secondary text-sm"
+                      disabled={notificationLogs.length === 0}
+                    >
+                      모두 읽음
+                    </button>
+                    <button
+                      onClick={handleClearAllNotifications}
+                      className="btn-secondary text-sm text-danger hover:bg-danger-50"
+                      disabled={notificationLogs.length === 0}
+                    >
+                      전체 삭제
+                    </button>
+                  </div>
+                </div>
 
-                <div className="border-t pt-4 mt-4">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">알림 방식</h3>
-                  <NotificationToggle
-                    icon={Mail}
-                    label="이메일 알림"
-                    description="이메일로 알림 받기"
-                    checked={notifications.email}
-                    onChange={(checked) =>
-                      setNotifications({ ...notifications, email: checked })
-                    }
-                  />
-                  <NotificationToggle
-                    icon={Smartphone}
-                    label="푸시 알림"
-                    description="모바일 앱 푸시 알림"
-                    checked={notifications.push}
-                    onChange={(checked) =>
-                      setNotifications({ ...notifications, push: checked })
-                    }
-                  />
+                {/* 필터 */}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => setSelectedFilter('all')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'all'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    전체 ({notificationLogs.length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedFilter('checklist_completed')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'checklist_completed'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    체크리스트 ({notificationLogs.filter(n => n.type === 'checklist_completed').length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedFilter('system')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'system'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    시스템 ({notificationLogs.filter(n => n.type === 'system').length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedFilter('analysis')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedFilter === 'analysis'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    분석 ({notificationLogs.filter(n => n.type === 'analysis').length})
+                  </button>
+                </div>
+              </div>
+
+              {/* 알림 목록 */}
+              <div className="card">
+                {filteredNotifications.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Bell className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500 mb-2">알림이 없습니다</p>
+                    <p className="text-sm text-gray-400">
+                      {selectedFilter === 'all'
+                        ? '체크리스트를 완료하면 알림이 기록됩니다'
+                        : `${getNotificationTypeLabel(selectedFilter)} 알림이 없습니다`
+                      }
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredNotifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`flex items-start gap-3 p-4 rounded-lg border transition-all hover:shadow-md ${!notification.read
+                          ? 'bg-blue-50/50 border-blue-200'
+                          : 'bg-gray-50 border-gray-200'
+                          }`}
+                      >
+                        {/* 아이콘 */}
+                        <div className="flex-shrink-0 mt-0.5">
+                          {getNotificationIcon(notification.type)}
+                        </div>
+
+                        {/* 내용 */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <h3 className="text-sm font-semibold text-gray-900">
+                              {notification.title}
+                            </h3>
+                            <span className="flex-shrink-0 text-xs px-2 py-1 bg-white rounded-full border border-gray-200 text-gray-600">
+                              {getNotificationTypeLabel(notification.type)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">{notification.message}</p>
+                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatRelativeTime(notification.timestamp)}
+                            </span>
+                            <span className="text-gray-400">
+                              {formatAbsoluteTime(notification.timestamp)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 삭제 버튼 */}
+                        <button
+                          onClick={() => handleDeleteNotification(notification.id)}
+                          className="flex-shrink-0 p-2 text-gray-400 hover:text-danger-500 hover:bg-danger-50 rounded-lg transition-colors"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 안내 메시지 */}
+              <div className="card bg-blue-50 border-blue-200">
+                <div className="flex gap-3">
+                  <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-900 mb-1">알림 로그 정보</h3>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• 알림은 최대 100개까지 저장됩니다</li>
+                      <li>• 오래된 알림은 자동으로 삭제됩니다</li>
+                      <li>• 우측 상단 종 아이콘에서 최근 10개 알림을 확인할 수 있습니다</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -634,64 +935,188 @@ export default function Settings() {
 
           {/* 보안 탭 */}
           {activeSection === 'security' && (
-            <>
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">보안 설정</h2>
-                <div className="space-y-3">
-                  <SecurityItem
-                    icon={Lock}
-                    label="비밀번호 변경"
-                    description="마지막 변경: 30일 전"
-                    action="변경"
-                  />
-                  <SecurityItem
-                    icon={Shield}
-                    label="2단계 인증"
-                    description="추가 보안 계층 활성화"
-                    action="설정"
-                  />
-                  <SecurityItem
-                    icon={Smartphone}
-                    label="로그인 기기 관리"
-                    description="3개 기기에서 로그인 중"
-                    action="관리"
-                  />
-                </div>
-              </div>
-
-              {/* Danger Zone */}
-              <div className="card border-danger-200 bg-danger-50">
-                <h2 className="text-lg font-semibold text-danger-900 mb-4">위험 영역</h2>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">계정 로그아웃</p>
-                      <p className="text-xs text-gray-600">모든 기기에서 로그아웃</p>
-                    </div>
-                    <button className="text-sm text-danger font-medium hover:text-danger-dark flex items-center gap-2">
-                      <LogOut className="w-4 h-4" />
-                      로그아웃
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">계정 삭제</p>
-                      <p className="text-xs text-gray-600">모든 데이터가 영구 삭제됩니다</p>
-                    </div>
-                    <button className="text-sm text-danger font-medium hover:text-danger-dark">
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
+            <div className="card">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">보안 및 개인정보</h2>
+              <p className="text-sm text-gray-600">보안 및 개인정보 설정 기능은 추후 추가될 예정입니다.</p>
+            </div>
           )}
 
-          {/* 카메라 설정 / 언어 탭 */}
+          {/* 카메라 설정 탭 */}
           {activeSection === 'camera' && (
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">카메라 설정</h2>
-              <p className="text-sm text-gray-600">카메라 설정 기능은 추후 추가될 예정입니다.</p>
+            <div className="space-y-6">
+              {/* 저장 공간 사용량 */}
+              {storageUsage && (
+                <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+                  <h3 className="text-sm font-semibold text-blue-900 mb-3">💾 저장 공간 사용량</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-blue-800">사용 중</span>
+                      <span className="font-semibold text-blue-900">
+                        {storageUsage.total_size_gb.toFixed(2)} GB / {storageUsage.max_size_gb} GB
+                      </span>
+                    </div>
+                    <div className="w-full bg-blue-200 rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full transition-all ${storageUsage.usage_percent > 90
+                          ? 'bg-red-500'
+                          : storageUsage.usage_percent > 70
+                            ? 'bg-yellow-500'
+                            : 'bg-blue-500'
+                          }`}
+                        style={{ width: `${Math.min(storageUsage.usage_percent, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between text-xs text-blue-700">
+                      <span>영상 {storageUsage.video_count}개</span>
+                      <span>남은 용량: {storageUsage.remaining_gb.toFixed(2)} GB</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="card">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">카메라 스트림 설정</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  카메라에 재생할 영상을 업로드하세요. 업로드한 영상은 자동으로 순환 재생됩니다.
+                </p>
+
+                {/* 카메라 선택 */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    카메라 선택
+                  </label>
+                  {cameras.length === 0 ? (
+                    <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                      아직 카메라가 없습니다. 아래에서 영상을 업로드하면 자동으로 카메라가 생성됩니다.
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedCameraId}
+                      onChange={(e) => setSelectedCameraId(e.target.value)}
+                      className="input-field"
+                    >
+                      {cameras.map((camera) => (
+                        <option key={camera.camera_id} value={camera.camera_id}>
+                          {camera.camera_name || `카메라 ${camera.camera_id.replace('camera-', '')}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {cameras.length === 0 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 팁: 기본 카메라(camera-1)가 자동으로 생성됩니다
+                    </p>
+                  )}
+                </div>
+
+                {/* 영상 업로드 */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    영상 업로드
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      disabled={isUploadingVideo}
+                      className="hidden"
+                      id="video-upload"
+                    />
+                    <label
+                      htmlFor="video-upload"
+                      className={`btn-primary flex items-center gap-2 cursor-pointer ${isUploadingVideo ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isUploadingVideo ? '업로드 중...' : '영상 선택'}
+                    </label>
+                    {isUploadingVideo && (
+                      <div className="flex-1">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-primary-600 h-2 rounded-full transition-all"
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{uploadProgress}%</p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    MP4, MOV, AVI 등 (최대 500MB)
+                  </p>
+                </div>
+
+                {/* 업로드된 영상 목록 */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                    업로드된 영상 ({cameras.find((c) => c.camera_id === selectedCameraId)?.video_count || 0}개)
+                  </h3>
+                  {(() => {
+                    const selectedCamera = cameras.find((c) => c.camera_id === selectedCameraId)
+
+                    if (!selectedCamera || selectedCamera.videos.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-gray-500">
+                          <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">아직 업로드된 영상이 없습니다</p>
+                          <p className="text-xs mt-1">위의 "영상 선택" 버튼을 클릭하여 영상을 업로드하세요</p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {selectedCamera.videos.map((video) => (
+                          <div
+                            key={video.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <Video className="w-5 h-5 text-primary-600" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {video.filename}
+                                </p>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-xs text-gray-500">
+                                    {formatFileSize(video.file_size)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {formatDuration(video.duration)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(video.uploaded_at).toLocaleDateString('ko-KR')}
+                                  </span>
+                                </div>
+                              </div>
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                            </div>
+                            <button
+                              onClick={() => handleVideoDelete(video.id, video.filename)}
+                              className="ml-3 p-2 text-danger hover:bg-danger-50 rounded-lg transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              <div className="card bg-amber-50 border-amber-200">
+                <h3 className="text-sm font-semibold text-amber-900 mb-2">⚠️ 중요 안내</h3>
+                <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                  <li><strong>영상을 먼저 업로드해야 합니다</strong> - 업로드 없이는 스트림이 시작되지 않습니다</li>
+                  <li>업로드한 영상들은 순서대로 자동 순환 재생됩니다</li>
+                  <li>라이브 모니터링 페이지에서 실시간 스트림을 확인할 수 있습니다</li>
+                  <li>영상 분석 및 하이라이트 클립 생성이 자동으로 진행됩니다</li>
+                </ul>
+              </div>
             </div>
           )}
 
@@ -822,70 +1247,7 @@ function SettingsNavItem({
   )
 }
 
-// Notification Toggle Component
-function NotificationToggle({
-  icon: Icon,
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  icon: any
-  label: string
-  description: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <div className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
-      <div className="flex items-start gap-3">
-        <Icon className="w-5 h-5 text-gray-600 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-gray-900">{label}</p>
-          <p className="text-xs text-gray-600 mt-1">{description}</p>
-        </div>
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-primary-600' : 'bg-gray-300'
-          }`}
-      >
-        <div
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'
-            }`}
-        ></div>
-      </button>
-    </div>
-  )
-}
 
-// Security Item Component
-function SecurityItem({
-  icon: Icon,
-  label,
-  description,
-  action,
-}: {
-  icon: any
-  label: string
-  description: string
-  action: string
-}) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-      <div className="flex items-center gap-3">
-        <Icon className="w-5 h-5 text-gray-600" />
-        <div>
-          <p className="text-sm font-medium text-gray-900">{label}</p>
-          <p className="text-xs text-gray-600">{description}</p>
-        </div>
-      </div>
-      <button className="text-sm text-primary-600 font-medium hover:text-primary-700">
-        {action}
-      </button>
-    </div>
-  )
-}
 
 // Feature Item Component
 function FeatureItem({ text }: { text: string }) {

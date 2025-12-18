@@ -104,7 +104,7 @@ export const SafetyMinimalClockChart = ({ fullClockData, overallScore }: { fullC
         return dataArray;
     }, [fullClockData]);
 
-    const handleMouseEnter = useCallback((event: React.MouseEvent<SVGElement>, data: ClockData, index: number, type: 'am' | 'pm') => {
+    const handleMouseEnter = useCallback((event: React.MouseEvent<SVGElement>, data: ClockData, _index: number, _type: 'am' | 'pm') => {
         const targetElement = event.currentTarget as SVGElement;
         const rect = targetElement.getBoundingClientRect();
         const svgRect = (event.currentTarget as SVGElement).viewportElement?.getBoundingClientRect();

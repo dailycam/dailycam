@@ -20,6 +20,7 @@ const polarToCartesian = (centerX: number, centerY: number, radius: number, angl
 }
 
 // 도넛 조각(Arc) 생성 함수 (두께 포함)
+// 도넛 조각(Arc) 생성 함수 (두께 포함)
 const describeDonutSlice = (x: number, y: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) => {
     const startOuter = polarToCartesian(x, y, outerRadius, endAngle)
     const endOuter = polarToCartesian(x, y, outerRadius, startAngle)
@@ -269,14 +270,18 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
 
                 {/* --- [4단계: 모니터링 구간 레이어 (가장 바깥쪽)] --- */}
                 {monitoringRanges.map((range, idx) => {
-                    const [startH] = range.start.split(':').map(Number)
-                    const [endH] = range.end.split(':').map(Number)
+                    const [startH, startM] = range.start.split(':').map(Number)
+                    const [endH, endM] = range.end.split(':').map(Number)
 
-                    const startHour12 = startH % 12
-                    const endHour12 = endH % 12
+                    // 모니터링 구간에 포함되는 모든 시간대를 찾기
+                    // 12시간 기준 각도 계산 (0.5도/분)
+                    let startAngle = ((startH % 12) * 60 + startM) * 0.5
+                    let endAngle = ((endH % 12) * 60 + endM) * 0.5
 
-                    const startAngle = startHour12 * 30
-                    let endAngle = (endHour12 + 1) * 30
+                    // [수정] 종료 각도가 시작 각도보다 작으면 360도 더해서 큰 호가 그려지게 함
+                    if (endAngle <= startAngle) {
+                        endAngle += 360
+                    }
 
                     return (
                         <g
@@ -285,9 +290,9 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                             onMouseLeave={() => setHoveredMonitoring(null)}
                             className="cursor-pointer"
                         >
-                            {/* 모니터링 띠 (가장 바깥쪽: radius + 52 ~ + 58) */}
+                            {/* 모니터링 띠 (가장 바깥쪽: radius + 55 ~ + 61) */}
                             <path
-                                d={describeDonutSlice(center, center, radius + 52, radius + 58, startAngle, endAngle)}
+                                d={describeDonutSlice(center, center, radius + 55, radius + 61, startAngle, endAngle)}
                                 fill={COLORS.monitoring}
                                 opacity={hoveredMonitoring === range ? "1" : "0.6"}
                                 className="transition-opacity duration-200"
@@ -358,8 +363,9 @@ export const SimpleClockChart: React.FC<SimpleClockChartProps> = ({ fullClockDat
                         exit={{ opacity: 0, y: 10, scale: 0.9 }}
                         className="absolute z-50 bg-gray-900/90 text-white p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-700 pointer-events-none"
                         style={{
-                            left: mousePos.x + 20,
-                            top: mousePos.y - 20,
+                            left: mousePos.x,
+                            top: mousePos.y,
+                            transform: 'translate(-50%, -120%)',
                             minWidth: '220px',
                             maxWidth: '260px'
                         }}

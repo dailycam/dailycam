@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from sqlalchemy.orm import Session
+import pytz
 
 from app.models.live_monitoring.analysis_job import AnalysisJob, JobStatus
 from app.database.session import get_db
@@ -35,7 +36,8 @@ class SegmentAnalysisScheduler:
         while self.is_running:
             # 10분마다 실행 (예: 14:00, 14:10, 14:20...)
             # 30초 여유를 두어 10분 분량 비디오가 완전히 저장되도록 함
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             
             # 다음 10분 단위 시간 계산 (서버 시간 기준)
             current_minutes = now.minute
@@ -54,12 +56,9 @@ class SegmentAnalysisScheduler:
             
             wait_seconds = (next_analysis_time - now).total_seconds()
 
-            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력
-            kst_offset = timedelta(hours=9)
-            next_analysis_time_kst = next_analysis_time + kst_offset
-            
+            # 이미 한국 시간(KST) 기준
             if wait_seconds > 0:
-                print(f"[10분 분석 스케줄러] 다음 분석 시간(한국 시각): {next_analysis_time_kst.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
+                print(f"[10분 분석 스케줄러] 다음 분석 시간(한국 시각): {next_analysis_time.strftime('%H:%M:%S')} ({wait_seconds:.0f}초 후)")
                 await asyncio.sleep(wait_seconds)
             
             if self.is_running:
@@ -80,10 +79,11 @@ class SegmentAnalysisScheduler:
         db = next(get_db())
         
         try:
-            # 1. 분석할 구간 정의 (현재 시간 기준 10분 전 구간)
-            now = datetime.now()
+            # 1. 분석할 구간 정의 (한국 시간 기준)
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             
-            # 현재 시간을 10분 단위로 내림 (서버 시간 기준)
+            # 현재 시간을 10분 단위로 내림 (한국 시간 기준)
             current_minutes = (now.minute // 10) * 10
             current_segment_end = now.replace(minute=current_minutes, second=0, microsecond=0)
             
@@ -91,26 +91,29 @@ class SegmentAnalysisScheduler:
             segment_end = current_segment_end - timedelta(minutes=10)
             segment_start = segment_end - timedelta(minutes=10)
 
-            # 로그는 한국 시간(KST, UTC+9) 기준으로 출력 (실제 계산은 서버 시간 기준)
-            kst_offset = timedelta(hours=9)
-            now_kst = now + kst_offset
-            segment_start_kst = segment_start + kst_offset
-            segment_end_kst = segment_end + kst_offset
+            # 로그 출력 (이미 한국 시간)
+            print(f"[Job 등록] 📅 현재 시간(한국 시각): {now.strftime('%H:%M:%S')}")
+            print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start.strftime('%H:%M:%S')} ~ {segment_end.strftime('%H:%M:%S')}")
             
-            print(f"[Job 등록] 📅 현재 시간(한국 시각): {now_kst.strftime('%H:%M:%S')}")
-            print(f"[Job 등록] 🎯 분석 대상 구간(한국 시각): {segment_start_kst.strftime('%H:%M:%S')} ~ {segment_end_kst.strftime('%H:%M:%S')}")
-            
-            # 2. 해당 구간의 비디오 파일 찾기
+            # 2. 해당 구간의 비디오 파일 찾기 (로컬 또는 S3)
+            # 로컬 파일이 없어도 Job 등록 (워커가 S3에서 다운로드)
             video_path = self._get_segment_video(segment_start)
             
+            # 로컬 파일이 없으면 예상 경로만 설정 (워커가 S3에서 다운로드)
             if not video_path or not video_path.exists():
-                print(f"[Job 등록] ❌ 비디오 파일 없음: {segment_start.strftime('%H:%M:%S')}")
-                return
+                # 예상 로컬 경로 생성 (워커가 S3에서 다운로드할 때 사용)
+                segment_start_naive = segment_start.replace(tzinfo=None) if segment_start.tzinfo else segment_start
+                archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
+                video_path = self.buffer_dir / archive_filename
+                print(f"[Job 등록] ⚠️ 로컬 파일 없음, 워커가 S3에서 다운로드 예정: {archive_filename}")
+            else:
+                print(f"[Job 등록] ✅ 로컬 파일 발견: {video_path.name}")
             
-            # 3. 이미 등록된 Job이 있는지 확인
+            # 3. 이미 등록된 Job이 있는지 확인 (UTC로 변환하여 비교)
+            segment_start_utc = segment_start.astimezone(pytz.UTC).replace(tzinfo=None)
             existing_job = db.query(AnalysisJob).filter(
                 AnalysisJob.camera_id == self.camera_id,
-                AnalysisJob.segment_start == segment_start,
+                AnalysisJob.segment_start == segment_start_utc,
                 AnalysisJob.status.in_([JobStatus.PENDING, JobStatus.PROCESSING, JobStatus.COMPLETED])
             ).first()
             
@@ -118,12 +121,14 @@ class SegmentAnalysisScheduler:
                 print(f"[Job 등록] ⏭️ 이미 등록됨 (상태: {existing_job.status}): {segment_start.strftime('%H:%M:%S')}")
                 return
             
-            # 4. 분석 Job 등록 (빠르게 완료)
+            # 4. 분석 Job 등록 (DB에는 UTC로 저장)
+            segment_end_utc = segment_end.astimezone(pytz.UTC).replace(tzinfo=None)
+            
             analysis_job = AnalysisJob(
                 camera_id=self.camera_id,
                 video_path=str(video_path),
-                segment_start=segment_start,
-                segment_end=segment_end,
+                segment_start=segment_start_utc,
+                segment_end=segment_end_utc,
                 status=JobStatus.PENDING
             )
             db.add(analysis_job)
@@ -142,17 +147,33 @@ class SegmentAnalysisScheduler:
     
     def _get_segment_video(self, segment_start: datetime) -> Optional[Path]:
         """해당 구간의 비디오 파일 경로 반환"""
+        # segment_start가 timezone-aware인 경우 naive datetime으로 변환
+        # ⚠️ 중요: KST 시간을 유지하고 tzinfo만 제거 (UTC 변환 X)
+        if segment_start.tzinfo is not None:
+            segment_start_naive = segment_start.replace(tzinfo=None)
+        else:
+            segment_start_naive = segment_start
+        
         # HLS archive 폴더에서 찾기 (archive_YYYYMMDD_HHMMSS.mp4)
-        archive_filename = f"archive_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        archive_filename = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         archive_path = self.buffer_dir / archive_filename
+        
+        print(f"[10분 분석 스케줄러] 🔍 정확한 파일명 검색: {archive_filename}")
+        print(f"[10분 분석 스케줄러] 📄 전체 경로: {archive_path.absolute()}")
+        print(f"[10분 분석 스케줄러] 📄 파일 존재 여부: {archive_path.exists()}")
         
         if archive_path.exists():
             print(f"[10분 분석 스케줄러] ✅ 정확한 아카이브 파일 발견: {archive_filename}")
             return archive_path
         
         # 패턴 검색 1: 같은 날짜, 같은 시간, 같은 분 (초만 다를 수 있음)
-        archive_pattern = f"archive_{segment_start.strftime('%Y%m%d_%H%M')}*.mp4"
+        archive_pattern = f"archive_{segment_start_naive.strftime('%Y%m%d_%H%M')}*.mp4"
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 1: {archive_pattern} (디렉토리: {self.buffer_dir.absolute()})")
         matching_archives = list(self.buffer_dir.glob(archive_pattern))
+        print(f"[10분 분석 스케줄러] 📋 패턴 매칭 결과: {len(matching_archives)}개 파일")
+        if matching_archives:
+            for f in matching_archives:
+                print(f"    - {f.name}")
         
         if matching_archives:
             # 가장 최근에 생성된 파일 선택
@@ -161,22 +182,26 @@ class SegmentAnalysisScheduler:
             return latest_archive
         
         # 패턴 검색 2: 시간대가 약간 다를 수 있으므로 ±10분 범위에서 검색
+        print(f"[10분 분석 스케줄러] 🔍 패턴 검색 2: ±10분 범위 검색")
         for offset_minutes in range(-10, 11):
-            adjusted_time = segment_start + timedelta(minutes=offset_minutes)
+            adjusted_time = segment_start_naive + timedelta(minutes=offset_minutes)
             adjusted_pattern = f"archive_{adjusted_time.strftime('%Y%m%d_%H%M')}*.mp4"
             adjusted_matches = list(self.buffer_dir.glob(adjusted_pattern))
             
             if adjusted_matches:
+                print(f"  - offset {offset_minutes}분: {len(adjusted_matches)}개 파일 발견")
+                for f in adjusted_matches:
+                    print(f"    - {f.name}")
                 # 파일 생성 시간이 segment_start와 가장 가까운 파일 선택
                 closest_file = min(
                     adjusted_matches,
-                    key=lambda f: abs((datetime.fromtimestamp(f.stat().st_mtime) - segment_start).total_seconds())
+                    key=lambda f: abs((datetime.fromtimestamp(f.stat().st_mtime) - segment_start_naive).total_seconds())
                 )
                 print(f"[10분 분석 스케줄러] ✅ 시간 범위 검색으로 아카이브 발견: {closest_file.name} (offset: {offset_minutes}분)")
                 return closest_file
         
         # fallback: hourly_buffer에서 segment 파일 찾기
-        segment_filename = f"segment_{segment_start.strftime('%Y%m%d_%H%M%S')}.mp4"
+        segment_filename = f"segment_{segment_start_naive.strftime('%Y%m%d_%H%M%S')}.mp4"
         fallback_path = self.fallback_buffer_dir / segment_filename
         
         if fallback_path.exists():

@@ -1,86 +1,72 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Camera,
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize,
   AlertTriangle,
   Activity,
   Clock,
   MapPin,
   Upload,
   X,
-  Settings,
 } from 'lucide-react'
-import { uploadVideoForStreaming, getStreamUrl, stopStream } from '../lib/api'
+import { stopStream } from '../lib/api'
+import { API_BASE_URL } from '@/constants/api'
+import { useOutletContext } from 'react-router-dom'
+import HLSVideoPlayer from '@/components/HLSVideoPlayer'
 
 export default function LiveMonitoring() {
-  const [isPlaying, setIsPlaying] = useState(true)
-  const [isMuted, setIsMuted] = useState(false)
-  const [selectedCamera, setSelectedCamera] = useState('camera-1')
-  const [streamUrl, setStreamUrl] = useState<string | null>(null)
+  // AppLayout에서 전달된 컨텍스트 사용
+  const outletContext = useOutletContext<{
+    selectedCamera: string
+    setSelectedCamera: (camera: string) => void
+  }>()
+  
+  const [selectedCamera, setSelectedCamera] = useState(outletContext?.selectedCamera || 'camera-1')
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [streamSpeed, setStreamSpeed] = useState(1.0)
-  const [streamLoop, setStreamLoop] = useState(true)
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const streamImgRef = useRef<HTMLImageElement>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const streamCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const lastVideoPathRef = useRef<string | null>(null)
 
-  // 페이지 로드 시 저장된 스트림 정보 복원
+  // 카메라 변경 시 AppLayout에 알림
   useEffect(() => {
-    const savedStreamInfo = localStorage.getItem(`stream_${selectedCamera}`)
-    if (savedStreamInfo) {
+    if (outletContext?.setSelectedCamera) {
+      outletContext.setSelectedCamera(selectedCamera)
+    }
+  }, [selectedCamera, outletContext])
+
+  // 페이지 로드 시 스트림 상태 확인
+  useEffect(() => {
+    const checkStreamStatus = async () => {
       try {
-        const info = JSON.parse(savedStreamInfo)
-        if (info.videoPath) {
-          lastVideoPathRef.current = info.videoPath
-          setStreamLoop(info.streamLoop ?? streamLoop)
-          setStreamSpeed(info.streamSpeed ?? streamSpeed)
+        const status = await fetch(
+          `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+          { credentials: 'include' }
+        )
+        const data = await status.json()
 
-          // 기존 스트림이 계속 실행 중이므로 타임스탬프 없이 URL 생성
-          // (타임스탬프를 추가하면 새 스트림이 시작되어 영상이 초기화됨)
-          const url = getStreamUrl(
-            selectedCamera,
-            info.streamLoop ?? streamLoop,
-            info.streamSpeed ?? streamSpeed,
-            undefined, // 타임스탬프 없음 (기존 스트림 사용)
-            info.videoPath
-          )
-          setStreamUrl(url)
+        if (data.is_active && data.is_running) {
+          const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
+          setHlsUrl(url)
           setIsStreamActive(true)
-          console.log('저장된 스트림 정보 복원 (기존 스트림 계속 사용):', info)
+        } else {
+          setHlsUrl(null)
+          setIsStreamActive(false)
         }
-      } catch (e) {
-        console.warn('스트림 정보 복원 실패:', e)
-        localStorage.removeItem(`stream_${selectedCamera}`)
+      } catch (error) {
+        console.error('[HLS] 스트림 상태 확인 실패:', error)
+        setHlsUrl(null)
+        setIsStreamActive(false)
       }
     }
-  }, [selectedCamera])
 
-  // 스트림 정보를 localStorage에 저장
-  useEffect(() => {
-    if (streamUrl && lastVideoPathRef.current) {
-      const streamInfo = {
-        videoPath: lastVideoPathRef.current,
-        streamUrl: streamUrl,
-        streamLoop: streamLoop,
-        streamSpeed: streamSpeed,
-        cameraId: selectedCamera,
-      }
-      localStorage.setItem(`stream_${selectedCamera}`, JSON.stringify(streamInfo))
-    } else {
-      localStorage.removeItem(`stream_${selectedCamera}`)
-    }
-  }, [streamUrl, streamLoop, streamSpeed, selectedCamera])
+    checkStreamStatus()
+    
+    // 주기적으로 상태 확인 (5초마다)
+    const interval = setInterval(checkStreamStatus, 5000)
+    return () => clearInterval(interval)
+  }, [selectedCamera])
 
   // 비디오 파일 선택
   const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,63 +88,40 @@ export default function LiveMonitoring() {
     setIsUploading(true)
     setUploadError(null)
 
-    console.log('업로드 시작:', {
-      camera: selectedCamera,
-      file: videoFile.name,
-      size: (videoFile.size / 1024 / 1024).toFixed(2) + ' MB',
-    })
-
     try {
-      // 기존 스트림이 있으면 먼저 중지
-      if (streamUrl) {
-        console.log('기존 스트림 중지 중...')
-        try {
-          await stopStream(selectedCamera)
-        } catch (e) {
-          console.warn('기존 스트림 중지 실패 (무시):', e)
-        }
-        // 스트림 URL 초기화하여 이미지 리로드 강제
-        setStreamUrl(null)
-        // 잠시 대기하여 스트림이 완전히 중지되도록 함
-        await new Promise((resolve) => setTimeout(resolve, 500))
+      // Settings API를 통해 업로드 (카메라 설정 API 사용)
+      const formData = new FormData()
+      formData.append('video', videoFile)
+
+      const response = await fetch(`${API_BASE_URL}/api/camera-settings/cameras/${selectedCamera}/upload-video`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('업로드 실패')
       }
 
-      const result = await uploadVideoForStreaming(selectedCamera, videoFile)
-      console.log('업로드 완료:', result)
+      // 잠시 대기 후 스트림 상태 확인
+      await new Promise(resolve => setTimeout(resolve, 2000))
 
-      // 타임스탬프를 추가하여 새로운 스트림임을 명확히 함
-      // 업로드 응답의 video_path를 사용하여 정확한 파일 경로로 스트림 시작
-      const timestamp = Date.now()
-      lastVideoPathRef.current = result.video_path // 나중에 재연결 시 사용
-      const url = getStreamUrl(
-        selectedCamera,
-        streamLoop,
-        streamSpeed,
-        timestamp,
-        result.video_path // 업로드된 정확한 파일 경로 사용
+      const status = await fetch(
+        `${API_BASE_URL}/api/live-monitoring/stream-status/${selectedCamera}`,
+        { credentials: 'include' }  // httpOnly Cookie 전송
       )
-      console.log('새 스트림 URL:', url)
+      const data = await status.json()
 
-      // 스트림 URL을 null로 설정한 후 다시 설정하여 이미지 강제 리로드
-      setStreamUrl(null)
-      setReconnectAttempts(0)
-      setIsStreamActive(true)
-
-      // 다음 렌더링 사이클에서 새 URL 설정
-      setTimeout(() => {
-        setStreamUrl(url)
-        setIsPlaying(true)
-        startStreamMonitoring()
-        // localStorage에 저장 (자동으로 useEffect에서 처리됨)
-      }, 100)
-
-      setShowUploadModal(false)
+      if (data.is_active && data.is_running) {
+        const url = `${API_BASE_URL}/api/live-monitoring/hls/${selectedCamera}/${selectedCamera}.m3u8`
+        setHlsUrl(url)
+        setIsStreamActive(true)
+        setShowUploadModal(false)
+      } else {
+        setUploadError('스트림 시작 실패. 다시 시도해주세요.')
+      }
     } catch (error: any) {
-      console.error('업로드 실패:', error)
-      const errorMessage =
-        error.message ||
-        '비디오 업로드 중 오류가 발생했습니다. 백엔드 서버를 확인해주세요.'
-      setUploadError(errorMessage)
+      console.error('[HLS] 업로드 실패:', error)
+      setUploadError(error.message || '업로드 중 오류가 발생했습니다.')
     } finally {
       setIsUploading(false)
     }
@@ -167,115 +130,13 @@ export default function LiveMonitoring() {
   // 스트림 중지
   const handleStopStream = async () => {
     try {
-      stopStreamMonitoring() // 모니터링 중지
       await stopStream(selectedCamera)
-      setStreamUrl(null)
-      setIsPlaying(false)
+      setHlsUrl(null)
       setIsStreamActive(false)
-      setReconnectAttempts(0)
-      lastVideoPathRef.current = null
-      // localStorage에서도 제거
-      localStorage.removeItem(`stream_${selectedCamera}`)
     } catch (error: any) {
-      console.error('스트림 중지 오류:', error)
+      console.error('[HLS] 스트림 중지 오류:', error)
     }
   }
-
-  // 카메라 변경 시 스트림 URL 업데이트
-  useEffect(() => {
-    if (streamUrl) {
-      const url = getStreamUrl(selectedCamera, streamLoop, streamSpeed)
-      setStreamUrl(url)
-    }
-  }, [selectedCamera, streamLoop, streamSpeed])
-
-  // 스트림 이미지 로드 오류 처리
-  const handleStreamError = () => {
-    console.warn('스트림 이미지 로드 실패, 재연결 시도...')
-    setIsStreamActive(false)
-
-    // 재연결 시도 (최대 5회)
-    if (reconnectAttempts < 5 && lastVideoPathRef.current) {
-      const newAttempts = reconnectAttempts + 1
-      setReconnectAttempts(newAttempts)
-
-      console.log(`재연결 시도 ${newAttempts}/5`)
-
-      // 2초 후 재연결
-      reconnectTimeoutRef.current = setTimeout(() => {
-        const timestamp = Date.now()
-        const url = getStreamUrl(
-          selectedCamera,
-          streamLoop,
-          streamSpeed,
-          timestamp,
-          lastVideoPathRef.current || undefined
-        )
-        setStreamUrl(null)
-        setTimeout(() => {
-          setStreamUrl(url)
-          setIsStreamActive(true)
-        }, 100)
-      }, 2000)
-    } else {
-      setStreamUrl(null)
-      setUploadError('스트림 연결에 실패했습니다. 비디오 파일을 다시 업로드해주세요.')
-      setIsStreamActive(false)
-    }
-  }
-
-  // 스트림 이미지 로드 성공 처리
-  const handleStreamLoad = () => {
-    setIsStreamActive(true)
-    setReconnectAttempts(0) // 성공 시 재시도 횟수 리셋
-    console.log('스트림 연결 성공')
-  }
-
-  // 스트림 모니터링 시작
-  const startStreamMonitoring = () => {
-    // 기존 인터벌 정리
-    if (streamCheckIntervalRef.current) {
-      clearInterval(streamCheckIntervalRef.current)
-    }
-
-    // 주기적으로 스트림 상태 확인 (30초마다)
-    streamCheckIntervalRef.current = setInterval(() => {
-      if (streamUrl && streamImgRef.current) {
-        // 이미지가 로드되어 있는지 확인
-        const img = streamImgRef.current
-        if (!img.complete || img.naturalWidth === 0) {
-          console.warn('스트림 이미지가 로드되지 않음, 재연결 시도...')
-          handleStreamError()
-        } else {
-          setIsStreamActive(true)
-        }
-      }
-    }, 30000) // 30초마다 확인
-  }
-
-  // 스트림 모니터링 중지
-  const stopStreamMonitoring = () => {
-    if (streamCheckIntervalRef.current) {
-      clearInterval(streamCheckIntervalRef.current)
-      streamCheckIntervalRef.current = null
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-  }
-
-  // 컴포넌트 언마운트 시에도 스트림과 모니터링 계속 실행
-  // (cleanup 함수를 제거하여 페이지를 떠나도 계속 실행되도록 함)
-
-  // 스트림 URL이 변경되면 모니터링 재시작
-  useEffect(() => {
-    if (streamUrl) {
-      startStreamMonitoring()
-    } else {
-      stopStreamMonitoring()
-    }
-  }, [streamUrl])
 
   return (
     <div className="space-y-6">
@@ -286,7 +147,7 @@ export default function LiveMonitoring() {
           <p className="text-gray-600 mt-1">아이의 행동을 분석합니다</p>
         </div>
         <div className="flex gap-2">
-          {!streamUrl ? (
+          {!hlsUrl ? (
             <button
               onClick={() => setShowUploadModal(true)}
               className="btn-primary flex items-center gap-2"
@@ -310,33 +171,41 @@ export default function LiveMonitoring() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Live Feed */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Main Camera Feed */}
+          {/* Live Video Feed Card */}
           <div className="card p-0 overflow-hidden">
             <div className="relative bg-gray-900 aspect-video">
-              {/* Video Stream */}
-              {streamUrl ? (
+              {hlsUrl ? (
                 <>
-                  <img
-                    key={streamUrl} // key를 추가하여 URL 변경 시 이미지 강제 리로드
-                    ref={streamImgRef}
-                    src={streamUrl}
-                    alt="Live Stream"
+                  <HLSVideoPlayer
+                    src={hlsUrl}
+                    autoPlay={true}
+                    muted={false}
                     className="w-full h-full object-contain"
-                    onError={handleStreamError}
-                    onLoad={handleStreamLoad}
+                    onError={(error: string) => {
+                      console.error('[HLS] 플레이어 오류:', error)
+                      if (error.includes('404') || error.includes('스트림 중지')) {
+                        setHlsUrl(null)
+                        setIsStreamActive(false)
+                      }
+                    }}
                   />
-                  {/* 스트림 상태 표시 */}
-                  {!isStreamActive && reconnectAttempts > 0 && (
-                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                        <p className="text-sm">스트림 재연결 중... ({reconnectAttempts}/5)</p>
-                      </div>
+                  {/* Live Indicator */}
+                  {isStreamActive && (
+                    <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600/90 text-white px-3 py-1.5 rounded-full z-10">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span className="text-sm font-semibold">LIVE</span>
                     </div>
                   )}
+                  {/* AI Detection Overlay */}
+                  <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg z-10">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Activity className="w-4 h-4 text-green-400" />
+                      <span>AI 분석 중...</span>
+                    </div>
+                  </div>
                 </>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
                   <div className="text-center text-gray-400">
                     <Camera className="w-20 h-20 mx-auto mb-4 opacity-50" />
                     <p className="text-base">카메라 피드</p>
@@ -353,61 +222,6 @@ export default function LiveMonitoring() {
                   </div>
                 </div>
               )}
-
-              {/* Live Indicator */}
-              {streamUrl && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-danger/90 text-white px-3 py-1.5 rounded-full">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                  <span className="text-sm font-semibold">LIVE</span>
-                </div>
-              )}
-
-              {/* AI Detection Overlay */}
-              <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg">
-                <div className="flex items-center gap-2 text-sm">
-                  <Activity className="w-4 h-4 text-safe" />
-                  <span>AI 분석 중...</span>
-                </div>
-              </div>
-
-              {/* Detection Box (Example) */}
-              <div className="absolute top-1/3 left-1/3 w-32 h-48 border-4 border-safe rounded-lg">
-                <div className="absolute -top-7 left-0 bg-safe text-white text-xs px-2 py-1 rounded">
-                  아이 감지됨
-                </div>
-              </div>
-
-              {/* Zone Warnings */}
-              <div className="absolute bottom-20 left-4 right-4 space-y-2">
-                <div className="bg-warning/90 text-white px-4 py-2 rounded-lg flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5" />
-                  <span className="text-sm">데드존 근처 접근 감지</span>
-                </div>
-              </div>
-
-              {/* Video Controls */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-                    >
-                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                    </button>
-                    <button
-                      onClick={() => setIsMuted(!isMuted)}
-                      className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-                    >
-                      {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                    </button>
-                    <span className="text-white text-sm ml-2">오후 3:45:22</span>
-                  </div>
-                  <button className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
-                    <Maximize className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -569,40 +383,10 @@ export default function LiveMonitoring() {
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  재생 속도: {streamSpeed}x
-                </label>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3"
-                  step="0.5"
-                  value={streamSpeed}
-                  onChange={(e) => setStreamSpeed(parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>0.5x</span>
-                  <span>1x</span>
-                  <span>1.5x</span>
-                  <span>2x</span>
-                  <span>2.5x</span>
-                  <span>3x</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="loop"
-                  checked={streamLoop}
-                  onChange={(e) => setStreamLoop(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <label htmlFor="loop" className="text-sm text-gray-700">
-                  비디오 반복 재생
-                </label>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  💡 비디오 업로드 후 자동으로 HLS 스트리밍이 시작됩니다.
+                </p>
               </div>
 
               {uploadError && (
@@ -640,7 +424,7 @@ export default function LiveMonitoring() {
 
 // Camera Thumbnail Component
 function CameraThumbnail({
-  id,
+  id: _id,
   name,
   isActive,
   onClick,

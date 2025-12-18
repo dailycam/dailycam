@@ -1,9 +1,29 @@
+import { useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { API_BASE_URL } from '@/constants/api'
 
 export default function Login() {
+    const navigate = useNavigate()
+    const location = useLocation()
+    
+    // ProtectedRoute에서 전달받은 원래 경로
+    const from = (location.state as any)?.from || '/monitoring'
+
+    const { isAuthenticated } = useAuth()
+    
+    useEffect(() => {
+        // 이미 로그인되어 있으면 원래 가려던 페이지로 이동
+        if (isAuthenticated) {
+            console.log('[Login] 이미 로그인됨, 리다이렉트:', from)
+            navigate(from, { replace: true })
+        }
+    }, [navigate, from, isAuthenticated])
+
     const handleGoogleLogin = () => {
         // 백엔드 Google OAuth 엔드포인트로 리다이렉트
-        window.location.href = 'http://localhost:8000/api/auth/google/login'
+        window.location.href = `${API_BASE_URL}/api/auth/google/login`
     }
 
     return (

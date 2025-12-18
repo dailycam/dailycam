@@ -285,14 +285,14 @@ GROUP BY worker_id;
 
 - `docs/PROCESS_SEPARATION_ARCHITECTURE.md`: 상세 아키텍처 설명
 - `backend/README_WORKER.md`: 워커 사용 가이드
-- `backend/scripts/create_analysis_jobs_table.sql`: DB 마이그레이션
+- `backend/app/commands/db/create_analysis_jobs_table.sql`: DB 마이그레이션
 
 ## 생성된 파일
 
 1. **모델**: `backend/app/models/live_monitoring/analysis_job.py`
 2. **워커**: `backend/analysis_worker.py`
 3. **스크립트**: `backend/start_worker.bat`
-4. **SQL**: `backend/scripts/create_analysis_jobs_table.sql`
+4. **SQL**: `backend/app/commands/db/create_analysis_jobs_table.sql`
 5. **문서**: `backend/README_WORKER.md`, `docs/PROCESS_SEPARATION_ARCHITECTURE.md`
 
 ## 수정된 파일

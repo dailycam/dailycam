@@ -9,6 +9,9 @@ from app.models.user import User
 from app.utils.auth_utils import get_current_user_id
 from app.services.gemini_content_curator import GeminiContentCurator
 from app.services.content_cache import get_from_cache, save_to_cache
+from app.services.geocoding_service import get_location_from_coords
+from pydantic import BaseModel
+from typing import Optional
 
 
 router = APIRouter(prefix="/api/content", tags=["content"])
@@ -137,8 +140,15 @@ async def get_recommended_blogs(
         raise HTTPException(status_code=500, detail="블로그 추천 중 오류가 발생했습니다")
 
 
-@router.get("/recommended-news")
+class LocationRequest(BaseModel):
+    """위치 정보 요청 모델"""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+@router.post("/recommended-news")
 async def get_recommended_news(
+    location_data: LocationRequest = None,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
@@ -153,13 +163,24 @@ async def get_recommended_news(
     
     age_months = calculate_age_months(user.child_birthdate) if user.child_birthdate else 6
     
-    # 캐시 확인
-    cache_key = f"news:{age_months}"
+    # 위치 정보 처리
+    location = None
+    if location_data and location_data.latitude and location_data.longitude:
+        print(f"📍 [News API] 위치 정보 수신: ({location_data.latitude}, {location_data.longitude})")
+        location = get_location_from_coords(location_data.latitude, location_data.longitude)
+        if location:
+            print(f"✅ [News API] 지역명 변환 성공: {location}")
+        else:
+            print(f"⚠️ [News API] 지역명 변환 실패, 전국 뉴스로 fallback")
+    
+    # 캐시 확인 (위치 정보 포함)
+    cache_key = f"news:{age_months}:{location}" if location else f"news:{age_months}"
     cached = get_from_cache(cache_key)
     if cached:
         return {
             "news": cached,
             "age_months": age_months,
+            "location": location,
             "cached": True,
             "cached_at": datetime.utcnow().isoformat()
         }
@@ -167,7 +188,7 @@ async def get_recommended_news(
     # Gemini AI Agent 호출
     try:
         curator = get_curator()
-        news = await curator.get_recommended_news(age_months)
+        news = await curator.get_recommended_news(age_months, location=location)
         
         # 캐시 저장 (24시간)
         save_to_cache(cache_key, news, ttl=86400)
@@ -175,6 +196,7 @@ async def get_recommended_news(
         return {
             "news": news,
             "age_months": age_months,
+            "location": location,
             "cached": False,
             "generated_at": datetime.utcnow().isoformat()
         }
@@ -341,4 +363,28 @@ async def search_content(
     except Exception as e:
         print(f"검색 오류: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+
+@router.post("/clear-cache")
+async def clear_content_cache(
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    콘텐츠 캐시 삭제
+    
+    개발/테스트 목적으로 캐시를 수동으로 삭제합니다.
+    """
+    from app.services.content_cache import clear_cache, get_cache_stats
+    
+    # 캐시 삭제 전 통계
+    before_stats = get_cache_stats()
+    
+    # 캐시 삭제
+    clear_cache()
+    
+    return {
+        "message": "캐시가 삭제되었습니다",
+        "before": before_stats,
+        "after": get_cache_stats()
+    }
 

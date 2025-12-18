@@ -1,7 +1,7 @@
 """Safety Report API Router"""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -16,13 +16,36 @@ router = APIRouter()
 
 @router.get("/summary")
 def get_safety_report_summary(
-    period_type: str = Query("week", description="기간 타입 (week, month)"),
+    target_date: str = Query(None, description="조회할 날짜 (YYYY-MM-DD), 기본값은 오늘"),
+    period_type: str = Query("week", description="기간 타입 (week, month) - 트렌드 차트용"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ) -> Dict[str, Any]:
     """
     안전 리포트용 요약 데이터 조회
+    
+    특정 날짜의 하루치 데이터를 조회합니다. (최근 7일 이내)
+    period_type은 트렌드 차트의 기간을 결정합니다.
     """
+    import time
+    start_time = time.time()
+    print(f"\n[Safety API] 🚀 요청 시작 - User: {user_id}, Date: {target_date}, Period: {period_type}")
+    
+    # 조회할 날짜 설정 (기본값: 오늘)
+    if target_date:
+        try:
+            query_date = datetime.strptime(target_date, "%Y-%m-%d")
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        query_date = datetime.now()
+    
+    # 최근 7일 이내인지 확인
+    days_ago = (datetime.now() - query_date).days
+    if days_ago < 0 or days_ago > 6:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Only data from the last 7 days can be queried")
     # 기간 설정
     if period_type == "week":
         days = 7
@@ -32,9 +55,10 @@ def get_safety_report_summary(
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    # 기간 내 분석 로그들
+    # 기간 내 분석 로그들 (관련 이벤트를 함께 로드하여 N+1 쿼리 방지)
     logs = (
         db.query(AnalysisLog)
+        .options(selectinload(AnalysisLog.safety_events))  # SafetyEvent를 미리 로드
         .filter(
             AnalysisLog.user_id == user_id,
             AnalysisLog.created_at >= start_date
@@ -112,14 +136,18 @@ def get_safety_report_summary(
                 "안전도": int(week_stats.avg_safety or 0) if week_stats.avg_safety else 0
             })
     
-    # 안전사고 유형별 통계 (오늘 기준)
-    today_start_for_incidents = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # 선택한 날짜의 하루치 데이터 조회 기준
+    today_start = query_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = query_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # 안전사고 유형별 통계 (선택한 날짜 기준)
     all_safety_events = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start_for_incidents
+            AnalysisLog.created_at >= today_start,
+            AnalysisLog.created_at <= today_end
         )
         .all()
     )
@@ -153,9 +181,7 @@ def get_safety_report_summary(
         {"name": "화상", "value": 5, "color": "#ff7043", "count": incident_type_counts.get("화상", 0)}, # 화상 색상 및 value 추가
     ]
     
-    # 24시간 시계 데이터 (오늘 날짜 기준)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    # 24시간 시계 데이터 (선택한 날짜 기준)
     
     today_logs = (
         db.query(AnalysisLog)
@@ -230,19 +256,20 @@ def get_safety_report_summary(
     avg_safety_score = int(sum(today_safety_scores) / len(today_safety_scores)) if today_safety_scores else 0
     
     # 체크리스트 데이터 생성 (SafetyEvent 기반)
+    # 날짜 무관하게 전체 미해결 이슈를 조회 (항상 최신 상태 유지)
     checklist = []
     
-    # 최근 미해결 안전 이벤트 조회 (오늘 발생한 건만, 최대 50개 조회 후 중복 제거)
+    # 전체 기간의 미해결 안전 이벤트 조회 (위험도 높은 순으로 10개)
     recent_safety_events = (
         db.query(SafetyEvent)
         .join(AnalysisLog, SafetyEvent.analysis_log_id == AnalysisLog.id)
         .filter(
             AnalysisLog.user_id == user_id,
-            AnalysisLog.created_at >= today_start,  # 오늘 발생한 건만 조회
+            # 날짜 필터 제거 - 전체 기간의 미해결 이슈 표시
             (SafetyEvent.resolved == False) | (SafetyEvent.resolved == None)  # 미해결 건만 조회
         )
         .order_by(SafetyEvent.event_timestamp.desc())
-        .limit(50)
+        .limit(50)  # 중복 제거 전 충분히 조회
         .all()
     )
 
@@ -303,22 +330,34 @@ def get_safety_report_summary(
     # 프론트엔드에서 완료 시 다음 항목을 보여주기 위해 넉넉하게 10개 반환
     checklist = checklist[:10]
 
-    # 텍스트 데이터는 HourlyReport에서 가져오기 (최신 1시간 리포트)
-    now = datetime.now()
-    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+    # 선택한 날짜의 분석 로그들 조회 (요약용)
+    selected_date_logs = (
+        db.query(AnalysisLog)
+        .filter(
+            AnalysisLog.user_id == user_id,
+            AnalysisLog.created_at >= today_start,
+            AnalysisLog.created_at <= today_end
+        )
+        .order_by(AnalysisLog.created_at.desc())
+        .all()
+    )
     
-    # 최신 HourlyReport 조회
+    latest_log = selected_date_logs[0] if selected_date_logs else None
+    
+    # 텍스트 데이터는 HourlyReport에서 가져오기 (선택한 날짜의 최신 리포트)
+    # 선택한 날짜의 HourlyReport 조회
     latest_hourly_report = (
         db.query(HourlyReport)
         .filter(
             HourlyReport.camera_id == camera_id,
-            HourlyReport.hour_start < current_hour_start
+            HourlyReport.hour_start >= today_start,
+            HourlyReport.hour_start <= today_end
         )
         .order_by(HourlyReport.hour_start.desc())
         .first()
     )
     
-    # 안전 요약 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    # 안전 요약 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
     if latest_hourly_report and latest_hourly_report.safety_summary:
         safety_summary = latest_hourly_report.safety_summary
     elif latest_log and latest_log.safety_summary:
@@ -326,13 +365,16 @@ def get_safety_report_summary(
     else:
         safety_summary = "아직 분석된 데이터가 없습니다."
     
-    # 안전 인사이트 (HourlyReport에서 가져오거나, 없으면 최신 로그 사용)
+    # 안전 인사이트 (선택한 날짜의 HourlyReport 또는 AnalysisLog에서 가져오기)
     if latest_hourly_report and latest_hourly_report.safety_insights:
         safety_insights = latest_hourly_report.safety_insights
     elif latest_log and latest_log.safety_insights:
         safety_insights = latest_log.safety_insights
     else:
         safety_insights = []
+    
+    elapsed_time = time.time() - start_time
+    print(f"[Safety API] ✅ 요청 완료 - 소요 시간: {elapsed_time:.3f}초")
     
     return {
         "trendData": trend_data,  # 실시간

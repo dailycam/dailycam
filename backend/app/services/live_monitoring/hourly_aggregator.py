@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import pytz
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -38,17 +39,34 @@ class HourlyAggregator:
         Returns:
             HourlyReport: 생성된 리포트 (실패 시 None)
         """
+        
+        # KST -> UTC 변환 (DB 조회용)
+        # hour_start는 timezone-aware datetime이어야 함 (KST)
+        if hour_start.tzinfo is None:
+            kst = pytz.timezone('Asia/Seoul')
+            hour_start = kst.localize(hour_start)
+        else:
+            # 이미 timezone이 있다면 KST인지 확인 (다르면 변환)
+            kst = pytz.timezone('Asia/Seoul')
+            if hour_start.tzinfo != kst:
+                hour_start = hour_start.astimezone(kst)
+            
         hour_end = hour_start + timedelta(hours=1)
         
-        print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} ~ {hour_end.strftime('%H:%M')} 종합 분석 시작")
+        # DB 쿼리용 UTC 시간 (naive)
+        hour_start_utc = hour_start.astimezone(pytz.UTC).replace(tzinfo=None)
+        hour_end_utc = hour_end.astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        print(f"[HourlyAggregator] {hour_start.strftime('%Y-%m-%d %H:%M')} (KST) 종합 분석 시작")
+        print(f"  - DB 조회 범위(UTC): {hour_start_utc} ~ {hour_end_utc}")
         
         # 1. 해당 시간대의 완료된 세그먼트 조회 (최대 6개)
         segments = (
             db.query(SegmentAnalysis)
             .filter(
                 SegmentAnalysis.camera_id == camera_id,
-                SegmentAnalysis.segment_start >= hour_start,
-                SegmentAnalysis.segment_start < hour_end,
+                SegmentAnalysis.segment_start >= hour_start_utc,
+                SegmentAnalysis.segment_start < hour_end_utc,
                 SegmentAnalysis.status == 'completed'
             )
             .order_by(SegmentAnalysis.segment_start.asc())
@@ -133,7 +151,8 @@ class HourlyAggregator:
             existing.development_insights = aggregated_text.get('development_insights', [])
             existing.recommended_activities = aggregated_text.get('recommended_activities', [])
             existing.segment_analyses_ids = [s.id for s in segments]
-            existing.updated_at = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            existing.updated_at = datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None)
             hourly_report = existing
         else:
             db.add(hourly_report)
@@ -360,7 +379,7 @@ class HourlyAggregator:
             "**중요 지침:**",
             "1. 중복되는 내용은 하나로 통합하세요",
             "2. 비슷한 내용은 그룹화하여 핵심만 남기세요",
-            "3. 가장 중요한 정보만 선별하여 포함하세요",
+            "3. 가장 중요한 정보만 선별하여 포함하고, 각 항목의 설명을 최대 2-3문장으로 간결하게 요약하세요.",
             "4. 빈 배열이나 빈 문자열이어도 괜찮습니다",
             "5. 반드시 유효한 JSON 형식으로 응답하세요"
         ])
@@ -386,7 +405,8 @@ class HourlyAggregatorScheduler:
         while self.is_running:
             # 매 시간 정각 + 5분에 실행 (예: 14:05, 15:05, 16:05...)
             # 5분 여유를 두어 마지막 10분 세그먼트가 완료되도록 함
-            now = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            now = datetime.now(kst)
             next_aggregation_time = (now.replace(minute=5, second=0, microsecond=0) + 
                                     timedelta(hours=1))
             

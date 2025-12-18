@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getAuthHeader } from '../lib/auth';
 import { SafetyReportData, ClockData } from '../types/safety';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/constants/api';
 
 const getSeverityColor = (severity: string | null) => {
     switch (severity) {
@@ -31,9 +29,7 @@ export function useSafetyData() {
                     `${API_BASE_URL}/api/safety/summary?period_type=${periodType}`,
                     {
                         method: 'GET',
-                        headers: {
-                            ...getAuthHeader(),
-                        },
+                        credentials: 'include',
                     }
                 );
 

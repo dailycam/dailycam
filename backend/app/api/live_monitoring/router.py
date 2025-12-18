@@ -1,15 +1,18 @@
-from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, Response, FileResponse
 from pathlib import Path
 from datetime import datetime, timedelta
 import asyncio
 import cv2
 import numpy as np
-from typing import Dict
+from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+import os
+import httpx
 
 from app.database.session import get_db
+from app.utils.auth_utils import get_current_user_id
 from app.models.live_monitoring.models import RealtimeEvent, HourlyAnalysis, SegmentAnalysis, DailyReport
 from app.services.live_monitoring.fake_stream_generator import FakeLiveStreamGenerator
 from app.services.live_monitoring.hls_stream_generator import HLSStreamGenerator
@@ -35,36 +38,17 @@ async def upload_video_for_streaming(
     video: UploadFile = File(..., description="업로드할 비디오 파일")
 ):
     """
-    비디오 파일 업로드 (기존 영상 저장용)
-    업로드된 영상을 short 또는 medium 폴더에 저장
+    ⚠️ DEPRECATED: 이 엔드포인트는 더 이상 사용되지 않습니다.
+    
+    대신 다음을 사용하세요:
+    POST /api/camera-settings/cameras/{camera_id}/upload-video
+    
+    이 엔드포인트는 하위 호환성을 위해 유지되지만, 새 엔드포인트 사용을 권장합니다.
     """
-    if not video.content_type or not video.content_type.startswith('video/'):
-        raise HTTPException(status_code=400, detail="비디오 파일만 업로드 가능합니다")
-    
-    # 비디오 길이에 따라 short 또는 medium 폴더에 저장
-    # 여기서는 기본적으로 short에 저장
-    video_dir = Path(f"videos/{camera_id}/short")
-    video_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 타임스탬프를 포함한 파일명 생성
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"uploaded_{timestamp}_{video.filename}"
-    file_path = video_dir / filename
-    
-    # 파일 저장
-    content = await video.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
-    
-    print(f"[비디오 업로드] {camera_id}: {filename} ({len(content)/1024/1024:.2f}MB)")
-    
-    return {
-        "camera_id": camera_id,
-        "video_path": str(file_path),
-        "filename": filename,
-        "message": "비디오 업로드 완료",
-        "stream_url": f"/api/live-monitoring/stream/{camera_id}"
-    }
+    raise HTTPException(
+        status_code=410,
+        detail="이 엔드포인트는 더 이상 사용되지 않습니다. Settings 페이지에서 영상을 업로드해주세요."
+    )
 
 
 @router.post("/start-stream/{camera_id}")
@@ -72,7 +56,9 @@ async def start_stream(
     camera_id: str,
     enable_analysis: bool = Query(True, description="1시간 단위 분석 활성화"),
     enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
-    age_months: int = Query(None, description="아이의 개월 수 (실시간 분석 정확도 향상)")
+    age_months: int = Query(None, description="아이의 개월 수 (실시간 분석 정확도 향상)"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     가짜 라이브 스트림 시작
@@ -87,10 +73,45 @@ async def start_stream(
     
     # 영상 디렉토리 확인
     if not video_dir.exists():
-        raise HTTPException(
-            status_code=404, 
-            detail=f"영상 디렉토리가 없습니다: {video_dir}"
-        )
+        video_dir.mkdir(parents=True, exist_ok=True)
+    
+    # DB에서 활성화된 영상 확인
+    from app.models.camera_setting import CameraSetting, CameraVideo
+    
+    try:
+        camera_setting = db.query(CameraSetting).filter(
+            CameraSetting.camera_id == camera_id,
+            CameraSetting.user_id == user_id,
+            CameraSetting.is_active == True
+        ).first()
+        
+        if not camera_setting:
+            raise HTTPException(
+                status_code=400, 
+                detail="카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
+            )
+        
+        active_videos = db.query(CameraVideo).filter(
+            CameraVideo.camera_setting_id == camera_setting.id,
+            CameraVideo.is_active == True
+        ).count()
+        
+        if active_videos == 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[스트림] DB 조회 실패, 로컬 파일 시스템 사용: {e}")
+        # 폴백: 로컬 파일 시스템
+        user_videos = list(video_dir.glob("user_uploaded_*.mp4"))
+        if not user_videos:
+            raise HTTPException(
+                status_code=400, 
+                detail="업로드된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+            )
     
     # 현재 이벤트 루프 가져오기
     loop = asyncio.get_running_loop()
@@ -129,13 +150,46 @@ async def start_stream(
     }
 
 
+def get_current_user_id_optional(request: Request) -> Optional[int]:
+    """선택적 사용자 ID 가져오기 (인증 실패 시 None 반환)"""
+    try:
+        from app.utils.auth_utils import get_current_user_id
+        # get_current_user_id는 Depends이므로 직접 호출할 수 없음
+        # 대신 토큰을 직접 파싱
+        from jose import jwt, JWTError
+        import os
+        
+        # 쿠키에서 토큰 가져오기
+        token = request.cookies.get("access_token")
+        if not token:
+            # Authorization 헤더에서 가져오기
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        
+        if token:
+            secret_key = os.getenv("JWT_SECRET_KEY")
+            if secret_key:
+                try:
+                    payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+                    return payload.get("user_id")
+                except JWTError:
+                    pass
+        return None
+    except Exception:
+        return None
+
+
 @router.post("/start-hls-stream/{camera_id}")
 async def start_hls_stream(
     camera_id: str,
+    request: Request,
     camera_url: str = Query(None, description="홈캠 RTSP/HTTP URL (실제 카메라인 경우)"),
     enable_analysis: bool = Query(True, description="10분 단위 분석 활성화"),
     enable_realtime_detection: bool = Query(True, description="실시간 이벤트 탐지 활성화"),
-    age_months: int = Query(None, description="아이의 개월 수")
+    age_months: int = Query(None, description="아이의 개월 수"),
+    s3_keys: Optional[str] = Query(None, description="S3 키 목록 (쉼표로 구분, 메인 서버에서 전달 시 DB 조회 생략)"),
+    db: Session = Depends(get_db)
 ):
     """
     HLS 스트림 시작 (진짜 실시간 스트림)
@@ -143,8 +197,29 @@ async def start_hls_stream(
     - 재연결 시 자동으로 현재 시간부터 재생
     - 가짜 영상 또는 실제 홈캠 지원
     """
+    # 이미 실행 중인 스트림이 있으면 자동으로 중지
     if camera_id in active_hls_streams:
-        raise HTTPException(status_code=400, detail="이미 HLS 스트림이 실행 중입니다")
+        print(f"[API] 기존 HLS 스트림 발견, 자동 중지 후 재시작: {camera_id}")
+        
+        # 기존 스트림 중지
+        generator = active_hls_streams[camera_id]
+        generator.stop_streaming()
+        
+        # 태스크 취소
+        if camera_id in hls_stream_tasks:
+            task = hls_stream_tasks[camera_id]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del hls_stream_tasks[camera_id]
+        
+        del active_hls_streams[camera_id]
+        
+        # 분석 스케줄러 중지
+        await stop_segment_analysis_for_camera(camera_id)
     
     # 실제 카메라인지 가짜 영상인지 판단
     is_real_camera = camera_url is not None
@@ -154,17 +229,106 @@ async def start_hls_stream(
         video_source = camera_url
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     else:
-        # 가짜 영상
+        # 사용자 업로드 영상
+        from app.models.camera_setting import CameraSetting, CameraVideo
+        from app.services.s3_service import S3Service
+        
         video_dir = Path(f"videos/{camera_id}")
         if not video_dir.exists():
-            raise HTTPException(404, f"영상 디렉토리가 없습니다: {video_dir}")
+            video_dir.mkdir(parents=True, exist_ok=True)
+        
+        user_id = get_current_user_id_optional(request)
+        s3_service = S3Service()
+        active_videos_list = []
+        
+        # S3 키가 직접 전달된 경우 (메인 서버에서 호출, DB 조회 생략)
+        if s3_keys and s3_service.is_enabled():
+            print(f"[HLS 스트림 시작] S3 키 직접 전달됨 (DB 조회 생략): {s3_keys}")
+            s3_key_list = [key.strip() for key in s3_keys.split(",") if key.strip()]
+            
+            for s3_key in s3_key_list:
+                # S3 키에서 파일명 추출 (예: videos/camera-1/filename.mp4 -> filename.mp4)
+                filename = s3_key.split("/")[-1]
+                local_video_path = video_dir / filename
+                
+                # S3에서 다운로드
+                if not local_video_path.exists():
+                    print(f"[HLS 스트림 시작] 📥 S3에서 다운로드 중: {s3_key}")
+                    success = s3_service.download_camera_video(s3_key, local_video_path)
+                    if not success:
+                        print(f"[HLS 스트림 시작] ❌ S3 다운로드 실패: {s3_key}")
+                        continue
+                else:
+                    print(f"[HLS 스트림 시작] ✅ 로컬 파일 존재: {filename}")
+                
+                # HLSStreamGenerator에서 사용할 수 있는 형태로 저장
+                active_videos_list.append({
+                    'filename': filename,
+                    's3_key': s3_key,
+                    'local_path': local_video_path
+                })
+            
+            if len(active_videos_list) == 0:
+                raise HTTPException(
+                    400,
+                    "S3에서 영상을 다운로드할 수 없습니다."
+                )
+        else:
+            # 기존 방식: DB에서 조회 (로컬 실행 또는 직접 호출 시)
+            if not user_id:
+                raise HTTPException(
+                    401,
+                    "인증이 필요합니다. S3 키를 직접 전달하거나 로그인해주세요."
+                )
+            
+            camera_setting = db.query(CameraSetting).filter(
+                CameraSetting.camera_id == camera_id,
+                CameraSetting.user_id == user_id,
+                CameraSetting.is_active == True
+            ).first()
+            
+            if not camera_setting:
+                raise HTTPException(
+                    400, 
+                    "카메라 설정을 찾을 수 없습니다. Settings 페이지에서 먼저 카메라를 설정해주세요."
+                )
+            
+            active_videos_list = db.query(CameraVideo).filter(
+                CameraVideo.camera_setting_id == camera_setting.id,
+                CameraVideo.is_active == True
+            ).order_by(CameraVideo.order_index).all()
+            
+            if len(active_videos_list) == 0:
+                raise HTTPException(
+                    400, 
+                    "활성화된 영상이 없습니다. Settings 페이지에서 먼저 영상을 업로드해주세요."
+                )
+            
+            # S3에서 영상 다운로드 (DB 조회 후)
+            if s3_service.is_enabled():
+                print(f"[HLS 스트림 시작] S3에서 영상 다운로드 시작: {camera_id}")
+                for camera_video in active_videos_list:
+                    if camera_video.s3_key:
+                        local_video_path = video_dir / camera_video.filename
+                        if not local_video_path.exists():
+                            success = s3_service.download_camera_video(camera_video.s3_key, local_video_path)
+                            if not success:
+                                print(f"[HLS 스트림 시작] ⚠️ S3 다운로드 실패: {camera_video.s3_key}")
+                    else:
+                        print(f"[HLS 스트림 시작] ⚠️ S3 키 없음: {camera_video.filename}, 로컬 파일만 사용")
+            else:
+                print(f"[HLS 스트림 시작] ⚠️ S3가 비활성화되어 있습니다. 로컬 파일만 사용")
+        
         video_source = video_dir
         output_dir = Path(f"temp_videos/hls_buffer/{camera_id}")
     
     # 현재 이벤트 루프 가져오기
     loop = asyncio.get_running_loop()
     
-    # HLS 스트림 생성기 생성
+    # HLS 스트림 생성기 생성 (DB 세션 전달)
+    # user_id 가져오기 (S3 키가 전달된 경우 None일 수 있음)
+    final_user_id = get_current_user_id_optional(request)
+    
     generator = HLSStreamGenerator(
         camera_id=camera_id,
         video_source=video_source,
@@ -173,7 +337,9 @@ async def start_hls_stream(
         segment_duration=10,  # 10초 단위 HLS 세그먼트
         enable_realtime_detection=enable_realtime_detection,
         age_months=age_months,
-        event_loop=loop
+        event_loop=loop,
+        db_session=db,  # DB 세션 전달
+        user_id=final_user_id  # 사용자 ID 전달 (None일 수 있음)
     )
     active_hls_streams[camera_id] = generator
     
@@ -201,25 +367,70 @@ async def start_hls_stream(
 @router.get("/stream-status/{camera_id}")
 async def get_stream_status(camera_id: str):
     """HLS 스트림 상태 확인"""
-    is_active = camera_id in active_hls_streams
+    # 메인 서버에서는 스트리밍 서버의 상태를 확인
+    enable_hls_streaming = os.getenv("ENABLE_HLS_STREAMING", "false").lower() == "true"
     
-    if is_active:
-        generator = active_hls_streams[camera_id]
-        return {
-            "camera_id": camera_id,
-            "is_active": True,
-            "is_running": generator.is_running,
-            "playlist_url": f"/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8",
-            "message": "스트림 실행 중"
-        }
+    if enable_hls_streaming:
+        # 스트리밍 서버에서 직접 확인 (로컬 실행)
+        is_active = camera_id in active_hls_streams
+        
+        if is_active:
+            generator = active_hls_streams[camera_id]
+            return {
+                "camera_id": camera_id,
+                "is_active": True,
+                "is_running": generator.is_running,
+                "playlist_url": f"/api/live-monitoring/hls/{camera_id}/{camera_id}.m3u8",
+                "message": "스트림 실행 중"
+            }
+        else:
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 중지됨"
+            }
     else:
-        return {
-            "camera_id": camera_id,
-            "is_active": False,
-            "is_running": False,
-            "playlist_url": None,
-            "message": "스트림 중지됨"
-        }
+        # 메인 서버에서는 스트리밍 서버의 상태를 확인
+        streaming_server_url = os.getenv("STREAMING_SERVER_URL", "https://stream.dailycam.net")
+        
+        try:
+            async with httpx.AsyncClient(verify=False, timeout=5.0) as client:
+                response = await client.get(
+                    f"{streaming_server_url}/api/live-monitoring/stream-status/{camera_id}"
+                )
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"[스트림 상태 확인] 스트리밍 서버 응답 오류: {response.status_code} - {response.text}")
+                    return {
+                        "camera_id": camera_id,
+                        "is_active": False,
+                        "is_running": False,
+                        "playlist_url": None,
+                        "message": "스트림 상태 확인 실패"
+                    }
+        except httpx.TimeoutException:
+            print(f"[스트림 상태 확인] 스트리밍 서버 타임아웃: {camera_id}")
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 상태 확인 타임아웃"
+            }
+        except Exception as e:
+            print(f"[스트림 상태 확인] 스트리밍 서버 호출 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "camera_id": camera_id,
+                "is_active": False,
+                "is_running": False,
+                "playlist_url": None,
+                "message": "스트림 상태 확인 실패"
+            }
 
 
 @router.post("/stop-hls-stream/{camera_id}")
@@ -246,7 +457,7 @@ async def stop_hls_stream(camera_id: str):
     del active_hls_streams[camera_id]
     
     # 분석 스케줄러 중지
-    stop_segment_analysis_for_camera(camera_id)
+    await stop_segment_analysis_for_camera(camera_id)
     
     print(f"[API] HLS 스트림 중지: {camera_id}")
     
@@ -276,20 +487,51 @@ async def serve_hls_file(camera_id: str, filename: str):
     # MIME 타입 설정
     if filename.endswith('.m3u8'):
         media_type = "application/vnd.apple.mpegurl"
+        # m3u8 파일은 동적으로 업데이트되므로 파일 내용을 직접 읽어서 반환
+        # FileResponse는 Content-Length를 먼저 계산하는데, 파일이 업데이트되면 길이가 달라져서 에러 발생
+        try:
+            # 파일 내용을 읽기 (동기 I/O를 별도 스레드에서 실행)
+            def read_file():
+                with open(file_path, 'rb') as f:
+                    return f.read()
+            
+            file_content = await asyncio.to_thread(read_file)
+            
+            return Response(
+                content=file_content,
+                media_type=media_type,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
+        except Exception as e:
+            print(f"[HLS] m3u8 파일 읽기 실패: {e}")
+            raise HTTPException(status_code=500, detail="파일을 읽을 수 없습니다")
     elif filename.endswith('.ts'):
         media_type = "video/mp2t"
+        # ts 파일은 FileResponse 사용 (크기가 크고 변경이 적음)
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     else:
         media_type = "application/octet-stream"
-    
-    return FileResponse(
-        file_path,
-        media_type=media_type,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-    )
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
 
 @router.post("/stop-stream/{camera_id}")
@@ -332,7 +574,9 @@ async def stream_video(
     loop: bool = Query(True, description="반복 재생 여부"),
     speed: float = Query(1.0, description="재생 속도"),
     video_path: str = Query(None, description="특정 비디오 경로"),
-    use_segments: bool = Query(True, description="세그먼트 파일 기반 스트리밍 사용 여부")
+    use_segments: bool = Query(True, description="세그먼트 파일 기반 스트리밍 사용 여부"),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     실시간 스트림 (MJPEG 스트리밍)
@@ -492,30 +736,40 @@ async def stream_video(
     # 원본 영상 기반 스트리밍 (fallback)
     video_dir = Path(f"videos/{camera_id}")
     
-    # 비디오 파일 찾기
+    # 비디오 파일 찾기 (DB 기반)
+    from app.models.camera_setting import CameraSetting, CameraVideo
+    
+    video_files = []
     if video_path:
         video_files = [Path(video_path)]
     else:
-        # 원본 영상 파일들 로드
-        video_files = []
-        
-        # short 디렉토리의 영상들
-        short_dir = video_dir / "short"
-        if short_dir.exists():
-            video_files.extend(sorted(short_dir.glob("*.mp4")))
-        
-        # medium 디렉토리의 영상들
-        medium_dir = video_dir / "medium"
-        if medium_dir.exists():
-            video_files.extend(sorted(medium_dir.glob("*.mp4")))
-        
-        # 루트 디렉토리의 영상들
-        video_files.extend(sorted(video_dir.glob("*.mp4")))
+        # DB에서 활성화된 영상 조회
+        try:
+            camera_setting = db.query(CameraSetting).filter(
+                CameraSetting.camera_id == camera_id,
+                CameraSetting.user_id == user_id,
+                CameraSetting.is_active == True
+            ).first()
+            
+            if camera_setting:
+                camera_videos = db.query(CameraVideo).filter(
+                    CameraVideo.camera_setting_id == camera_setting.id,
+                    CameraVideo.is_active == True
+                ).order_by(CameraVideo.order_index).all()
+                
+                for video in camera_videos:
+                    video_path_obj = Path(video.file_path)
+                    if video_path_obj.exists():
+                        video_files.append(video_path_obj)
+        except Exception as e:
+            print(f"[스트림] DB 조회 실패, 로컬 파일 시스템 사용: {e}")
+            # 폴백: 로컬 파일 시스템
+            video_files = sorted(video_dir.glob("user_uploaded_*.mp4"))
         
         if not video_files:
             raise HTTPException(
                 status_code=404,
-                detail=f"스트림 파일이 없습니다. {video_dir}에 영상을 업로드하세요"
+                detail=f"업로드된 영상이 없습니다. Settings 페이지에서 영상을 업로드해주세요."
             )
     
     print(f"[스트림] 원본 영상 기반 스트리밍: {camera_id}, {len(video_files)}개 파일")
@@ -818,12 +1072,26 @@ async def get_monitoring_stats(
         RealtimeEvent.timestamp >= hour_ago
     ).count()
     
+    # 오늘의 총 모니터링 시간 계산 (분 단위)
+    today_segments = db.query(SegmentAnalysis).filter(
+        SegmentAnalysis.camera_id == camera_id,
+        SegmentAnalysis.segment_start >= today_start,
+        SegmentAnalysis.status == 'completed'
+    ).all()
+    
+    total_monitoring_seconds = sum(
+        (s.segment_end - s.segment_start).total_seconds() 
+        for s in today_segments
+    )
+    total_monitoring_minutes = int(total_monitoring_seconds / 60)
+    
     return {
         "camera_id": camera_id,
         "today_total_events": total_events,
         "danger_events": danger_events,
         "warning_events": warning_events,
         "recent_hour_events": recent_events,
+        "today_monitoring_minutes": total_monitoring_minutes,
         "is_active": camera_id in active_streams
     }
 

@@ -1,0 +1,65 @@
+[1mdiff --git a/backend/app/services/highlight_clip_service.py b/backend/app/services/highlight_clip_service.py[m
+[1mindex b08fac5..d68ebb5 100644[m
+[1m--- a/backend/app/services/highlight_clip_service.py[m
+[1m+++ b/backend/app/services/highlight_clip_service.py[m
+[36m@@ -12,6 +12,7 @@[m [mfrom sqlalchemy.orm import Session[m
+ [m
+ from app.models.clip import HighlightClip, ClipCategory[m
+ from app.models.live_monitoring.models import SegmentAnalysis[m
+[32m+[m[32mfrom app.services.s3_service import S3Service[m
+ [m
+ [m
+ class HighlightClipService:[m
+[36m@@ -142,6 +143,52 @@[m [mclass HighlightClipService:[m
+             db.commit()[m
+             db.refresh(clip)[m
+             [m
+[32m+[m[32m            # S3에 업로드 (활성화된 경우)[m
+[32m+[m[32m            s3_service = S3Service()[m
+[32m+[m[32m            if s3_service.is_enabled():[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    # 비디오 업로드[m
+[32m+[m[32m                    video_s3_url = s3_service.upload_clip([m
+[32m+[m[32m                        file_path=output_path,[m
+[32m+[m[32m                        clip_id=str(clip.id),[m
+[32m+[m[32m                        file_type="video"[m
+[32m+[m[32m                    )[m
+[32m+[m[41m                    [m
+[32m+[m[32m                    # 썸네일 업로드[m
+[32m+[m[32m                    thumbnail_s3_url = None[m
+[32m+[m[32m                    if thumbnail_path.exists():[m
+[32m+[m[32m                        thumbnail_s3_url = s3_service.upload_clip([m
+[32m+[m[32m                            file_path=thumbnail_path,[m
+[32m+[m[32m                            clip_id=str(clip.id),[m
+[32m+[m[32m                            file_type="thumbnail"[m
+[32m+[m[32m                        )[m
+[32m+[m[41m                    [m
+[32m+[m[32m                    # DB에 S3 URL 업데이트[m
+[32m+[m[32m                    if video_s3_url:[m
+[32m+[m[32m                        clip.video_url = video_s3_url[m
+[32m+[m[32m                        if thumbnail_s3_url:[m
+[32m+[m[32m                            clip.thumbnail_url = thumbnail_s3_url[m
+[32m+[m[32m                        db.commit()[m
+[32m+[m[32m                        db.refresh(clip)[m
+[32m+[m[41m                        [m
+[32m+[m[32m                        # 로컬 파일 삭제 (선택적 - S3 업로드 성공 후)[m
+[32m+[m[32m                        try:[m
+[32m+[m[32m                            output_path.unlink()[m
+[32m+[m[32m                            print(f"[하이라이트] 🗑️ 로컬 파일 삭제: {output_path.name}")[m
+[32m+[m[32m                        except Exception as e:[m
+[32m+[m[32m                            print(f"[하이라이트] ⚠️ 로컬 파일 삭제 실패 (무시): {e}")[m
+[32m+[m[41m                        [m
+[32m+[m[32m                        if thumbnail_path.exists():[m
+[32m+[m[32m                            try:[m
+[32m+[m[32m                                thumbnail_path.unlink()[m
+[32m+[m[32m                                print(f"[하이라이트] 🗑️ 로컬 썸네일 삭제: {thumbnail_path.name}")[m
+[32m+[m[32m                            except Exception as e:[m
+[32m+[m[32m                                print(f"[하이라이트] ⚠️ 로컬 썸네일 삭제 실패 (무시): {e}")[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                        print(f"[하이라이트] ⚠️ S3 업로드 실패, 로컬 URL 유지")[m
+[32m+[m[32m                except Exception as e:[m
+[32m+[m[32m                    print(f"[하이라이트] ⚠️ S3 업로드 중 오류 발생 (로컬 URL 유지): {e}")[m
+[32m+[m[41m            [m
+             return {[m
+                 "clip_id": clip.id,[m
+                 "video_url": clip.video_url,[m

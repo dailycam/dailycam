@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import pytz
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
 from pathlib import Path
@@ -133,7 +134,9 @@ class RealtimeEventDetector:
         if event_key not in self.last_event_time:
             return True
         
-        elapsed = (datetime.now() - self.last_event_time[event_key]).total_seconds()
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
+        elapsed = (now - self.last_event_time[event_key]).total_seconds()
         return elapsed > self.event_cooldown
     
     def should_run_gemini_analysis(self) -> bool:
@@ -144,7 +147,9 @@ class RealtimeEventDetector:
         if self.last_gemini_analysis is None:
             return True
         
-        elapsed = (datetime.now() - self.last_gemini_analysis).total_seconds()
+        kst = pytz.timezone('Asia/Seoul')
+        now = datetime.now(kst)
+        elapsed = (now - self.last_gemini_analysis).total_seconds()
         return elapsed >= self.gemini_analysis_interval
     
     async def analyze_with_gemini(self, frame: np.ndarray) -> Optional[RealtimeEvent]:
@@ -156,7 +161,8 @@ class RealtimeEventDetector:
         """
         try:
             self.gemini_analysis_running = True
-            self.last_gemini_analysis = datetime.now()
+            kst = pytz.timezone('Asia/Seoul')
+            self.last_gemini_analysis = datetime.now(kst)
             
             # 프레임을 JPEG로 인코딩
             ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -194,9 +200,10 @@ class RealtimeEventDetector:
             if dev_obs.get('notable'):
                 event_type = 'development'
             
+            kst = pytz.timezone('Asia/Seoul')
             event = RealtimeEvent(
                 camera_id=self.camera_id,
-                timestamp=datetime.now(),
+                timestamp=datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None),
                 event_type=event_type,
                 severity=severity,
                 title=event_summary.get('title', '활동 감지'),
@@ -255,9 +262,10 @@ class RealtimeEventDetector:
                 
                 if self.should_create_event(event_key):
                     # 위험 이벤트는 즉시 생성 (경량)
+                    kst = pytz.timezone('Asia/Seoul')
                     event = RealtimeEvent(
                         camera_id=self.camera_id,
-                        timestamp=datetime.now(),
+                        timestamp=datetime.now(kst).astimezone(pytz.UTC).replace(tzinfo=None),
                         event_type='safety',
                         severity=danger_zone['severity'],
                         title=f"⚠️ {danger_zone['name']} 접근 감지",
@@ -271,7 +279,8 @@ class RealtimeEventDetector:
                         }
                     )
                     events.append(event)
-                    self.last_event_time[event_key] = datetime.now()
+                    kst = pytz.timezone('Asia/Seoul')
+                    self.last_event_time[event_key] = datetime.now(kst)
         
         return events
     

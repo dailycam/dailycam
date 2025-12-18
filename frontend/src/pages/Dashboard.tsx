@@ -7,9 +7,13 @@ import { useDashboard } from '../features/dashboard/hooks/useDashboard'
 import { LayoutDashboard, FileText } from 'lucide-react'
 import { useState } from 'react'
 import { DailyReportModal } from '../features/reports/DailyReportModal'
+import { formatDate } from '../utils'
 
 export const Dashboard = () => {
     const {
+        selectedDate,
+        handleDateChange,
+        availableDates,
         error,
         selectedHour,
         setSelectedHour,
@@ -44,14 +48,29 @@ export const Dashboard = () => {
                     </h1>
                 </div>
 
-                {/* 데일리 리포트 버튼 */}
-                <button
-                    onClick={() => setShowReportModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-medium transition-colors"
-                >
-                    <FileText className="w-5 h-5" />
-                    오늘의 육아 리포트
-                </button>
+                <div className="flex items-center gap-3">
+                    {/* 날짜 선택 드롭다운 */}
+                    <select
+                        value={selectedDate.toISOString().split('T')[0]}
+                        onChange={(e) => handleDateChange(new Date(e.target.value))}
+                        className="px-4 py-2 border border-gray-300 rounded-xl bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                        {availableDates.map((date) => (
+                            <option key={date.toISOString()} value={date.toISOString().split('T')[0]}>
+                                {formatDate(date)}
+                            </option>
+                        ))}
+                    </select>
+
+                    {/* 데일리 리포트 버튼 */}
+                    <button
+                        onClick={() => setShowReportModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-medium transition-colors"
+                    >
+                        <FileText className="w-5 h-5" />
+                        오늘의 육아 리포트
+                    </button>
+                </div>
             </div>
             <p className="text-gray-600 mb-6">오늘 하루를 한눈에 확인하세요</p>
 

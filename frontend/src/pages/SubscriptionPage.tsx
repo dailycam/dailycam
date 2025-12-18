@@ -2,8 +2,9 @@
 
 import { useNavigate } from 'react-router-dom'
 import { Shield } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { getAuthToken } from '../lib/auth'
+import { useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { API_BASE_URL } from '@/constants/api'
 
 declare global {
     interface Window {
@@ -11,60 +12,79 @@ declare global {
     }
 }
 
-interface MeResponse {
-    id: number
-    email: string
-    name: string
-    // 백엔드에서 /api/auth/me에 is_subscribed, next_billing_at까지 내려줄 거라면
-    // 여기에 추가해도 됨
-    // is_subscribed?: boolean
-    // next_billing_at?: string | null
-}
-
-// 🔥 백엔드 기본 URL (Vite .env에서 설정 가능)
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-
 export default function SubscriptionPage() {
     const navigate = useNavigate()
-    const [me, setMe] = useState<MeResponse | null>(null)
+    const { user: me, refreshUser } = useAuth()
 
     useEffect(() => {
-        if (window.IMP) {
-            // .env: VITE_PORTONE_MERCHANT_ID=impXXXXXXX (포트원 가맹점 식별코드)
-            window.IMP.init(import.meta.env.VITE_PORTONE_MERCHANT_ID)
-        }
+        // PortOne 스크립트 로드 대기 및 초기화
+        let retryTimeout: NodeJS.Timeout | null = null
+        let retryCount = 0
+        const MAX_RETRIES = 50 // 5초 (50 * 100ms)
+        
+        const initPortOne = () => {
+            const merchantId = import.meta.env.VITE_PORTONE_MERCHANT_ID
+            
+            if (!merchantId) {
+                console.error('VITE_PORTONE_MERCHANT_ID가 설정되지 않았습니다.')
+                return
+            }
 
-        const fetchMe = async () => {
-            const token = getAuthToken()
-            if (!token) return
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
-                if (res.ok) {
-                    const data = await res.json()
-                    setMe({
-                        id: data.id,
-                        email: data.email,
-                        name: data.name,
-                    })
+            if (window.IMP) {
+                try {
+                    window.IMP.init(merchantId)
+                    console.log('PortOne 초기화 완료')
+                } catch (error) {
+                    console.error('PortOne 초기화 실패:', error)
                 }
-            } catch (e) {
-                console.error('failed to fetch /me', e)
+            } else {
+                // 스크립트가 아직 로드되지 않았으면 재시도
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++
+                    retryTimeout = setTimeout(initPortOne, 100)
+                } else {
+                    console.error('PortOne 스크립트 로드 실패: 시간 초과')
+                }
             }
         }
 
-        fetchMe()
+        // 즉시 초기화 시도
+        initPortOne()
+
+        // 스크립트 로드 완료 대기
+        const handleLoad = () => {
+            retryCount = 0 // 리셋
+            initPortOne()
+        }
+        
+        if (document.readyState === 'complete') {
+            handleLoad()
+        } else {
+            window.addEventListener('load', handleLoad)
+        }
+
+        // Context에서 사용자 정보를 가져오므로 별도 호출 불필요
+
+        return () => {
+            if (retryTimeout) {
+                clearTimeout(retryTimeout)
+            }
+            window.removeEventListener('load', handleLoad)
+        }
     }, [])
 
     const handleBasicPlanPay = () => {
         const { IMP } = window
+        const merchantId = import.meta.env.VITE_PORTONE_MERCHANT_ID
+        
         if (!IMP) {
-            alert('결제 모듈이 로드되지 않았습니다.')
+            alert('결제 모듈이 로드되지 않았습니다. 페이지를 새로고침해 주세요.')
+            return
+        }
+
+        if (!merchantId) {
+            alert('결제 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.')
+            console.error('VITE_PORTONE_MERCHANT_ID가 설정되지 않았습니다.')
             return
         }
 
@@ -103,8 +123,8 @@ export default function SubscriptionPage() {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${getAuthToken()}`,
                                 },
+                                credentials: 'include', // httpOnly Cookie
                                 body: JSON.stringify({
                                     imp_uid: rsp.imp_uid,
                                     merchant_uid: rsp.merchant_uid,
@@ -125,28 +145,26 @@ export default function SubscriptionPage() {
 
                         alert('베이직 플랜 월 정기구독이 시작되었습니다.')
 
+                        // 사용자 정보 새로고침
+                        await refreshUser()
+                        
+                        // Context 업데이트 대기
+                        await new Promise(resolve => setTimeout(resolve, 300))
+                        
                         // 프로필 완성 여부 확인 후 리다이렉트
-                        try {
-                            const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                                headers: {
-                                    Authorization: `Bearer ${getAuthToken()}`,
-                                },
-                            })
-                            if (meRes.ok) {
-                                const userData = await meRes.json()
-                                // 프로필이 완성되지 않았으면 프로필 설정 페이지로
-                                if (!userData.profile_completed) {
-                                    navigate('/profile-setup')
-                                } else {
-                                    // 이미 프로필이 있으면 홈으로
-                                    navigate('/')
-                                }
-                            } else {
-                                // 사용자 정보를 가져올 수 없으면 기본적으로 프로필 설정으로
+                        const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                            credentials: 'include',
+                        })
+                        
+                        if (meRes.ok) {
+                            const userData = await meRes.json()
+                            const profileCompleted = Boolean(userData.child_name && userData.child_birthdate)
+                            if (!profileCompleted) {
                                 navigate('/profile-setup')
+                            } else {
+                                navigate('/')
                             }
-                        } catch (e) {
-                            console.error('프로필 확인 실패:', e)
+                        } else {
                             navigate('/profile-setup')
                         }
                     } catch (e) {

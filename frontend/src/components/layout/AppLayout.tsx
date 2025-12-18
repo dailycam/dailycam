@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
-import Sidebar from './Sidebar'
-import Header from './Header'
+import Sidebar from '../layout/Sidebar'
+import Header from '../layout/Header'
 
 /**
  * 앱 내부 페이지용 레이아웃
@@ -9,6 +9,7 @@ import Header from './Header'
  */
 export default function AppLayout() {
     const [isCollapsed, setIsCollapsed] = useState(false)
+    const [selectedCamera, setSelectedCamera] = useState('camera-1')
 
     const toggleSidebar = () => {
         setIsCollapsed(!isCollapsed)
@@ -26,7 +27,7 @@ export default function AppLayout() {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-auto">
-                    <Outlet />
+                    <Outlet context={{ selectedCamera, setSelectedCamera }} />
                 </main>
             </div>
         </div>

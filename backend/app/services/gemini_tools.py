@@ -279,12 +279,57 @@ class WebSearchTool:
                     # URL 추출 (여러 키 시도)
                     url = r.get('href') or r.get('link') or r.get('url', '')
                     
-                    # 0. 도메인 필터링 (중국 사이트 강력 차단)
-                    if any(domain in url for domain in ['.cn', 'zhihu.com', 'baidu.com', '163.com', 'qq.com', 'bilibili.com']):
-                        print(f"🚫 [Filter] 중국 도메인 차단: {url}")
+                    # 0-1. SNS 및 비블로그 사이트 차단 (블랙리스트)
+                    blocked_domains = [
+                        'tiktok.com',
+                        'instagram.com',
+                        'youtube.com',
+                        'youtu.be',
+                        'facebook.com',
+                        'twitter.com',
+                        'x.com',
+                        'pinterest.com',
+                        'linkedin.com',
+                        'news.naver.com',
+                        'news.daum.net',
+                        'news.google.com',
+                        'shopping.naver.com',
+                        'smartstore.naver.com',
+                        'coupang.com',
+                        'gmarket.com',
+                        '11st.co.kr',
+                        '.cn',
+                        'zhihu.com',
+                        'baidu.com',
+                        '163.com',
+                        'qq.com',
+                        'bilibili.com'
+                    ]
+                    
+                    if any(domain in url.lower() for domain in blocked_domains):
+                        print(f"🚫 [Blog] 차단된 도메인: {url}")
+                        continue
+                    
+                    # 0-2. 블로그 도메인 필터링 (블로그 사이트만 허용)
+                    blog_domains = [
+                        'blog.naver.com',
+                        'tistory.com',
+                        'brunch.co.kr',
+                        'velog.io',
+                        'medium.com',
+                        'blog.daum.net',
+                        'egloos.com',
+                        'ohmynews.com/NWS_Web/Blog',
+                        'blog.yes24.com'
+                    ]
+                    
+                    is_blog = any(domain in url.lower() for domain in blog_domains)
+                    if not is_blog:
+                        print(f"🚫 [Blog] 블로그 아님 필터링: {url}")
                         continue
 
-                    # 안전성 검사 (한글 포함 여부 등)
+                    
+                    # 1. 안전성 검사 (한글 포함 여부 등)
                     if not self._is_safe_content(title, desc):
                         continue
                     
@@ -310,17 +355,26 @@ class WebSearchTool:
     def search_news(
         self, 
         query: str, 
-        max_results: int = 5
+        max_results: int = 5,
+        location: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         뉴스 검색 (DuckDuckGo news 메서드 사용)
+        
+        Args:
+            query: 검색 쿼리
+            max_results: 최대 결과 수
+            location: 지역명 (예: "서울", "부산") - 제공되면 쿼리에 포함
         """
         try:
-            print(f"🔍 [News] 검색 쿼리: {query}")
+            # 지역이 제공되면 쿼리에 포함
+            search_query = f"{location} {query}" if location else query
+            print(f"🔍 [News] 검색 쿼리: {search_query}" + (f" (지역: {location})" if location else ""))
+            
             with DDGS() as ddgs:
                 # DuckDuckGo의 news() 메서드 사용
                 results = ddgs.news(
-                    keywords=query,
+                    keywords=search_query,
                     region="kr-kr",
                     safesearch="moderate",
                     max_results=max_results
@@ -329,9 +383,29 @@ class WebSearchTool:
                 news = []
                 result_count = 0
                 
+                # 육아 관련 키워드 (필터링용)
+                parenting_keywords = [
+                    '육아', '아기', '아이', '영유아', '유아', '유치원', '어린이집',
+                    '보육', '양육', '자녀', '자녀 교육', '엄마', '아빠', '부모',
+                    '신생아', '영아', '유아교육', '유아 발달', '유아 건강',
+                    '이유식', '분유', '수유', '출산', '임신', '산모',
+                    '유치', '키즈', '베이비', '유아기', '영아기'
+                ]
+                
                 for r in results:
                     result_count += 1
-                    print(f"📰 [News] 결과 {result_count}: {r.get('title', 'No title')[:50]}")
+                    title = r.get('title', '')
+                    body = r.get('body', '')
+                    
+                    # 육아 관련성 확인
+                    text = (title + " " + body).lower()
+                    is_parenting_related = any(keyword in text for keyword in parenting_keywords)
+                    
+                    if not is_parenting_related:
+                        print(f"🚫 [News] 육아 무관 필터링: {title[:50]}")
+                        continue
+                    
+                    print(f"📰 [News] 결과 {len(news)+1}: {title[:50]}")
                     
                     # 이미지 URL 추출 시도
                     thumbnail = r.get('image', None)
@@ -349,12 +423,16 @@ class WebSearchTool:
                         print(f"⚠️ [News] 썸네일 없음")
                     
                     news.append({
-                        'title': r.get('title', ''),
-                        'description': r.get('body', '')[:200],
+                        'title': title,
+                        'description': body[:200],
                         'url': r.get('url', ''),
                         'thumbnail': thumbnail,
                         'score': 0.0
                     })
+                    
+                    # 충분한 결과를 얻었으면 중단
+                    if len(news) >= max_results:
+                        break
                 
                 print(f"✅ [News] 총 {len(news)}개 결과 반환")
                 return news
